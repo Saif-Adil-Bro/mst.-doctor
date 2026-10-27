@@ -32,6 +32,7 @@ class DatabaseSeeder @Inject constructor(
                 .open("health_articles.json")
                 .bufferedReader()
                 .use { it.readText() }
+                .removePrefix("\uFEFF") // strip UTF-8 BOM if present
 
             val type = object : TypeToken<List<BundledArticle>>() {}.type
             val bundled: List<BundledArticle> = Gson().fromJson(json, type)
