@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">স্বাস্থ্য জ্ঞান</string>
+    <string name="app_description">Body &amp; Health Knowledge - আয়ুর্বেদ স্বাস্থ্যতথ্য</string>
+    <string name="search_hint">রোগ, উপাদান বা বিষয় লিখুন...</string>
+    <string name="no_results">কোনো ফলাফল পাওয়া যায়নি</string>
+    <string name="bookmark">বুকমার্ক</string>
+    <string name="share">শেয়ার করুন</string>
+    <string name="copy">কপি</string>
+    <string name="synced_from_firebase">Firebase থেকে সিঙ্ক হয়েছে</string>
+    <string name="offline_available">অফলাইনে পাওয়া যাবে</string>
+</resources>

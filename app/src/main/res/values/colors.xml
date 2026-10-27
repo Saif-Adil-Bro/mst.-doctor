@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="green_primary">#2E7D32</color>
+    <color name="green_light">#60AD5E</color>
+    <color name="green_dark">#005005</color>
+    <color name="amber_accent">#FF8F00</color>
+    <color name="surface_light">#F9FBF7</color>
+</resources>
