@@ -1,6 +1,7 @@
 package com.health.knowledge.ui.home
 
 import android.widget.Toast
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -18,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -37,6 +39,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.health.knowledge.domain.model.Article
+import com.health.knowledge.util.UserPreferencesManager
 
 val categories = listOf(
     "চোখ" to "👁️",
@@ -64,9 +67,24 @@ fun HomeScreen(
     val selectedCategory by viewModel.selectedCategory.collectAsState()
     val articles by viewModel.articles.collectAsState()
     val bookmarked by viewModel.bookmarkedArticles.collectAsState()
+    val readingHistory by viewModel.readingHistoryArticles.collectAsState()
+    val notedArticles by viewModel.notedArticles.collectAsState()
     val activeTab by viewModel.activeTab.collectAsState()
+    val savedSubTab by viewModel.savedSubTab.collectAsState()
     val totalCount by viewModel.totalCount.collectAsState()
     val isAdminMode by viewModel.isAdminMode.collectAsState()
+
+    val sortOrder by viewModel.sortOrder.collectAsState()
+    val themeMode by viewModel.themeMode.collectAsState()
+    val dailyReminderEnabled by viewModel.dailyReminderEnabled.collectAsState()
+    val dailyTipArticle by viewModel.dailyTipArticle.collectAsState()
+    val isRefreshing by viewModel.isRefreshing.collectAsState()
+
+    val herbalIndex by viewModel.herbalIndex.collectAsState()
+    val herbSearchQuery by viewModel.herbSearchQuery.collectAsState()
+    val selectedHerb by viewModel.selectedHerb.collectAsState()
+    val selectedMultiCategories by viewModel.selectedMultiCategories.collectAsState()
+    val advancedFilteredArticles by viewModel.advancedFilteredArticles.collectAsState()
 
     val context = LocalContext.current
 
@@ -105,6 +123,7 @@ fun HomeScreen(
     var tapCount by remember { mutableIntStateOf(0) }
     var lastTapTime by remember { mutableLongStateOf(0L) }
     var showPasswordDialog by remember { mutableStateOf(false) }
+    var showThemeDialog by remember { mutableStateOf(false) }
     var articleToDelete by remember { mutableStateOf<Article?>(null) }
 
     if (showPasswordDialog) {
@@ -118,6 +137,16 @@ fun HomeScreen(
                 }
                 ok
             }
+        )
+    }
+
+    if (showThemeDialog) {
+        ThemeAndReminderDialog(
+            currentThemeMode = themeMode,
+            reminderEnabled = dailyReminderEnabled,
+            onSelectTheme = { viewModel.setThemeMode(it) },
+            onToggleReminder = { enabled -> viewModel.setDailyReminderEnabled(context, enabled) },
+            onDismiss = { showThemeDialog = false }
         )
     }
 
@@ -155,7 +184,7 @@ fun HomeScreen(
                     .statusBarsPadding()
                     .padding(top = 6.dp, bottom = 12.dp)
             ) {
-                // App Title + Hidden 5-Click Admin Trigger
+                // App Title + Hidden 5-Click Admin Trigger + Theme & Admin Controls
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -164,26 +193,28 @@ fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(
-                        modifier = Modifier.clickable(
-                            indication = null,
-                            interactionSource = remember { MutableInteractionSource() }
-                        ) {
-                            val now = System.currentTimeMillis()
-                            if (now - lastTapTime > 2500L) {
-                                tapCount = 1
-                            } else {
-                                tapCount++
-                            }
-                            lastTapTime = now
-                            if (tapCount >= 5) {
-                                tapCount = 0
-                                if (!isAdminMode) {
-                                    showPasswordDialog = true
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable(
+                                indication = null,
+                                interactionSource = remember { MutableInteractionSource() }
+                            ) {
+                                val now = System.currentTimeMillis()
+                                if (now - lastTapTime > 2500L) {
+                                    tapCount = 1
                                 } else {
-                                    onAdminClick()
+                                    tapCount++
+                                }
+                                lastTapTime = now
+                                if (tapCount >= 5) {
+                                    tapCount = 0
+                                    if (!isAdminMode) {
+                                        showPasswordDialog = true
+                                    } else {
+                                        onAdminClick()
+                                    }
                                 }
                             }
-                        }
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
@@ -215,19 +246,39 @@ fun HomeScreen(
                         )
                     }
 
-                    // Show Admin Controls ONLY when Admin Mode is unlocked
-                    if (isAdminMode) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        // Reading Theme & Reminder Switcher Button
+                        IconButton(
+                            onClick = { showThemeDialog = true },
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(Color.White.copy(alpha = 0.18f), CircleShape)
                         ) {
+                            Icon(
+                                when (themeMode) {
+                                    UserPreferencesManager.THEME_DARK -> Icons.Default.DarkMode
+                                    UserPreferencesManager.THEME_SEPIA -> Icons.Default.MenuBook
+                                    UserPreferencesManager.THEME_LIGHT -> Icons.Default.LightMode
+                                    else -> Icons.Default.Palette
+                                },
+                                contentDescription = "থিম ও রিমাইন্ডার",
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+
+                        // Show Admin Controls ONLY when Admin Mode is unlocked
+                        if (isAdminMode) {
                             FilledTonalButton(
                                 onClick = onAdminClick,
                                 colors = ButtonDefaults.filledTonalButtonColors(
                                     containerColor = Color.White,
                                     contentColor = MaterialTheme.colorScheme.primary
                                 ),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                             ) {
                                 Icon(Icons.Default.AdminPanelSettings, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(4.dp))
@@ -253,15 +304,17 @@ fun HomeScreen(
                     }
                 }
 
-                // Search Bar
-                SearchBar(
-                    query = searchQuery,
-                    onQueryChange = viewModel::onSearchQueryChange,
-                    onClear = viewModel::clearSearch,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp)
-                )
+                // Search Bar (shown on Home tab)
+                if (activeTab == "home") {
+                    SearchBar(
+                        query = searchQuery,
+                        onQueryChange = viewModel::onSearchQueryChange,
+                        onClear = viewModel::clearSearch,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp)
+                    )
+                }
             }
         },
         bottomBar = {
@@ -275,99 +328,160 @@ fun HomeScreen(
                 NavigationBarItem(
                     selected = activeTab == "search",
                     onClick = { viewModel.onTabSelected("search") },
-                    icon = { Icon(Icons.Default.Search, null) },
-                    label = { Text("সার্চ") }
+                    icon = { Icon(if (activeTab == "search") Icons.Filled.Eco else Icons.Outlined.Eco, null) },
+                    label = { Text("ভেষজ ও সার্চ") }
                 )
                 NavigationBarItem(
                     selected = activeTab == "bookmarks",
                     onClick = { viewModel.onTabSelected("bookmarks") },
                     icon = { Icon(if (activeTab == "bookmarks") Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder, null) },
-                    label = { Text("সেভ করা") }
+                    label = { Text("সেভ ও নোট") }
                 )
             }
         }
     ) { paddingValues ->
-        when (activeTab) {
-            "bookmarks" -> {
-                ArticleList(
-                    articles = bookmarked,
-                    listState = bookmarkListState,
-                    isAdminMode = isAdminMode,
-                    onArticleClick = onArticleClick,
-                    onBookmarkToggle = { id, state -> viewModel.toggleBookmark(id, state) },
-                    onReactionClick = { viewModel.toggleReaction(it) },
-                    onPinToggle = { viewModel.togglePin(it) },
-                    onDeleteClick = { articleToDelete = it },
-                    emptyMessage = "কোনো সেভ করা আর্টিকেল নেই",
-                    modifier = Modifier.padding(paddingValues)
-                )
-            }
-            else -> {
-                LazyColumn(
-                    state = homeListState,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentPadding = PaddingValues(bottom = 16.dp)
-                ) {
-                    // Category chips
-                    if (searchQuery.isBlank()) {
-                        item(key = "category_chips", contentType = "header_chips") {
-                            CategoryChips(
-                                categories = categories,
-                                selectedCategory = selectedCategory,
-                                onCategorySelected = viewModel::onCategorySelected
-                            )
-                        }
-                    }
+        Crossfade(targetState = activeTab, label = "home_tab_crossfade") { tab ->
+            when (tab) {
+                "search" -> {
+                    HerbalIndexTabContent(
+                        herbalIndex = herbalIndex,
+                        herbSearchQuery = herbSearchQuery,
+                        selectedHerb = selectedHerb,
+                        selectedMultiCategories = selectedMultiCategories,
+                        filteredArticles = advancedFilteredArticles,
+                        isAdminMode = isAdminMode,
+                        onHerbQueryChange = viewModel::onHerbSearchQueryChange,
+                        onSelectHerb = viewModel::onSelectHerb,
+                        onToggleMultiCategory = viewModel::onToggleMultiCategory,
+                        onClearFilters = viewModel::clearAdvancedFilters,
+                        onArticleClick = onArticleClick,
+                        onBookmarkToggle = { id, state -> viewModel.toggleBookmark(id, state) },
+                        onReactionClick = { viewModel.toggleReaction(it) },
+                        onPinToggle = { viewModel.togglePin(it) },
+                        onDeleteClick = { articleToDelete = it },
+                        modifier = Modifier.padding(paddingValues)
+                    )
+                }
+                "bookmarks" -> {
+                    SavedAndHistoryTabContent(
+                        savedSubTab = savedSubTab,
+                        bookmarkedArticles = bookmarked,
+                        historyArticles = readingHistory,
+                        notedArticles = notedArticles,
+                        listState = bookmarkListState,
+                        isAdminMode = isAdminMode,
+                        onSubTabChange = viewModel::onSavedSubTabChange,
+                        onArticleClick = onArticleClick,
+                        onBookmarkToggle = { id, state -> viewModel.toggleBookmark(id, state) },
+                        onReactionClick = { viewModel.toggleReaction(it) },
+                        onPinToggle = { viewModel.togglePin(it) },
+                        onDeleteClick = { articleToDelete = it },
+                        onClearHistory = {
+                            viewModel.clearReadingHistory()
+                            Toast.makeText(context, "🕒 পঠিত হিস্ট্রি মুছে ফেলা হয়েছে", Toast.LENGTH_SHORT).show()
+                        },
+                        onExportBackup = viewModel::exportUserBackup,
+                        onImportBackup = viewModel::importUserBackup,
+                        modifier = Modifier.padding(paddingValues)
+                    )
+                }
+                else -> {
+                    PullToRefreshBox(
+                        isRefreshing = isRefreshing,
+                        onRefresh = {
+                            viewModel.refreshFromCloud { newAdded ->
+                                val msg = if (newAdded > 0) {
+                                    "☁️ $newAdded টি নতুন পোস্ট ক্লাউড থেকে যুক্ত হয়েছে!"
+                                } else {
+                                    "✅ সব তথ্য ও রিঅ্যাকশন আপ-টু-ডেট আছে"
+                                }
+                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(paddingValues)
+                    ) {
+                        LazyColumn(
+                            state = homeListState,
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(bottom = 16.dp)
+                        ) {
+                            // Category chips + Daily Tip Card (when not searching)
+                            if (searchQuery.isBlank()) {
+                                item(key = "category_chips", contentType = "header_chips") {
+                                    CategoryChips(
+                                        categories = categories,
+                                        selectedCategory = selectedCategory,
+                                        onCategorySelected = viewModel::onCategorySelected
+                                    )
+                                }
 
-                    // Results header
-                    item(key = "results_header", contentType = "header_text") {
-                        val headerText = when {
-                            selectedCategory != null -> "\"${selectedCategory!!.replace("_", " ")}\" বিষয়ক: ${articles.size}টি"
-                            searchQuery.isNotBlank() -> "\"$searchQuery\" এর ফলাফল: ${articles.size}টি"
-                            else -> "সকল স্বাস্থ্যতথ্য (${articles.size}টি)"
-                        }
-                        Text(
-                            text = headerText,
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
-                    }
+                                if (selectedCategory == null) {
+                                    dailyTipArticle?.let { tip ->
+                                        item(key = "daily_tip_card", contentType = "daily_tip") {
+                                            DailyHealthTipCard(
+                                                article = tip,
+                                                reminderEnabled = dailyReminderEnabled,
+                                                onReadClick = { onArticleClick(tip.id) },
+                                                onNextTipClick = viewModel::nextDailyTip,
+                                                onToggleReminder = { showThemeDialog = true }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
 
-                    if (articles.isEmpty() && searchQuery.isNotBlank()) {
-                        item(key = "empty_state") {
-                            Box(
-                                modifier = Modifier.fillMaxWidth().padding(48.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("🔍", fontSize = 48.sp)
-                                    Spacer(Modifier.height(8.dp))
-                                    Text(
-                                        "\"$searchQuery\" এর জন্য কোনো ফলাফল পাওয়া যায়নি",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                            // Results header + Sort chips (জনপ্রিয় / নতুন / পুরাতন)
+                            item(key = "results_header", contentType = "header_text") {
+                                val headerText = when {
+                                    selectedCategory != null -> "\"${selectedCategory!!.replace("_", " ")}\": ${articles.size}টি"
+                                    searchQuery.isNotBlank() -> "\"$searchQuery\": ${articles.size}টি"
+                                    else -> "সকল স্বাস্থ্যতথ্য (${articles.size}টি)"
+                                }
+                                SortAndResultsHeader(
+                                    headerText = headerText,
+                                    sortOrder = sortOrder,
+                                    onSortChange = viewModel::onSortOrderChange
+                                )
+                            }
+
+                            if (articles.isEmpty() && searchQuery.isNotBlank()) {
+                                item(key = "empty_state") {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(48.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Text("🔍", fontSize = 48.sp)
+                                            Spacer(Modifier.height(8.dp))
+                                            Text(
+                                                "\"$searchQuery\" এর জন্য কোনো ফলাফল পাওয়া যায়নি",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                            } else {
+                                items(
+                                    items = articles,
+                                    key = { it.id },
+                                    contentType = { "article_card" }
+                                ) { article ->
+                                    ArticleCard(
+                                        article = article,
+                                        isAdminMode = isAdminMode,
+                                        onClick = { onArticleClick(article.id) },
+                                        onBookmarkToggle = { viewModel.toggleBookmark(article.id, article.isBookmarked) },
+                                        onReactionClick = { viewModel.toggleReaction(article) },
+                                        onPinToggle = { viewModel.togglePin(article) },
+                                        onDeleteClick = { articleToDelete = article }
                                     )
                                 }
                             }
-                        }
-                    } else {
-                        items(
-                            items = articles,
-                            key = { it.id },
-                            contentType = { "article_card" }
-                        ) { article ->
-                            ArticleCard(
-                                article = article,
-                                isAdminMode = isAdminMode,
-                                onClick = { onArticleClick(article.id) },
-                                onBookmarkToggle = { viewModel.toggleBookmark(article.id, article.isBookmarked) },
-                                onReactionClick = { viewModel.toggleReaction(article) },
-                                onPinToggle = { viewModel.togglePin(article) },
-                                onDeleteClick = { articleToDelete = article }
-                            )
                         }
                     }
                 }
@@ -554,7 +668,7 @@ fun ArticleCard(
                 Spacer(Modifier.height(10.dp))
             }
 
-            // Header row: Pinned / New badges + Bookmark / Admin actions
+            // Header row: Pinned / New / Note badges + Bookmark / Admin actions
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -588,6 +702,19 @@ fun ArticleCard(
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSecondary
+                            )
+                        }
+                    }
+                    if (article.userNote.isNotBlank()) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.tertiaryContainer,
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                "📓 নোট",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
                             )
                         }
                     }
@@ -753,7 +880,9 @@ fun ArticleList(
         if (articles.isEmpty()) {
             item(key = "empty_bookmarks") {
                 Box(
-                    modifier = Modifier.fillMaxWidth().padding(48.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(48.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(emptyMessage, color = MaterialTheme.colorScheme.onSurfaceVariant)

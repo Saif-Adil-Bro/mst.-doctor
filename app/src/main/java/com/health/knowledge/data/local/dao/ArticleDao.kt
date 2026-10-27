@@ -7,10 +7,10 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface ArticleDao {
 
-    // ── SEARCH (Pinned first, excludes deleted) ──────────────────────────────
+    // ── SEARCH (Pinned first, excludes deleted & drafts) ─────────────────────
     @Query("""
         SELECT * FROM articles 
-        WHERE isDeleted = 0
+        WHERE isDeleted = 0 AND isDraft = 0
           AND (title LIKE '%' || :query || '%'
            OR content LIKE '%' || :query || '%'
            OR medicines LIKE '%' || :query || '%'
@@ -19,14 +19,32 @@ interface ArticleDao {
     """)
     fun searchArticles(query: String): Flow<List<ArticleEntity>>
 
-    // ── GET ALL (Pinned first, excludes deleted) ─────────────────────────────
-    @Query("SELECT * FROM articles WHERE isDeleted = 0 ORDER BY isPinned DESC, reactions DESC, createdAt DESC")
+    // ── ADMIN SEARCH (includes drafts) ───────────────────────────────────────
+    @Query("""
+        SELECT * FROM articles 
+        WHERE isDeleted = 0
+          AND (title LIKE '%' || :query || '%'
+           OR content LIKE '%' || :query || '%'
+           OR medicines LIKE '%' || :query || '%'
+           OR categories LIKE '%' || :query || '%')
+        ORDER BY isDraft DESC, isPinned DESC, reactions DESC, createdAt DESC
+    """)
+    fun searchArticlesAdmin(query: String): Flow<List<ArticleEntity>>
+
+    // ── GET ALL (Pinned first, excludes deleted & drafts) ────────────────────
+    @Query("SELECT * FROM articles WHERE isDeleted = 0 AND isDraft = 0 ORDER BY isPinned DESC, reactions DESC, createdAt DESC")
     fun getAllArticles(): Flow<List<ArticleEntity>>
+
+    @Query("SELECT * FROM articles WHERE isDeleted = 0 ORDER BY isDraft DESC, isPinned DESC, reactions DESC, createdAt DESC")
+    fun getAllArticlesAdmin(): Flow<List<ArticleEntity>>
+
+    @Query("SELECT * FROM articles WHERE isDeleted = 0 AND isDraft = 0")
+    suspend fun getAllActiveSnapshot(): List<ArticleEntity>
 
     // ── GET BY CATEGORY ──────────────────────────────────────────────────────
     @Query("""
         SELECT * FROM articles 
-        WHERE isDeleted = 0
+        WHERE isDeleted = 0 AND isDraft = 0
           AND categories LIKE '%' || :category || '%'
         ORDER BY isPinned DESC, reactions DESC, createdAt DESC
     """)
@@ -46,11 +64,48 @@ interface ArticleDao {
     suspend fun getByFirebaseDocId(docId: String): ArticleEntity?
 
     // ── BOOKMARKS ────────────────────────────────────────────────────────────
-    @Query("SELECT * FROM articles WHERE isDeleted = 0 AND isBookmarked = 1 ORDER BY isPinned DESC, createdAt DESC")
+    @Query("SELECT * FROM articles WHERE isDeleted = 0 AND isDraft = 0 AND isBookmarked = 1 ORDER BY isPinned DESC, createdAt DESC")
     fun getBookmarked(): Flow<List<ArticleEntity>>
 
     @Query("UPDATE articles SET isBookmarked = :bookmarked WHERE id = :id")
     suspend fun updateBookmark(id: Int, bookmarked: Boolean)
+
+    // ── READING HISTORY & PERSONAL NOTES ─────────────────────────────────────
+    @Query("SELECT * FROM articles WHERE isDeleted = 0 AND isDraft = 0 AND lastReadAt > 0 ORDER BY lastReadAt DESC LIMIT 100")
+    fun getReadingHistory(): Flow<List<ArticleEntity>>
+
+    @Query("UPDATE articles SET lastReadAt = :timestamp WHERE id = :id")
+    suspend fun updateLastReadAt(id: Int, timestamp: Long)
+
+    @Query("UPDATE articles SET lastReadAt = 0 WHERE lastReadAt > 0")
+    suspend fun clearReadingHistory()
+
+    @Query("SELECT * FROM articles WHERE isDeleted = 0 AND isDraft = 0 AND TRIM(userNote) != '' ORDER BY lastReadAt DESC, createdAt DESC")
+    fun getArticlesWithNotes(): Flow<List<ArticleEntity>>
+
+    @Query("UPDATE articles SET userNote = :note WHERE id = :id")
+    suspend fun updateUserNote(id: Int, note: String)
+
+    // ── DRAFTS ───────────────────────────────────────────────────────────────
+    @Query("SELECT * FROM articles WHERE isDeleted = 0 AND isDraft = 1 ORDER BY createdAt DESC")
+    fun getDrafts(): Flow<List<ArticleEntity>>
+
+    @Query("""
+        UPDATE articles 
+        SET isDraft = 0,
+            syncedFromFirebase = :syncedFromFirebase,
+            firebaseDocId = :firebaseDocId,
+            date = :date,
+            createdAt = :createdAt
+        WHERE id = :id
+    """)
+    suspend fun markDraftPublished(
+        id: Int,
+        syncedFromFirebase: Boolean,
+        firebaseDocId: String,
+        date: String,
+        createdAt: Long
+    )
 
     // ── PIN / UNPIN ──────────────────────────────────────────────────────────
     @Query("UPDATE articles SET isPinned = :pinned WHERE id = :id")
@@ -103,10 +158,10 @@ interface ArticleDao {
     @Query("SELECT COUNT(*) FROM articles")
     suspend fun getTotalCount(): Int
 
-    @Query("SELECT COUNT(*) FROM articles WHERE isDeleted = 0")
+    @Query("SELECT COUNT(*) FROM articles WHERE isDeleted = 0 AND isDraft = 0")
     fun observeActiveCount(): Flow<Int>
 
-    @Query("SELECT COUNT(*) FROM articles WHERE syncedFromFirebase = 1 AND isDeleted = 0")
+    @Query("SELECT COUNT(*) FROM articles WHERE syncedFromFirebase = 1 AND isDeleted = 0 AND isDraft = 0")
     suspend fun getFirebaseSyncedCount(): Int
 
     // ── SOFT DELETE (persists deletion of bundled & remote posts) ────────────

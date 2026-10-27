@@ -24,7 +24,10 @@ data class ArticleEntity(
     val isDeleted: Boolean = false,
     val isReacted: Boolean = false,
     val isReviewed: Boolean = true,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val lastReadAt: Long = 0L,
+    val userNote: String = "",
+    val isDraft: Boolean = false
 ) {
     val postKey: String
         get() = if (firebaseDocId.isNotBlank()) "fb_$firebaseDocId"

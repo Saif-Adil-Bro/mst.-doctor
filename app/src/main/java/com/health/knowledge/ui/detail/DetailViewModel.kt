@@ -27,12 +27,43 @@ class DetailViewModel @Inject constructor(
         .map { it?.toDomain() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    // Related articles based on shared categories or herbal ingredients
+    val relatedArticles: StateFlow<List<Article>> = combine(
+        article.filterNotNull(),
+        repository.getAllArticles()
+    ) { current, allEntities ->
+        allEntities
+            .asSequence()
+            .filter { it.id != current.id }
+            .map { it.toDomain() }
+            .map { candidate ->
+                val sharedMeds = candidate.medicines.count { med ->
+                    current.medicines.any { it.equals(med, ignoreCase = true) }
+                }
+                val sharedCats = candidate.categories.count { cat ->
+                    current.categories.any { it.equals(cat, ignoreCase = true) }
+                }
+                val score = sharedMeds * 3 + sharedCats * 2
+                candidate to score
+            }
+            .filter { it.second > 0 }
+            .sortedWith(
+                compareByDescending<Pair<Article, Int>> { it.second }
+                    .thenByDescending { it.first.reactions }
+            )
+            .take(5)
+            .map { it.first }
+            .toList()
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val fontSizeSp: StateFlow<Float> = prefsManager.fontSizeSp
+    val themeMode: StateFlow<String> = prefsManager.themeMode
     val isAdminMode: StateFlow<Boolean> = prefsManager.isAdminMode
 
     fun loadArticle(id: Int) {
         _articleId.value = id
         viewModelScope.launch {
+            repository.markArticleRead(id)
             repository.getById(id)?.toDomain()?.let { loaded ->
                 repository.refreshLiveReactions(loaded)
             }
@@ -49,6 +80,21 @@ class DetailViewModel @Inject constructor(
 
     fun resetFontSize() {
         prefsManager.resetFontSize()
+    }
+
+    fun setThemeMode(mode: String) {
+        prefsManager.setThemeMode(mode)
+    }
+
+    fun cycleThemeMode(): String {
+        return prefsManager.cycleThemeMode()
+    }
+
+    fun saveUserNote(note: String) {
+        val id = _articleId.value ?: return
+        viewModelScope.launch {
+            repository.saveUserNote(id, note)
+        }
     }
 
     fun toggleBookmark(id: Int, currentState: Boolean) {

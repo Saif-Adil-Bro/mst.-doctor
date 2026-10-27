@@ -19,7 +19,11 @@ data class Article(
     val isPinned: Boolean,
     val isReacted: Boolean,
     val isReviewed: Boolean,
-    val postKey: String
+    val postKey: String,
+    val createdAt: Long = 0L,
+    val lastReadAt: Long = 0L,
+    val userNote: String = "",
+    val isDraft: Boolean = false
 )
 
 fun ArticleEntity.toDomain() = Article(
@@ -39,5 +43,9 @@ fun ArticleEntity.toDomain() = Article(
     isPinned = isPinned,
     isReacted = isReacted,
     isReviewed = isReviewed,
-    postKey = postKey
+    postKey = postKey,
+    createdAt = createdAt,
+    lastReadAt = lastReadAt,
+    userNote = userNote,
+    isDraft = isDraft
 )

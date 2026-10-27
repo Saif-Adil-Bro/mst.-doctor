@@ -11,7 +11,7 @@ import com.health.knowledge.data.local.entity.ArticleEntity
 
 @Database(
     entities = [ArticleEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class HealthDatabase : RoomDatabase() {
@@ -30,13 +30,21 @@ abstract class HealthDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE articles ADD COLUMN lastReadAt INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE articles ADD COLUMN userNote TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE articles ADD COLUMN isDraft INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         fun create(context: Context): HealthDatabase {
             return Room.databaseBuilder(
                 context.applicationContext,
                 HealthDatabase::class.java,
                 DATABASE_NAME
             )
-            .addMigrations(MIGRATION_1_2)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
             .fallbackToDestructiveMigration()
             .build()
         }

@@ -44,6 +44,51 @@ class UserPreferencesManager @Inject constructor(
         prefs.edit().putFloat(KEY_FONT_SIZE, size).apply()
     }
 
+    // ── READING THEME MODE ("system" | "light" | "sepia" | "dark") ───────────
+    private val _themeMode = MutableStateFlow(prefs.getString(KEY_THEME_MODE, THEME_SYSTEM) ?: THEME_SYSTEM)
+    val themeMode: StateFlow<String> = _themeMode.asStateFlow()
+
+    fun setThemeMode(mode: String) {
+        _themeMode.value = mode
+        prefs.edit().putString(KEY_THEME_MODE, mode).apply()
+    }
+
+    fun cycleThemeMode(): String {
+        val next = when (_themeMode.value) {
+            THEME_SYSTEM -> THEME_LIGHT
+            THEME_LIGHT -> THEME_SEPIA
+            THEME_SEPIA -> THEME_DARK
+            else -> THEME_SYSTEM
+        }
+        setThemeMode(next)
+        return next
+    }
+
+    // ── SORT ORDER ("popular" | "newest" | "oldest") ─────────────────────────
+    private val _sortOrder = MutableStateFlow(prefs.getString(KEY_SORT_ORDER, SORT_POPULAR) ?: SORT_POPULAR)
+    val sortOrder: StateFlow<String> = _sortOrder.asStateFlow()
+
+    fun setSortOrder(order: String) {
+        _sortOrder.value = order
+        prefs.edit().putString(KEY_SORT_ORDER, order).apply()
+    }
+
+    // ── DAILY HEALTH TIP REMINDER ────────────────────────────────────────────
+    private val _dailyReminderEnabled = MutableStateFlow(prefs.getBoolean(KEY_DAILY_REMINDER, true))
+    val dailyReminderEnabled: StateFlow<Boolean> = _dailyReminderEnabled.asStateFlow()
+
+    fun setDailyReminderEnabled(enabled: Boolean) {
+        _dailyReminderEnabled.value = enabled
+        prefs.edit().putBoolean(KEY_DAILY_REMINDER, enabled).apply()
+    }
+
+    private val _dailyTipOffset = MutableStateFlow(0)
+    val dailyTipOffset: StateFlow<Int> = _dailyTipOffset.asStateFlow()
+
+    fun nextDailyTip() {
+        _dailyTipOffset.value += 1
+    }
+
     // ── HIDDEN ADMIN MODE ────────────────────────────────────────────────────
     private val _isAdminMode = MutableStateFlow(prefs.getBoolean(KEY_ADMIN_UNLOCKED, false))
     val isAdminMode: StateFlow<Boolean> = _isAdminMode.asStateFlow()
@@ -148,6 +193,19 @@ class UserPreferencesManager @Inject constructor(
         const val DEFAULT_FONT_SIZE = 16f
         const val MIN_FONT_SIZE = 12f
         const val MAX_FONT_SIZE = 28f
+
+        private const val KEY_THEME_MODE = "reading_theme_mode"
+        const val THEME_SYSTEM = "system"
+        const val THEME_LIGHT = "light"
+        const val THEME_SEPIA = "sepia"
+        const val THEME_DARK = "dark"
+
+        private const val KEY_SORT_ORDER = "article_sort_order"
+        const val SORT_POPULAR = "popular"
+        const val SORT_NEWEST = "newest"
+        const val SORT_OLDEST = "oldest"
+
+        private const val KEY_DAILY_REMINDER = "daily_tip_reminder_enabled"
 
         private const val KEY_ADMIN_UNLOCKED = "is_admin_unlocked"
         private const val KEY_ADMIN_PASSWORD = "admin_password"
