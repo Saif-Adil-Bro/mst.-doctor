@@ -1050,6 +1050,7 @@ fun InitialDatabaseLoadingView(modifier: Modifier = Modifier) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun UserSubmitPostDialog(
     onDismiss: () -> Unit,
