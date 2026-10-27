@@ -200,10 +200,12 @@ fun AdminScreen(
                     searchQuery = manageQuery,
                     selectedFilter = manageFilter,
                     draftCount = analytics.draftCount,
+                    pendingCount = analytics.pendingReviewCount,
                     onQueryChange = viewModel::onManageQueryChange,
                     onFilterChange = viewModel::onManageFilterChange,
                     onPinToggle = viewModel::togglePin,
                     onPublishDraft = viewModel::publishDraft,
+                    onApproveClick = viewModel::approveArticle,
                     onEditClick = { editingArticle = it },
                     onDeleteClick = { deletingArticle = it }
                 )
@@ -433,10 +435,12 @@ private fun ManagePostsTab(
     searchQuery: String,
     selectedFilter: String,
     draftCount: Int,
+    pendingCount: Int,
     onQueryChange: (String) -> Unit,
     onFilterChange: (String) -> Unit,
     onPinToggle: (Article) -> Unit,
     onPublishDraft: (Article) -> Unit,
+    onApproveClick: (Article) -> Unit,
     onEditClick: (Article) -> Unit,
     onDeleteClick: (Article) -> Unit
 ) {
@@ -469,6 +473,13 @@ private fun ManagePostsTab(
                     selected = selectedFilter == "all",
                     onClick = { onFilterChange("all") },
                     label = { Text("সব পোস্ট") }
+                )
+            }
+            item {
+                FilterChip(
+                    selected = selectedFilter == "pending",
+                    onClick = { onFilterChange("pending") },
+                    label = { Text("⏳ পেন্ডিং রিভিউ ($pendingCount)") }
                 )
             }
             item {
@@ -506,6 +517,8 @@ private fun ManagePostsTab(
                     colors = CardDefaults.cardColors(
                         containerColor = if (article.isDraft)
                             MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f)
+                        else if (!article.isReviewed)
+                            Color(0xFFFFF8E1)
                         else
                             MaterialTheme.colorScheme.surface
                     )
@@ -517,6 +530,20 @@ private fun ManagePostsTab(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                if (!article.isReviewed && !article.isDraft) {
+                                    Surface(
+                                        color = Color(0xFFFFB300),
+                                        shape = RoundedCornerShape(4.dp)
+                                    ) {
+                                        Text(
+                                            "⏳ পেন্ডিং রিভিউ",
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color.Black,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
                                 if (article.isDraft) {
                                     Surface(
                                         color = MaterialTheme.colorScheme.secondary,
@@ -574,12 +601,23 @@ private fun ManagePostsTab(
 
                         Spacer(Modifier.height(10.dp))
 
-                        // Action Buttons: Publish Draft / Pin, Review/Edit, Global Delete
+                        // Action Buttons: Approve / Publish Draft / Pin, Review/Edit, Global Delete
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            if (article.isDraft) {
+                            if (!article.isReviewed && !article.isDraft) {
+                                Button(
+                                    onClick = { onApproveClick(article) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                                    modifier = Modifier.weight(1.2f),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(Icons.Default.CheckCircle, null, modifier = Modifier.size(15.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("অনুমোদন", style = MaterialTheme.typography.labelMedium)
+                                }
+                            } else if (article.isDraft) {
                                 Button(
                                     onClick = { onPublishDraft(article) },
                                     modifier = Modifier.weight(1.1f),
@@ -670,9 +708,9 @@ private fun AdminAnalyticsTab(analytics: AdminAnalyticsState) {
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 MetricStatCard(
-                    title = "ক্লাউড সিঙ্কড",
-                    value = "${analytics.cloudSyncedCount}",
-                    icon = "☁️",
+                    title = "পেন্ডিং রিভিউ",
+                    value = "${analytics.pendingReviewCount}",
+                    icon = "⏳",
                     modifier = Modifier.weight(1f)
                 )
                 MetricStatCard(

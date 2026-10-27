@@ -1,5 +1,6 @@
 package com.health.knowledge.data.repository
 
+import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.reflect.TypeToken
@@ -7,7 +8,9 @@ import com.health.knowledge.data.local.dao.ArticleDao
 import com.health.knowledge.data.local.entity.ArticleEntity
 import com.health.knowledge.data.remote.FirestoreDataSource
 import com.health.knowledge.domain.model.Article
+import com.health.knowledge.util.HealthNotificationHelper
 import com.health.knowledge.util.UserPreferencesManager
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -17,6 +20,7 @@ import javax.inject.Singleton
 
 @Singleton
 class ArticleRepository @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val articleDao: ArticleDao,
     private val firestoreDataSource: FirestoreDataSource,
     private val prefsManager: UserPreferencesManager
@@ -236,6 +240,72 @@ class ArticleRepository @Inject constructor(
         articleDao.insert(entity)
 
         return Result.success(remoteDocId)
+    }
+
+    // ── User: Submit Article for Admin Review ────────────────────────────────
+    suspend fun submitUserArticle(
+        title: String,
+        content: String,
+        medicines: String,
+        categories: String,
+        photoUrl: String,
+        date: String
+    ): Result<String> {
+        val now = System.currentTimeMillis()
+        val cleanPhotoUrl = photoUrl.trim()
+        val firestoreArticle = FirestoreDataSource.FirestoreArticle(
+            title = title,
+            content = content,
+            date = date,
+            medicines = medicines,
+            categories = categories,
+            hasPhoto = cleanPhotoUrl.isNotBlank(),
+            photoUrl = cleanPhotoUrl,
+            isPinned = false,
+            isReviewed = false, // Pending admin review
+            addedByAdmin = false,
+            createdAt = now
+        )
+
+        val remoteDocId = withTimeoutOrNull(6000L) {
+            firestoreDataSource.addArticle(firestoreArticle).getOrNull()
+        } ?: ""
+
+        val entity = firestoreArticle.copy(firebaseDocId = remoteDocId).toEntity()
+        articleDao.insert(entity)
+
+        return Result.success(remoteDocId)
+    }
+
+    // ── Admin: Approve Pending Article (publishes globally & notifies users) ─
+    suspend fun approveArticle(article: Article): Result<Unit> {
+        articleDao.approveArticle(article.id)
+        val cleanPhotoUrl = if (article.photoPath.startsWith("http")) article.photoPath.trim() else ""
+        val medsCsv = article.medicines.joinToString(",")
+        val catsCsv = article.categories.joinToString(",")
+
+        withTimeoutOrNull(5000L) {
+            firestoreDataSource.updateArticleGlobal(
+                postKey = article.postKey,
+                firebaseDocId = article.firebaseDocId,
+                title = article.title,
+                content = article.content,
+                medicines = medsCsv,
+                categories = catsCsv,
+                photoUrl = cleanPhotoUrl,
+                isReviewed = true
+            )
+        }
+
+        // Trigger local / push notification for all users
+        HealthNotificationHelper.showNewPostNotification(
+            context = context,
+            articleId = article.id,
+            title = article.title,
+            content = article.content
+        )
+
+        return Result.success(Unit)
     }
 
     // ── Admin: Save Draft Locally (can be edited & published later) ──────────

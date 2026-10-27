@@ -37,6 +37,15 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- Firebase Cloud Messaging for Push Notifications -->
+        <service
+            android:name=".sync.HealthFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
         <!-- WorkManager for Firebase sync -->
         <provider
             android:name="androidx.startup.InitializationProvider"

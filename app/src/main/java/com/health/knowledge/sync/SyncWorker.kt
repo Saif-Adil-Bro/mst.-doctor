@@ -5,6 +5,7 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.*
 import com.health.knowledge.data.local.dao.ArticleDao
 import com.health.knowledge.data.remote.FirestoreDataSource
+import com.health.knowledge.util.HealthNotificationHelper
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import java.util.concurrent.TimeUnit
@@ -36,6 +37,19 @@ class SyncWorker @AssistedInject constructor(
                 }
                 if (entities.isNotEmpty()) {
                     articleDao.insertAll(entities)
+                    if (lastSync > 0L) {
+                        val firstApproved = entities.firstOrNull { it.isReviewed && !it.isDraft }
+                        if (firstApproved != null) {
+                            val inserted = articleDao.getByFirebaseDocId(firstApproved.firebaseDocId)
+                            val targetId = inserted?.id ?: 0
+                            HealthNotificationHelper.showNewPostNotification(
+                                context = applicationContext,
+                                articleId = targetId,
+                                title = firstApproved.title,
+                                content = firstApproved.content
+                            )
+                        }
+                    }
                 }
             }
 

@@ -7,13 +7,17 @@ import com.health.knowledge.data.repository.ArticleRepository
 import com.health.knowledge.domain.model.Article
 import com.health.knowledge.domain.model.toDomain
 import com.health.knowledge.sync.DailyTipNotificationWorker
+import com.health.knowledge.util.DatabaseSeeder
 import com.health.knowledge.util.UserPreferencesManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 import javax.inject.Inject
 
 data class HerbalIngredientStat(
@@ -25,8 +29,12 @@ data class HerbalIngredientStat(
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val repository: ArticleRepository,
-    private val prefsManager: UserPreferencesManager
+    private val prefsManager: UserPreferencesManager,
+    private val databaseSeeder: DatabaseSeeder
 ) : ViewModel() {
+
+    // First launch database seeding state
+    val isSeeding: StateFlow<Boolean> = databaseSeeder.isSeeding
 
     // Search query state
     private val _searchQuery = MutableStateFlow("")
@@ -108,6 +116,41 @@ class HomeViewModel @Inject constructor(
             sortArticles(domainList, sort)
         }
     }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    // Window limit for instantaneous progressive loading without lag
+    private val _visibleItemCount = MutableStateFlow(25)
+    val visibleItemCount: StateFlow<Int> = _visibleItemCount.asStateFlow()
+
+    // Smooth chunked articles for LazyColumn to eliminate UI jank & load instantly on scroll
+    val displayedArticles: StateFlow<List<Article>> = combine(
+        articles,
+        _visibleItemCount
+    ) { all, limit ->
+        all.take(limit)
+    }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    val hasMoreArticles: StateFlow<Boolean> = combine(
+        articles,
+        _visibleItemCount
+    ) { all, limit ->
+        all.size > limit
+    }.stateIn(viewModelScope, SharingStarted.Lazily, false)
+
+    // True while initial bundled JSON is seeding or initial database load is in progress
+    val isInitialLoading: StateFlow<Boolean> = combine(
+        allActiveDomainArticles,
+        databaseSeeder.isSeeding
+    ) { list, seeding ->
+        seeding || list.isEmpty()
+    }.stateIn(viewModelScope, SharingStarted.Lazily, true)
+
+    fun loadMoreArticles() {
+        val total = articles.value.size
+        val current = _visibleItemCount.value
+        if (current < total) {
+            _visibleItemCount.value = (current + 25).coerceAtMost(total)
+        }
+    }
 
     // Daily Health Tip of the Day (deterministic per day + rotatable with nextDailyTip)
     val dailyTipArticle: StateFlow<Article?> = combine(
@@ -203,6 +246,7 @@ class HomeViewModel @Inject constructor(
 
     fun onSearchQueryChange(query: String) {
         _searchQuery.value = query
+        _visibleItemCount.value = 25
         if (query.isNotBlank()) {
             _selectedCategory.value = null
             savedScrollIndex = 0
@@ -213,14 +257,56 @@ class HomeViewModel @Inject constructor(
     fun onCategorySelected(category: String?) {
         _selectedCategory.value = category
         _searchQuery.value = ""
+        _visibleItemCount.value = 25
         savedScrollIndex = 0
         savedScrollOffset = 0
     }
 
     fun onSortOrderChange(order: String) {
         prefsManager.setSortOrder(order)
+        _visibleItemCount.value = 25
         savedScrollIndex = 0
         savedScrollOffset = 0
+    }
+
+    fun submitUserPost(
+        title: String,
+        content: String,
+        medicines: String,
+        categories: List<String>,
+        photoUrl: String,
+        onComplete: (Boolean, String) -> Unit
+    ) {
+        if (title.isBlank() || content.isBlank()) {
+            onComplete(false, "শিরোনাম এবং বিস্তারিত বিবরণ পূরণ করা আবশ্যক")
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                val today = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date())
+                val cleanPhoto = photoUrl.trim()
+                val medsCsv = medicines.trim()
+                val catsCsv = categories.joinToString(",")
+
+                val res = repository.submitUserArticle(
+                    title = title.trim(),
+                    content = content.trim(),
+                    medicines = medsCsv,
+                    categories = catsCsv,
+                    photoUrl = cleanPhoto,
+                    date = today
+                )
+
+                if (res.isSuccess) {
+                    onComplete(true, "🎉 আপনার পোস্টটি পর্যালোচনার জন্য জমা হয়েছে! অ্যাডমিন অনুমোদন করার পর এটি সবার কাছে দৃশ্যমান হবে।")
+                } else {
+                    onComplete(false, "পোস্ট জমা দিতে সমস্যা হয়েছে। পরে আবার চেষ্টা করুন।")
+                }
+            } catch (e: Exception) {
+                onComplete(false, e.localizedMessage ?: "অপ্রত্যাশিত সমস্যা দেখা দিয়েছে")
+            }
+        }
     }
 
     fun onTabSelected(tab: String) {

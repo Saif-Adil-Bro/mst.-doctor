@@ -26,6 +26,7 @@ data class AdminAnalyticsState(
     val pinnedCount: Int = 0,
     val cloudSyncedCount: Int = 0,
     val draftCount: Int = 0,
+    val pendingReviewCount: Int = 0,
     val bookmarkedCount: Int = 0,
     val categoryDistribution: List<Pair<String, Int>> = emptyList(),
     val topReactedPosts: List<Article> = emptyList()
@@ -44,7 +45,7 @@ class AdminViewModel @Inject constructor(
     private val _manageQuery = MutableStateFlow("")
     val manageQuery: StateFlow<String> = _manageQuery.asStateFlow()
 
-    // Filter: "all" | "pinned" | "firebase" | "drafts"
+    // Filter: "all" | "pending" | "pinned" | "firebase" | "drafts"
     private val _manageFilter = MutableStateFlow("all")
     val manageFilter: StateFlow<String> = _manageFilter.asStateFlow()
 
@@ -58,6 +59,7 @@ class AdminViewModel @Inject constructor(
     }.combine(_manageFilter) { entities, filter ->
         val domainList = entities.map { it.toDomain() }
         when (filter) {
+            "pending" -> domainList.filter { !it.isReviewed && !it.isDraft }
             "pinned" -> domainList.filter { it.isPinned && !it.isDraft }
             "firebase" -> domainList.filter { it.syncedFromFirebase && !it.isDraft }
             "drafts" -> domainList.filter { it.isDraft }
@@ -68,8 +70,9 @@ class AdminViewModel @Inject constructor(
     val analyticsState: StateFlow<AdminAnalyticsState> = repository.searchArticlesAdmin("")
         .map { entities ->
             val all = entities.map { it.toDomain() }
-            val active = all.filter { !it.isDraft }
+            val active = all.filter { !it.isDraft && it.isReviewed }
             val drafts = all.filter { it.isDraft }
+            val pending = all.filter { !it.isReviewed && !it.isDraft }
 
             val catCounts = mutableMapOf<String, Int>()
             for (art in active) {
@@ -87,6 +90,7 @@ class AdminViewModel @Inject constructor(
                 pinnedCount = active.count { it.isPinned },
                 cloudSyncedCount = active.count { it.syncedFromFirebase },
                 draftCount = drafts.size,
+                pendingReviewCount = pending.size,
                 bookmarkedCount = active.count { it.isBookmarked },
                 categoryDistribution = catCounts.entries
                     .map { it.key to it.value }
@@ -162,6 +166,18 @@ class AdminViewModel @Inject constructor(
                 isPinned = isPinned
             )
             _uiState.value = AdminUiState(isSuccess = true, message = "📝 পোস্টটি ড্রাফট হিসেবে সেভ করা হয়েছে!")
+        }
+    }
+
+    fun approveArticle(article: Article) {
+        viewModelScope.launch {
+            _uiState.value = AdminUiState(isLoading = true)
+            val res = repository.approveArticle(article)
+            _uiState.value = if (res.isSuccess) {
+                AdminUiState(isSuccess = true, message = "✅ পোস্টটি অনুমোদিত ও পাবলিক করা হয়েছে! নোটিফিকেশন পাঠানো হয়েছে।")
+            } else {
+                AdminUiState(error = "পোস্ট অনুমোদন করতে সমস্যা হয়েছে")
+            }
         }
     }
 

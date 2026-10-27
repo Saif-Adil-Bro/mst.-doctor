@@ -6,6 +6,9 @@ import com.google.gson.reflect.TypeToken
 import com.health.knowledge.data.local.dao.ArticleDao
 import com.health.knowledge.data.local.entity.ArticleEntity
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -18,11 +21,19 @@ class DatabaseSeeder @Inject constructor(
     @ApplicationContext private val context: Context,
     private val articleDao: ArticleDao
 ) {
+    private val _isSeeding = MutableStateFlow(false)
+    val isSeeding: StateFlow<Boolean> = _isSeeding.asStateFlow()
+
     suspend fun seedIfEmpty() {
         val count = articleDao.getTotalCount()
         if (count == 0) {
-            val articles = loadBundledArticles()
-            articleDao.insertAll(articles)
+            _isSeeding.value = true
+            try {
+                val articles = loadBundledArticles()
+                articleDao.insertAll(articles)
+            } finally {
+                _isSeeding.value = false
+            }
         }
     }
 

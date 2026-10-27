@@ -2,6 +2,7 @@ package com.health.knowledge.ui.home
 
 import android.widget.Toast
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -26,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -35,6 +37,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -56,7 +60,7 @@ val categories = listOf(
     "আয়ুর্বেদ" to "🌿"
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun HomeScreen(
     onArticleClick: (Int) -> Unit,
@@ -66,6 +70,10 @@ fun HomeScreen(
     val searchQuery by viewModel.searchQuery.collectAsState()
     val selectedCategory by viewModel.selectedCategory.collectAsState()
     val articles by viewModel.articles.collectAsState()
+    val displayedArticles by viewModel.displayedArticles.collectAsState()
+    val hasMoreArticles by viewModel.hasMoreArticles.collectAsState()
+    val isInitialLoading by viewModel.isInitialLoading.collectAsState()
+
     val bookmarked by viewModel.bookmarkedArticles.collectAsState()
     val readingHistory by viewModel.readingHistoryArticles.collectAsState()
     val notedArticles by viewModel.notedArticles.collectAsState()
@@ -87,6 +95,7 @@ fun HomeScreen(
     val advancedFilteredArticles by viewModel.advancedFilteredArticles.collectAsState()
 
     val context = LocalContext.current
+    var showUserPostDialog by remember { mutableStateOf(false) }
 
     // Hoisted LazyListStates preserved across DetailScreen / AdminScreen navigation
     val homeListState = rememberSaveable(saver = LazyListState.Saver) {
@@ -108,6 +117,19 @@ fun HomeScreen(
             homeListState.firstVisibleItemIndex to homeListState.firstVisibleItemScrollOffset
         }.collect { (index, offset) ->
             viewModel.saveHomeScrollPosition(index, offset)
+        }
+    }
+
+    // Instant progressive load when nearing the end of displayed list
+    LaunchedEffect(homeListState, displayedArticles.size) {
+        snapshotFlow {
+            val lastVisible = homeListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            val total = homeListState.layoutInfo.totalItemsCount
+            lastVisible to total
+        }.collect { (lastVisible, total) ->
+            if (total > 0 && lastVisible >= total - 6) {
+                viewModel.loadMoreArticles()
+            }
         }
     }
 
@@ -170,6 +192,18 @@ fun HomeScreen(
             dismissButton = {
                 TextButton(onClick = { articleToDelete = null }) {
                     Text("বাতিল")
+                }
+            }
+        )
+    }
+
+    if (showUserPostDialog) {
+        UserSubmitPostDialog(
+            onDismiss = { showUserPostDialog = false },
+            onSubmit = { title, content, meds, cats, photoUrl ->
+                viewModel.submitUserPost(title, content, meds, cats, photoUrl) { success, msg ->
+                    showUserPostDialog = false
+                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                 }
             }
         )
@@ -317,6 +351,17 @@ fun HomeScreen(
                 }
             }
         },
+        floatingActionButton = {
+            if (activeTab == "home") {
+                ExtendedFloatingActionButton(
+                    onClick = { showUserPostDialog = true },
+                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                    text = { Text("পোস্ট করুন", fontWeight = FontWeight.Bold) },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                )
+            }
+        },
         bottomBar = {
             NavigationBar {
                 NavigationBarItem(
@@ -386,100 +431,131 @@ fun HomeScreen(
                     )
                 }
                 else -> {
-                    PullToRefreshBox(
-                        isRefreshing = isRefreshing,
-                        onRefresh = {
-                            viewModel.refreshFromCloud { newAdded ->
-                                val msg = if (newAdded > 0) {
-                                    "☁️ $newAdded টি নতুন পোস্ট ক্লাউড থেকে যুক্ত হয়েছে!"
-                                } else {
-                                    "✅ সব তথ্য ও রিঅ্যাকশন আপ-টু-ডেট আছে"
+                    if (isInitialLoading && searchQuery.isBlank() && selectedCategory == null) {
+                        InitialDatabaseLoadingView(modifier = Modifier.padding(paddingValues))
+                    } else {
+                        PullToRefreshBox(
+                            isRefreshing = isRefreshing,
+                            onRefresh = {
+                                viewModel.refreshFromCloud { newAdded ->
+                                    val msg = if (newAdded > 0) {
+                                        "☁️ $newAdded টি নতুন পোস্ট ক্লাউড থেকে যুক্ত হয়েছে!"
+                                    } else {
+                                        "✅ সব তথ্য ও রিঅ্যাকশন আপ-টু-ডেট আছে"
+                                    }
+                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                                 }
-                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(paddingValues)
-                    ) {
-                        LazyColumn(
-                            state = homeListState,
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(bottom = 16.dp)
+                            },
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(paddingValues)
                         ) {
-                            // Category chips + Daily Tip Card (when not searching)
-                            if (searchQuery.isBlank()) {
-                                item(key = "category_chips", contentType = "header_chips") {
-                                    CategoryChips(
-                                        categories = categories,
-                                        selectedCategory = selectedCategory,
-                                        onCategorySelected = viewModel::onCategorySelected
-                                    )
-                                }
+                            LazyColumn(
+                                state = homeListState,
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(bottom = 16.dp)
+                            ) {
+                                // Category chips + Daily Tip Card (when not searching)
+                                if (searchQuery.isBlank()) {
+                                    item(key = "category_chips", contentType = "header_chips") {
+                                        CategoryChips(
+                                            categories = categories,
+                                            selectedCategory = selectedCategory,
+                                            onCategorySelected = viewModel::onCategorySelected
+                                        )
+                                    }
 
-                                if (selectedCategory == null) {
-                                    dailyTipArticle?.let { tip ->
-                                        item(key = "daily_tip_card", contentType = "daily_tip") {
-                                            DailyHealthTipCard(
-                                                article = tip,
-                                                reminderEnabled = dailyReminderEnabled,
-                                                onReadClick = { onArticleClick(tip.id) },
-                                                onNextTipClick = viewModel::nextDailyTip,
-                                                onToggleReminder = { showThemeDialog = true }
-                                            )
+                                    if (selectedCategory == null) {
+                                        dailyTipArticle?.let { tip ->
+                                            item(key = "daily_tip_card", contentType = "daily_tip") {
+                                                DailyHealthTipCard(
+                                                    article = tip,
+                                                    reminderEnabled = dailyReminderEnabled,
+                                                    onReadClick = { onArticleClick(tip.id) },
+                                                    onNextTipClick = viewModel::nextDailyTip,
+                                                    onToggleReminder = { showThemeDialog = true }
+                                                )
+                                            }
                                         }
                                     }
                                 }
-                            }
 
-                            // Results header + Sort chips (জনপ্রিয় / নতুন / পুরাতন)
-                            item(key = "results_header", contentType = "header_text") {
-                                val headerText = when {
-                                    selectedCategory != null -> "\"${selectedCategory!!.replace("_", " ")}\": ${articles.size}টি"
-                                    searchQuery.isNotBlank() -> "\"$searchQuery\": ${articles.size}টি"
-                                    else -> "সকল স্বাস্থ্যতথ্য (${articles.size}টি)"
+                                // Results header + Sort chips (জনপ্রিয় / নতুন / পুরাতন)
+                                item(key = "results_header", contentType = "header_text") {
+                                    val headerText = when {
+                                        selectedCategory != null -> "\"${selectedCategory!!.replace("_", " ")}\": ${articles.size}টি"
+                                        searchQuery.isNotBlank() -> "\"$searchQuery\": ${articles.size}টি"
+                                        else -> "সকল স্বাস্থ্যতথ্য (${articles.size}টি)"
+                                    }
+                                    SortAndResultsHeader(
+                                        headerText = headerText,
+                                        sortOrder = sortOrder,
+                                        onSortChange = viewModel::onSortOrderChange
+                                    )
                                 }
-                                SortAndResultsHeader(
-                                    headerText = headerText,
-                                    sortOrder = sortOrder,
-                                    onSortChange = viewModel::onSortOrderChange
-                                )
-                            }
 
-                            if (articles.isEmpty() && searchQuery.isNotBlank()) {
-                                item(key = "empty_state") {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(48.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                            Text("🔍", fontSize = 48.sp)
-                                            Spacer(Modifier.height(8.dp))
-                                            Text(
-                                                "\"$searchQuery\" এর জন্য কোনো ফলাফল পাওয়া যায়নি",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
+                                if (articles.isEmpty() && searchQuery.isNotBlank()) {
+                                    item(key = "empty_state") {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(48.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                Text("🔍", fontSize = 48.sp)
+                                                Spacer(Modifier.height(8.dp))
+                                                Text(
+                                                    "\"$searchQuery\" এর জন্য কোনো ফলাফল পাওয়া যায়নি",
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
                                         }
                                     }
-                                }
-                            } else {
-                                items(
-                                    items = articles,
-                                    key = { it.id },
-                                    contentType = { "article_card" }
-                                ) { article ->
-                                    ArticleCard(
-                                        article = article,
-                                        isAdminMode = isAdminMode,
-                                        onClick = { onArticleClick(article.id) },
-                                        onBookmarkToggle = { viewModel.toggleBookmark(article.id, article.isBookmarked) },
-                                        onReactionClick = { viewModel.toggleReaction(article) },
-                                        onPinToggle = { viewModel.togglePin(article) },
-                                        onDeleteClick = { articleToDelete = article }
-                                    )
+                                } else {
+                                    items(
+                                        items = displayedArticles,
+                                        key = { it.id },
+                                        contentType = { "article_card" }
+                                    ) { article ->
+                                        ArticleCard(
+                                            article = article,
+                                            isAdminMode = isAdminMode,
+                                            onClick = { onArticleClick(article.id) },
+                                            onBookmarkToggle = { viewModel.toggleBookmark(article.id, article.isBookmarked) },
+                                            onReactionClick = { viewModel.toggleReaction(article) },
+                                            onPinToggle = { viewModel.togglePin(article) },
+                                            onDeleteClick = { articleToDelete = article }
+                                        )
+                                    }
+
+                                    if (hasMoreArticles) {
+                                        item(key = "loading_more_posts") {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(vertical = 12.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                    CircularProgressIndicator(
+                                                        modifier = Modifier.size(18.dp),
+                                                        strokeWidth = 2.dp,
+                                                        color = MaterialTheme.colorScheme.primary
+                                                    )
+                                                    Text(
+                                                        text = "পরবর্তী পোস্টগুলো লোড হচ্ছে...",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -903,6 +979,239 @@ fun ArticleList(
                     onPinToggle = { onPinToggle(article) },
                     onDeleteClick = { onDeleteClick(article) }
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun InitialDatabaseLoadingView(modifier: Modifier = Modifier) {
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val scale by infiniteTransition.animateFloat(
+        initialValue = 0.88f,
+        targetValue = 1.12f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "scale"
+    )
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.6f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "alpha"
+    )
+
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.padding(32.dp)
+        ) {
+            Surface(
+                modifier = Modifier
+                    .size(96.dp)
+                    .graphicsLayer(scaleX = scale, scaleY = scale, alpha = alpha),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text("🌿", fontSize = 44.sp)
+                }
+            }
+
+            CircularProgressIndicator(
+                color = MaterialTheme.colorScheme.primary,
+                strokeWidth = 3.dp,
+                modifier = Modifier.size(38.dp)
+            )
+
+            Text(
+                text = "স্বাস্থ্য জ্ঞান প্রস্তুত হচ্ছে...",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Text(
+                text = "প্রথমবার অ্যাপ চালু করায় তথ্যগুলো অফলাইনে সাজানো হচ্ছে। অনুগ্রহ করে কয়েক সেকেন্ড অপেক্ষা করুন...",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+        }
+    }
+}
+
+@Composable
+fun UserSubmitPostDialog(
+    onDismiss: () -> Unit,
+    onSubmit: (title: String, content: String, medicines: String, categories: List<String>, photoUrl: String) -> Unit
+) {
+    var title by remember { mutableStateOf("") }
+    var content by remember { mutableStateOf("") }
+    var medicines by remember { mutableStateOf("") }
+    var photoUrl by remember { mutableStateOf("") }
+    var selectedCats by remember { mutableStateOf(setOf<String>()) }
+    var isSubmitting by remember { mutableStateOf(false) }
+
+    Dialog(
+        onDismissRequest = { if (!isSubmitting) onDismiss() },
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier
+                .fillMaxWidth(0.94f)
+                .fillMaxHeight(0.9f)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(20.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("✍️", fontSize = 22.sp)
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "নতুন স্বাস্থ্যতথ্য পোস্ট করুন",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    IconButton(onClick = onDismiss, enabled = !isSubmitting) {
+                        Icon(Icons.Default.Close, null)
+                    }
+                }
+
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp)
+                ) {
+                    Text(
+                        text = "ℹ️ আপনার পোস্টটি পর্যালোচনার জন্য জমা হবে। অ্যাডমিন অনুমোদন (Approve) করার পর এটি সবার কাছে প্রকাশিত হবে।",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.padding(10.dp)
+                    )
+                }
+
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    item {
+                        OutlinedTextField(
+                            value = title,
+                            onValueChange = { title = it },
+                            label = { Text("শিরোনাম *") },
+                            placeholder = { Text("যেমন: গ্যাস্ট্রিক দূর করার সহজ ঘরোয়া উপায়") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true
+                        )
+                    }
+
+                    item {
+                        OutlinedTextField(
+                            value = content,
+                            onValueChange = { content = it },
+                            label = { Text("বিস্তারিত বিবরণ ও সমাধান *") },
+                            placeholder = { Text("কীভাবে ব্যবহার করবেন, নিয়মাবলি ইত্যাদি বিস্তারিত লিখুন...") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            minLines = 4,
+                            maxLines = 8
+                        )
+                    }
+
+                    item {
+                        OutlinedTextField(
+                            value = medicines,
+                            onValueChange = { medicines = it },
+                            label = { Text("ভেষজ বা উপাদান (ঐচ্ছিক)") },
+                            placeholder = { Text("কমা দিয়ে লিখুন, যেমন: মধু, আদা, লেবু") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true
+                        )
+                    }
+
+                    item {
+                        OutlinedTextField(
+                            value = photoUrl,
+                            onValueChange = { photoUrl = it },
+                            label = { Text("কভার ফটো CDN লিংক (ঐচ্ছিক)") },
+                            placeholder = { Text("https://example.com/image.jpg") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true
+                        )
+                    }
+
+                    item {
+                        Text(
+                            "ক্যাটাগরি নির্বাচন করুন:",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            categories.forEach { (cat, emoji) ->
+                                val selected = selectedCats.contains(cat)
+                                FilterChip(
+                                    selected = selected,
+                                    onClick = {
+                                        selectedCats = if (selected) selectedCats - cat else selectedCats + cat
+                                    },
+                                    label = { Text("$emoji ${cat.replace("_", " ")}") }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
+
+                Button(
+                    onClick = {
+                        isSubmitting = true
+                        onSubmit(title, content, medicines, selectedCats.toList(), photoUrl)
+                    },
+                    enabled = title.isNotBlank() && content.isNotBlank() && !isSubmitting,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    if (isSubmitting) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text("জমা হচ্ছে...")
+                    } else {
+                        Icon(Icons.Default.Send, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("পোস্ট জমা দিন (Submit)")
+                    }
+                }
             }
         }
     }
