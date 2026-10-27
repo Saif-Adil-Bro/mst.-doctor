@@ -2,6 +2,7 @@ package com.health.knowledge.ui.detail
 
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -23,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -44,7 +46,7 @@ import com.health.knowledge.util.ShareCardGenerator
 import com.health.knowledge.util.UserPreferencesManager
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun DetailScreen(
     articleId: Int,
@@ -239,64 +241,68 @@ fun DetailScreen(
 
             LazyColumn(
                 modifier = Modifier.padding(paddingValues),
-                contentPadding = PaddingValues(16.dp),
+                contentPadding = PaddingValues(top = 16.dp, bottom = 28.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 // ── Font Size + Reading Theme Control Bar (A- / A+ / Light / Sepia / Dark)
                 item {
-                    FontSizeControlBar(
-                        fontSizeSp = fontSizeSp,
-                        themeMode = themeMode,
-                        onDecrease = viewModel::decreaseFontSize,
-                        onIncrease = viewModel::increaseFontSize,
-                        onReset = viewModel::resetFontSize,
-                        onSelectTheme = viewModel::setThemeMode
-                    )
+                    Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        FontSizeControlBar(
+                            fontSizeSp = fontSizeSp,
+                            themeMode = themeMode,
+                            onDecrease = viewModel::decreaseFontSize,
+                            onIncrease = viewModel::increaseFontSize,
+                            onReset = viewModel::resetFontSize,
+                            onSelectTheme = viewModel::setThemeMode
+                        )
+                    }
                 }
 
                 // ── Cover Photo from CDN URL (Tap for Fullscreen Pinch-to-Zoom)
                 if (hasCdnImage) {
                     item {
-                        Card(
-                            shape = RoundedCornerShape(16.dp),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { showFullscreenPhoto = true }
-                        ) {
-                            Box {
-                                AsyncImage(
-                                    model = remember(art.photoPath) {
-                                        ImageRequest.Builder(context)
-                                            .data(art.photoPath)
-                                            .crossfade(true)
-                                            .build()
-                                    },
-                                    contentDescription = art.title,
-                                    contentScale = ContentScale.FillWidth,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .wrapContentHeight()
-                                )
-                                Surface(
-                                    color = Color.Black.copy(alpha = 0.55f),
-                                    shape = RoundedCornerShape(20.dp),
-                                    modifier = Modifier
-                                        .align(Alignment.BottomEnd)
-                                        .padding(10.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                                        verticalAlignment = Alignment.CenterVertically
+                        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            Card(
+                                shape = RoundedCornerShape(16.dp),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { showFullscreenPhoto = true }
+                            ) {
+                                Box {
+                                    AsyncImage(
+                                        model = remember(art.photoPath) {
+                                            ImageRequest.Builder(context)
+                                                .data(art.photoPath)
+                                                .crossfade(true)
+                                                .build()
+                                        },
+                                        contentDescription = art.title,
+                                        contentScale = ContentScale.FillWidth,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .wrapContentHeight()
+                                    )
+                                    Surface(
+                                        color = Color.Black.copy(alpha = 0.55f),
+                                        shape = RoundedCornerShape(20.dp),
+                                        modifier = Modifier
+                                            .align(Alignment.BottomEnd)
+                                            .padding(10.dp)
                                     ) {
-                                        Icon(
-                                            Icons.Default.ZoomIn,
-                                            contentDescription = "জুম করুন",
-                                            tint = Color.White,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Spacer(Modifier.width(4.dp))
-                                        Text("জুম করতে ট্যাপ করুন", color = Color.White, fontSize = 11.sp)
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                Icons.Default.ZoomIn,
+                                                contentDescription = "জুম করুন",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Spacer(Modifier.width(4.dp))
+                                            Text("জুম করতে ট্যাপ করুন", color = Color.White, fontSize = 11.sp)
+                                        }
                                     }
                                 }
                             }
@@ -306,81 +312,85 @@ fun DetailScreen(
 
                 // ── Selectable Title ─────────────────────────────────────────
                 item {
-                    SelectionContainer {
-                        Text(
-                            text = art.title,
-                            fontSize = (fontSizeSp + 4f).sp,
-                            lineHeight = ((fontSizeSp + 4f) * 1.35f).sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                    Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        SelectionContainer {
+                            Text(
+                                text = art.title,
+                                fontSize = (fontSizeSp + 4f).sp,
+                                lineHeight = ((fontSizeSp + 4f) * 1.35f).sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
                 }
 
                 // ── Meta info + Interactive Global Per-IP Reaction Button ────
                 item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                    Box(modifier = Modifier.padding(horizontal = 16.dp)) {
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                "📅 ${art.date}",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            if (art.isPinned) {
-                                Surface(
-                                    color = MaterialTheme.colorScheme.primary,
-                                    shape = RoundedCornerShape(4.dp)
-                                ) {
-                                    Text(
-                                        "📌 পিন করা",
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onPrimary
-                                    )
-                                }
-                            }
-                            if (art.syncedFromFirebase) {
-                                Surface(
-                                    color = MaterialTheme.colorScheme.secondary,
-                                    shape = RoundedCornerShape(4.dp)
-                                ) {
-                                    Text(
-                                        "নতুন",
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSecondary
-                                    )
-                                }
-                            }
-                        }
-
-                        // Reaction Button (1 per IP, synced globally via Firestore)
-                        Surface(
-                            shape = RoundedCornerShape(20.dp),
-                            color = if (art.isReacted) Color(0xFFFFEBEE) else MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(20.dp))
-                                .clickable { viewModel.toggleReaction(art) }
-                        ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(if (art.isReacted) "❤️" else "🤍", fontSize = 15.sp)
-                                Spacer(Modifier.width(6.dp))
                                 Text(
-                                    text = if (art.isReacted) "পছন্দ করেছেন (${art.reactions})" else "পছন্দ করুন (${art.reactions})",
+                                    "📅 ${art.date}",
                                     style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = if (art.isReacted) Color(0xFFD32F2F) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                                if (art.isPinned) {
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.primary,
+                                        shape = RoundedCornerShape(4.dp)
+                                    ) {
+                                        Text(
+                                            "📌 পিন করা",
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onPrimary
+                                        )
+                                    }
+                                }
+                                if (art.syncedFromFirebase) {
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.secondary,
+                                        shape = RoundedCornerShape(4.dp)
+                                    ) {
+                                        Text(
+                                            "নতুন",
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSecondary
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Reaction Button (1 per IP, synced globally via Firestore)
+                            Surface(
+                                shape = RoundedCornerShape(20.dp),
+                                color = if (art.isReacted) Color(0xFFFFEBEE) else MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .clickable { viewModel.toggleReaction(art) }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(if (art.isReacted) "❤️" else "🤍", fontSize = 15.sp)
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        text = if (art.isReacted) "পছন্দ করেছেন (${art.reactions})" else "পছন্দ করুন (${art.reactions})",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (art.isReacted) Color(0xFFD32F2F) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }
@@ -389,33 +399,55 @@ fun DetailScreen(
                 // ── Categories section ───────────────────────────────────────
                 if (art.categories.isNotEmpty()) {
                     item {
-                        SectionCard(title = "🏷️ বিষয়বস্তু") {
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                items(art.categories) { cat ->
-                                    TagChip(
-                                        text = cat.replace("_", " "),
-                                        color = MaterialTheme.colorScheme.primaryContainer
-                                    )
+                        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            SectionCard(title = "🏷️ বিষয়বস্তু") {
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    items(art.categories) { cat ->
+                                        TagChip(
+                                            text = cat.replace("_", " "),
+                                            color = MaterialTheme.colorScheme.primaryContainer
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                 }
 
-                // ── Selectable Medicines / ingredients section ───────────────
+                // ── Selectable Medicines / ingredients section (ইনলাইন ভেষজ উপাদান) ───────────────
                 if (art.medicines.isNotEmpty()) {
                     item {
-                        SectionCard(title = "💊 উপাদান / ভেষজ") {
-                            SelectionContainer {
-                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    art.medicines.forEach { med ->
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text("🌿 ", fontSize = fontSizeSp.sp)
-                                            Text(
-                                                med,
-                                                fontSize = fontSizeSp.sp,
-                                                fontWeight = FontWeight.Medium
-                                            )
+                        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            SectionCard(title = "💊 উপাদান / ভেষজ") {
+                                SelectionContainer {
+                                    FlowRow(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        art.medicines.forEach { med ->
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.65f),
+                                                border = BorderStroke(
+                                                    width = 1.dp,
+                                                    color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.25f)
+                                                )
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text("🌿", fontSize = (fontSizeSp - 1f).coerceAtLeast(12f).sp)
+                                                    Spacer(Modifier.width(4.dp))
+                                                    Text(
+                                                        text = med,
+                                                        fontSize = fontSizeSp.sp,
+                                                        fontWeight = FontWeight.Medium,
+                                                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -424,129 +456,230 @@ fun DetailScreen(
                     }
                 }
 
-                // ── Selectable Main content (scales with fontSizeSp) ─────────
+                // ── Selectable Main Content - 100% Full Width Card ─────────
                 item {
-                    SectionCard(title = "📝 বিস্তারিত সমাধান (টেক্সট সিলেক্ট করা যাবে)") {
-                        SelectionContainer {
-                            Text(
-                                text = art.content,
-                                fontSize = fontSizeSp.sp,
-                                lineHeight = (fontSizeSp * 1.6f).sp,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RectangleShape,
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 1.5.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 18.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "📝 বিস্তারিত সমাধান",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Surface(
+                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text(
+                                        "টেক্সট সিলেক্ট করা যাবে",
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                            }
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            SelectionContainer {
+                                Text(
+                                    text = art.content,
+                                    fontSize = fontSizeSp.sp,
+                                    lineHeight = (fontSizeSp * 1.65f).sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
                         }
                     }
                 }
 
                 // ── Personal Note Section (ব্যক্তিগত নোট) ─────────────────────
                 item {
-                    PersonalNoteCard(
-                        savedNote = art.userNote,
-                        onSaveNote = { newNote ->
-                            viewModel.saveUserNote(newNote)
-                            Toast.makeText(context, "📓 আপনার নোট সেভ হয়েছে!", Toast.LENGTH_SHORT).show()
-                        }
-                    )
+                    Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        PersonalNoteCard(
+                            savedNote = art.userNote,
+                            onSaveNote = { newNote ->
+                                viewModel.saveUserNote(newNote)
+                                Toast.makeText(context, "📓 আপনার নোট সেভ হয়েছে!", Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    }
                 }
 
                 // ── Bottom Reaction & Image Card Share Bar ───────────────────
                 item {
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer
-                        ),
-                        shape = RoundedCornerShape(14.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                    Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer
+                            ),
+                            shape = RoundedCornerShape(14.dp)
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                Text(
-                                    text = "📌 লেখাটি উপকারী মনে হয়েছে?",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                                Button(
-                                    onClick = { viewModel.toggleReaction(art) },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = if (art.isReacted) Color(0xFFD32F2F) else MaterialTheme.colorScheme.primary
-                                    ),
-                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = if (art.isReacted) "❤️ ${art.reactions}" else "🤍 রিঅ্যাক্ট দিন (${art.reactions})"
+                                        text = "📌 লেখাটি উপকারী মনে হয়েছে?",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
                                     )
-                                }
-                            }
-
-                            OutlinedButton(
-                                onClick = {
-                                    isSharingImage = true
-                                    coroutineScope.launch {
-                                        ShareCardGenerator.shareArticleAsImageCard(context, art)
-                                        isSharingImage = false
+                                    Button(
+                                        onClick = { viewModel.toggleReaction(art) },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = if (art.isReacted) Color(0xFFD32F2F) else MaterialTheme.colorScheme.primary
+                                        ),
+                                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                                    ) {
+                                        Text(
+                                            text = if (art.isReacted) "❤️ ${art.reactions}" else "🤍 রিঅ্যাক্ট দিন (${art.reactions})"
+                                        )
                                     }
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text("🖼️ ইমেজ কার্ড হিসেবে সোশ্যাল মিডিয়ায় শেয়ার করুন")
+                                }
+
+                                OutlinedButton(
+                                    onClick = {
+                                        isSharingImage = true
+                                        coroutineScope.launch {
+                                            ShareCardGenerator.shareArticleAsImageCard(context, art)
+                                            isSharingImage = false
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("🖼️ ইমেজ কার্ড হিসেবে সোশ্যাল মিডিয়ায় শেয়ার করুন")
+                                }
                             }
                         }
                     }
                 }
 
-                // ── Related Articles Section ─────────────────────────────────
+                // ── Related / Suggested Articles Section (ডানে-বামে স্ক্রোলযোগ্য) ─────────────────
                 if (relatedArticles.isNotEmpty()) {
                     item {
-                        SectionCard(title = "🔗 সম্পর্কিত আরও স্বাস্থ্যতথ্য") {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                relatedArticles.forEach { rel ->
-                                    Surface(
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "🔗 সম্পর্কিত আরও স্বাস্থ্যতথ্য",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "👈 ডানে-বামে স্ক্রোল করুন 👉",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                items(relatedArticles, key = { it.id }) { rel ->
+                                    val relHasImage = remember(rel.photoPath) {
+                                        rel.photoPath.startsWith("http://") || rel.photoPath.startsWith("https://")
+                                    }
+                                    Card(
                                         modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .clickable { onRelatedArticleClick(rel.id) }
+                                            .width(260.dp)
+                                            .clickable { onRelatedArticleClick(rel.id) },
+                                        shape = RoundedCornerShape(14.dp),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
+                                        ),
+                                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                                     ) {
-                                        Row(
-                                            modifier = Modifier.padding(12.dp),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(12.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
-                                            Column(modifier = Modifier.weight(1f)) {
+                                            if (relHasImage) {
+                                                AsyncImage(
+                                                    model = ImageRequest.Builder(context)
+                                                        .data(rel.photoPath)
+                                                        .crossfade(true)
+                                                        .build(),
+                                                    contentDescription = rel.title,
+                                                    contentScale = ContentScale.Crop,
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(110.dp)
+                                                        .clip(RoundedCornerShape(8.dp))
+                                                )
+                                            }
+                                            Text(
+                                                text = rel.title,
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            if (rel.medicines.isNotEmpty()) {
                                                 Text(
-                                                    text = rel.title,
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    maxLines = 2,
+                                                    text = "🌿 ${rel.medicines.take(2).joinToString(", ")}",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis
                                                 )
-                                                if (rel.medicines.isNotEmpty()) {
-                                                    Spacer(Modifier.height(2.dp))
-                                                    Text(
-                                                        text = "🌿 ${rel.medicines.take(3).joinToString(", ")}",
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = MaterialTheme.colorScheme.primary
-                                                    )
-                                                }
                                             }
-                                            Icon(
-                                                Icons.Default.ChevronRight,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
+                                            Spacer(Modifier.height(4.dp))
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = "বিস্তারিত দেখুন",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                                Icon(
+                                                    Icons.Default.ArrowForward,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
                                         }
                                     }
                                 }
