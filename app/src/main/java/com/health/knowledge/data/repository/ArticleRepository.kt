@@ -45,32 +45,59 @@ class ArticleRepository @Inject constructor(
 
     suspend fun getFirebaseSyncedCount(): Int = articleDao.getFirebaseSyncedCount()
 
-    // ── Per-IP Reaction (1 reaction per IP/Device per post) ──────────────────
+    // ── Per-IP Global Reaction (Optimistic Local + Atomic Firestore Sync) ────
     suspend fun toggleReaction(article: Article) {
         val wantReact = !article.isReacted
-        val newCount = if (wantReact) {
+        val optimisticCount = if (wantReact) {
             article.reactions + 1
         } else {
             (article.reactions - 1).coerceAtLeast(0)
         }
 
-        // 1. Update local Room DB immediately for instant UI feedback
+        // 1. Optimistic local update for instant UI feedback
         articleDao.updateReaction(
             id = article.id,
-            reactions = newCount,
+            reactions = optimisticCount,
             isReacted = wantReact
         )
 
-        // 2. Sync per-IP reaction to Firestore (with timeout so offline never blocks)
-        withTimeoutOrNull(4500L) {
+        // 2. Atomic Firestore Transaction to count globally across all users/IPs
+        withTimeoutOrNull(5000L) {
             val ipHash = prefsManager.getClientIpHash()
-            firestoreDataSource.syncReactionByIp(
+            val txResult = firestoreDataSource.toggleReactionGlobalTransaction(
                 postKey = article.postKey,
                 firebaseDocId = article.firebaseDocId,
                 ipHash = ipHash,
                 wantReact = wantReact,
-                newLocalReactionCount = newCount
+                fallbackBaseCount = article.reactions
             )
+            txResult.getOrNull()?.let { (globalCount, reactedState) ->
+                articleDao.updateReaction(
+                    id = article.id,
+                    reactions = globalCount,
+                    isReacted = reactedState
+                )
+            }
+        }
+    }
+
+    /**
+     * Refreshes the live global reaction count from Firestore when viewing a post.
+     */
+    suspend fun refreshLiveReactions(article: Article) {
+        withTimeoutOrNull(4000L) {
+            val ipHash = prefsManager.getClientIpHash()
+            val (globalCount, hasIpReacted) = firestoreDataSource.fetchLiveReactionStatus(
+                postKey = article.postKey,
+                ipHash = ipHash
+            )
+            if (globalCount != null) {
+                articleDao.updateReaction(
+                    id = article.id,
+                    reactions = globalCount,
+                    isReacted = hasIpReacted ?: article.isReacted
+                )
+            }
         }
     }
 
@@ -80,22 +107,25 @@ class ArticleRepository @Inject constructor(
         content: String,
         medicines: String,
         categories: String,
+        photoUrl: String,
         date: String,
         isPinned: Boolean = false
     ): Result<String> {
         val now = System.currentTimeMillis()
+        val cleanPhotoUrl = photoUrl.trim()
         val firestoreArticle = FirestoreDataSource.FirestoreArticle(
             title = title,
             content = content,
             date = date,
             medicines = medicines,
             categories = categories,
+            hasPhoto = cleanPhotoUrl.isNotBlank(),
+            photoUrl = cleanPhotoUrl,
             isPinned = isPinned,
             isReviewed = true,
             createdAt = now
         )
 
-        // Try uploading to Firestore with a 5-second timeout
         val remoteDocId = withTimeoutOrNull(5000L) {
             firestoreDataSource.addArticle(firestoreArticle).getOrNull()
         } ?: ""
@@ -120,15 +150,17 @@ class ArticleRepository @Inject constructor(
         }
     }
 
-    // ── Admin: Edit / Review post globally ───────────────────────────────────
+    // ── Admin: Edit / Review post globally (including CDN photoUrl) ──────────
     suspend fun updateArticleGlobally(
         article: Article,
         title: String,
         content: String,
         medicines: String,
         categories: String,
+        photoUrl: String,
         isReviewed: Boolean = true
     ) {
+        val cleanPhotoUrl = photoUrl.trim()
         val keywords = "$title $content $medicines $categories".lowercase()
         articleDao.updateArticleContent(
             id = article.id,
@@ -136,6 +168,8 @@ class ArticleRepository @Inject constructor(
             content = content,
             medicines = medicines,
             categories = categories,
+            photoPath = cleanPhotoUrl,
+            hasPhoto = cleanPhotoUrl.isNotBlank(),
             searchKeywords = keywords,
             isReviewed = isReviewed
         )
@@ -148,6 +182,7 @@ class ArticleRepository @Inject constructor(
                 content = content,
                 medicines = medicines,
                 categories = categories,
+                photoUrl = cleanPhotoUrl,
                 isReviewed = isReviewed
             )
         }

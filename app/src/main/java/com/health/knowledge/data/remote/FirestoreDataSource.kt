@@ -1,6 +1,5 @@
 package com.health.knowledge.data.remote
 
-import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.ktx.firestore
@@ -55,7 +54,7 @@ class FirestoreDataSource @Inject constructor() {
     }
 
     /**
-     * Fetches global overrides (pins, edits, deletes, reaction counts) for both bundled and Firebase articles.
+     * Fetches global overrides (pins, edits, deletes, global reaction counts, cover photos).
      */
     suspend fun fetchAllPostMeta(): List<PostMetaOverride> {
         return try {
@@ -65,6 +64,26 @@ class FirestoreDataSource @Inject constructor() {
             }
         } catch (e: Exception) {
             emptyList()
+        }
+    }
+
+    /**
+     * Fetches live global reaction count & IP reaction status for a single post.
+     */
+    suspend fun fetchLiveReactionStatus(postKey: String, ipHash: String): Pair<Int?, Boolean?> {
+        return try {
+            val metaDoc = metaCollection.document(postKey).get().await()
+            val reactorDoc = metaCollection.document(postKey)
+                .collection("reactors")
+                .document(ipHash)
+                .get()
+                .await()
+
+            val globalCount = metaDoc.getLong("reactions")?.toInt()
+            val hasIpReacted = if (metaDoc.exists()) reactorDoc.exists() else null
+            Pair(globalCount, hasIpReacted)
+        } catch (e: Exception) {
+            Pair(null, null)
         }
     }
 
@@ -122,7 +141,7 @@ class FirestoreDataSource @Inject constructor() {
     }
 
     /**
-     * Admin: Edit / Review an article globally.
+     * Admin: Edit / Review an article globally (including CDN cover photo URL).
      */
     suspend fun updateArticleGlobal(
         postKey: String,
@@ -131,16 +150,20 @@ class FirestoreDataSource @Inject constructor() {
         content: String,
         medicines: String,
         categories: String,
+        photoUrl: String,
         isReviewed: Boolean
     ): Result<Unit> {
         return try {
             val now = System.currentTimeMillis()
+            val hasPhoto = photoUrl.isNotBlank()
             val data = mapOf(
                 "postKey" to postKey,
                 "title" to title,
                 "content" to content,
                 "medicines" to medicines,
                 "categories" to categories,
+                "photoUrl" to photoUrl,
+                "hasPhoto" to hasPhoto,
                 "isReviewed" to isReviewed,
                 "hasContentOverride" to true,
                 "updatedAt" to now
@@ -153,6 +176,8 @@ class FirestoreDataSource @Inject constructor() {
                         "content" to content,
                         "medicines" to medicines,
                         "categories" to categories,
+                        "photoUrl" to photoUrl,
+                        "hasPhoto" to hasPhoto,
                         "isReviewed" to isReviewed
                     ),
                     SetOptions.merge()
@@ -165,46 +190,68 @@ class FirestoreDataSource @Inject constructor() {
     }
 
     /**
-     * Per-IP Reaction: Ensures each IP hash can react at most once per post in Firestore.
+     * Atomic Global Per-IP Reaction using Firestore Transaction:
+     * - Checks if `postMeta/{postKey}/reactors/{ipHash}` exists in Firestore
+     * - Atomically increments or decrements the global `reactions` counter
+     * - Returns Pair(globalReactionCount, isReactedByThisIp)
      */
-    suspend fun syncReactionByIp(
+    suspend fun toggleReactionGlobalTransaction(
         postKey: String,
         firebaseDocId: String,
         ipHash: String,
         wantReact: Boolean,
-        newLocalReactionCount: Int
-    ): Result<Unit> {
+        fallbackBaseCount: Int
+    ): Result<Pair<Int, Boolean>> {
         return try {
             val metaRef = metaCollection.document(postKey)
             val reactorRef = metaRef.collection("reactors").document(ipHash)
 
-            if (wantReact) {
-                reactorRef.set(
-                    mapOf(
-                        "ipHash" to ipHash,
-                        "reactedAt" to System.currentTimeMillis()
-                    )
-                ).await()
-            } else {
-                reactorRef.delete().await()
-            }
+            val resultPair = db.runTransaction { transaction ->
+                val metaSnap = transaction.get(metaRef)
+                val reactorSnap = transaction.get(reactorRef)
 
-            metaRef.set(
-                mapOf(
-                    "postKey" to postKey,
-                    "reactions" to newLocalReactionCount,
-                    "updatedAt" to System.currentTimeMillis()
-                ),
-                SetOptions.merge()
-            ).await()
+                val currentGlobalCount = metaSnap.getLong("reactions")?.toInt() ?: fallbackBaseCount
+                val alreadyReactedInCloud = reactorSnap.exists()
+
+                val updatedCount = when {
+                    wantReact && !alreadyReactedInCloud -> {
+                        transaction.set(
+                            reactorRef,
+                            mapOf(
+                                "ipHash" to ipHash,
+                                "reactedAt" to System.currentTimeMillis()
+                            )
+                        )
+                        currentGlobalCount + 1
+                    }
+                    !wantReact && alreadyReactedInCloud -> {
+                        transaction.delete(reactorRef)
+                        (currentGlobalCount - 1).coerceAtLeast(0)
+                    }
+                    else -> currentGlobalCount
+                }
+
+                transaction.set(
+                    metaRef,
+                    mapOf(
+                        "postKey" to postKey,
+                        "reactions" to updatedCount,
+                        "updatedAt" to System.currentTimeMillis()
+                    ),
+                    SetOptions.merge()
+                )
+
+                Pair(updatedCount, wantReact)
+            }.await()
 
             if (firebaseDocId.isNotBlank()) {
                 collection.document(firebaseDocId).set(
-                    mapOf("reactions" to newLocalReactionCount),
+                    mapOf("reactions" to resultPair.first),
                     SetOptions.merge()
                 ).await()
             }
-            Result.success(Unit)
+
+            Result.success(resultPair)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -232,7 +279,8 @@ class FirestoreDataSource @Inject constructor() {
             reactions = reactions,
             medicines = medicines,
             categories = categories,
-            hasPhoto = hasPhoto,
+            hasPhoto = hasPhoto || photoUrl.isNotBlank(),
+            photoPath = photoUrl,
             syncedFromFirebase = true,
             firebaseDocId = firebaseDocId,
             isPinned = isPinned,
@@ -248,6 +296,8 @@ class FirestoreDataSource @Inject constructor() {
         val content: String = "",
         val medicines: String = "",
         val categories: String = "",
+        val photoUrl: String = "",
+        val hasPhoto: Boolean = false,
         val hasContentOverride: Boolean = false,
         val isPinned: Boolean? = null,
         val isDeleted: Boolean = false,

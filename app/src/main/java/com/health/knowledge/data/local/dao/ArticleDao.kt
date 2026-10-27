@@ -63,13 +63,15 @@ interface ArticleDao {
     @Query("UPDATE articles SET reactions = :reactions WHERE id = :id")
     suspend fun updateReactionsCountOnly(id: Int, reactions: Int)
 
-    // ── EDIT / REVIEW ────────────────────────────────────────────────────────
+    // ── EDIT / REVIEW (includes CDN photoUrl) ────────────────────────────────
     @Query("""
         UPDATE articles 
         SET title = :title,
             content = :content,
             medicines = :medicines,
             categories = :categories,
+            photoPath = :photoPath,
+            hasPhoto = :hasPhoto,
             searchKeywords = :searchKeywords,
             isReviewed = :isReviewed
         WHERE id = :id
@@ -80,6 +82,8 @@ interface ArticleDao {
         content: String,
         medicines: String,
         categories: String,
+        photoPath: String,
+        hasPhoto: Boolean,
         searchKeywords: String,
         isReviewed: Boolean
     )

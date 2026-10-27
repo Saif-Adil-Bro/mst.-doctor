@@ -32,12 +32,33 @@ class HomeViewModel @Inject constructor(
     private val _activeTab = MutableStateFlow("home")
     val activeTab: StateFlow<String> = _activeTab.asStateFlow()
 
+    // Saved scroll position across navigation and config changes
+    var savedScrollIndex: Int = 0
+        private set
+    var savedScrollOffset: Int = 0
+        private set
+
+    var savedBookmarkScrollIndex: Int = 0
+        private set
+    var savedBookmarkScrollOffset: Int = 0
+        private set
+
+    fun saveHomeScrollPosition(index: Int, offset: Int) {
+        savedScrollIndex = index
+        savedScrollOffset = offset
+    }
+
+    fun saveBookmarkScrollPosition(index: Int, offset: Int) {
+        savedBookmarkScrollIndex = index
+        savedBookmarkScrollOffset = offset
+    }
+
     // Admin Mode state
     val isAdminMode: StateFlow<Boolean> = prefsManager.isAdminMode
 
-    // Articles result (instant search with 250ms debounce, pinned first)
+    // Keep articles warm with SharingStarted.Lazily so list never flashes empty on back navigation
     val articles: StateFlow<List<Article>> = combine(
-        _searchQuery.debounce(250),
+        _searchQuery.debounce(200),
         _selectedCategory
     ) { query, category ->
         Pair(query, category)
@@ -49,25 +70,29 @@ class HomeViewModel @Inject constructor(
         }
     }
     .map { entities -> entities.map { it.toDomain() } }
-    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     val bookmarkedArticles: StateFlow<List<Article>> = repository.getBookmarked()
         .map { entities -> entities.map { it.toDomain() } }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     val totalCount: StateFlow<Int> = repository.observeActiveCount()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+        .stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
     fun onSearchQueryChange(query: String) {
         _searchQuery.value = query
         if (query.isNotBlank()) {
             _selectedCategory.value = null
+            savedScrollIndex = 0
+            savedScrollOffset = 0
         }
     }
 
     fun onCategorySelected(category: String?) {
         _selectedCategory.value = category
         _searchQuery.value = ""
+        savedScrollIndex = 0
+        savedScrollOffset = 0
     }
 
     fun onTabSelected(tab: String) {
@@ -109,5 +134,7 @@ class HomeViewModel @Inject constructor(
     fun clearSearch() {
         _searchQuery.value = ""
         _selectedCategory.value = null
+        savedScrollIndex = 0
+        savedScrollOffset = 0
     }
 }

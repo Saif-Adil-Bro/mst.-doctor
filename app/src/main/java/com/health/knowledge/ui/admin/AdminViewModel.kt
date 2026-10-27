@@ -66,6 +66,7 @@ class AdminViewModel @Inject constructor(
         content: String,
         medicines: String,
         selectedCategories: List<String>,
+        photoUrl: String,
         isPinned: Boolean
     ) {
         if (title.isBlank() || content.isBlank()) {
@@ -80,6 +81,7 @@ class AdminViewModel @Inject constructor(
                 content = content.trim(),
                 medicines = medicines.trim(),
                 categories = selectedCategories.joinToString(","),
+                photoUrl = photoUrl.trim(),
                 date = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault())
                     .format(java.util.Date()),
                 isPinned = isPinned
@@ -105,7 +107,8 @@ class AdminViewModel @Inject constructor(
         title: String,
         content: String,
         medicines: String,
-        categories: String
+        categories: String,
+        photoUrl: String
     ) {
         if (title.isBlank() || content.isBlank()) {
             _uiState.value = AdminUiState(error = "শিরোনাম এবং বিষয়বস্তু খালি রাখা যাবে না")
@@ -119,6 +122,7 @@ class AdminViewModel @Inject constructor(
                 content = content.trim(),
                 medicines = medicines.trim(),
                 categories = categories.trim(),
+                photoUrl = photoUrl.trim(),
                 isReviewed = true
             )
             _uiState.value = AdminUiState(isSuccess = true, message = "✅ পোস্ট আপডেট ও রিভিউ সম্পন্ন হয়েছে!")

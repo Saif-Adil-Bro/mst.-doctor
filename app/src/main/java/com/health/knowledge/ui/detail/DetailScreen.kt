@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.BookmarkBorder
@@ -17,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
@@ -24,6 +26,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.health.knowledge.domain.model.Article
 import com.health.knowledge.ui.home.TagChip
 import com.health.knowledge.util.UserPreferencesManager
@@ -146,6 +150,10 @@ fun DetailScreen(
         }
     ) { paddingValues ->
         article?.let { art ->
+            val hasCdnImage = remember(art.photoPath) {
+                art.photoPath.startsWith("http://") || art.photoPath.startsWith("https://")
+            }
+
             LazyColumn(
                 modifier = Modifier.padding(paddingValues),
                 contentPadding = PaddingValues(16.dp),
@@ -161,18 +169,45 @@ fun DetailScreen(
                     )
                 }
 
-                // ── Title ────────────────────────────────────────────────────
-                item {
-                    Text(
-                        text = art.title,
-                        fontSize = (fontSizeSp + 4f).sp,
-                        lineHeight = ((fontSizeSp + 4f) * 1.35f).sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                // ── Cover Photo from CDN URL (Auto-Size Fit Screen Width) ────
+                if (hasCdnImage) {
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            AsyncImage(
+                                model = remember(art.photoPath) {
+                                    ImageRequest.Builder(context)
+                                        .data(art.photoPath)
+                                        .crossfade(true)
+                                        .build()
+                                },
+                                contentDescription = art.title,
+                                contentScale = ContentScale.FillWidth,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .wrapContentHeight()
+                            )
+                        }
+                    }
                 }
 
-                // ── Meta info + Interactive Per-IP Reaction Button ───────────
+                // ── Selectable Title ─────────────────────────────────────────
+                item {
+                    SelectionContainer {
+                        Text(
+                            text = art.title,
+                            fontSize = (fontSizeSp + 4f).sp,
+                            lineHeight = ((fontSizeSp + 4f) * 1.35f).sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+
+                // ── Meta info + Interactive Global Per-IP Reaction Button ────
                 item {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -216,7 +251,7 @@ fun DetailScreen(
                             }
                         }
 
-                        // Reaction Button (1 per IP)
+                        // Reaction Button (1 per IP, synced globally via Firestore)
                         Surface(
                             shape = RoundedCornerShape(20.dp),
                             color = if (art.isReacted) Color(0xFFFFEBEE) else MaterialTheme.colorScheme.surfaceVariant,
@@ -257,19 +292,21 @@ fun DetailScreen(
                     }
                 }
 
-                // ── Medicines / ingredients section ──────────────────────────
+                // ── Selectable Medicines / ingredients section ───────────────
                 if (art.medicines.isNotEmpty()) {
                     item {
                         SectionCard(title = "💊 উপাদান / ভেষজ") {
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                art.medicines.forEach { med ->
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text("🌿 ", fontSize = fontSizeSp.sp)
-                                        Text(
-                                            med,
-                                            fontSize = fontSizeSp.sp,
-                                            fontWeight = FontWeight.Medium
-                                        )
+                            SelectionContainer {
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    art.medicines.forEach { med ->
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text("🌿 ", fontSize = fontSizeSp.sp)
+                                            Text(
+                                                med,
+                                                fontSize = fontSizeSp.sp,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -277,15 +314,17 @@ fun DetailScreen(
                     }
                 }
 
-                // ── Main content (scales with fontSizeSp) ────────────────────
+                // ── Selectable Main content (scales with fontSizeSp) ─────────
                 item {
-                    SectionCard(title = "📝 বিস্তারিত সমাধান") {
-                        Text(
-                            text = art.content,
-                            fontSize = fontSizeSp.sp,
-                            lineHeight = (fontSizeSp * 1.6f).sp,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                    SectionCard(title = "📝 বিস্তারিত সমাধান (টেক্সট সিলেক্ট করা যাবে)") {
+                        SelectionContainer {
+                            Text(
+                                text = art.content,
+                                fontSize = fontSizeSp.sp,
+                                lineHeight = (fontSizeSp * 1.6f).sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
                 }
 

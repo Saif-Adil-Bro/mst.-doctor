@@ -4,17 +4,24 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.health.knowledge.domain.model.Article
 import com.health.knowledge.ui.home.categories
 
@@ -40,13 +47,13 @@ fun AdminScreen(
         }
     }
 
-    // Edit / Review Dialog
+    // Edit / Review Dialog (includes Cover Photo CDN URL)
     editingArticle?.let { article ->
         EditArticleDialog(
             article = article,
             onDismiss = { editingArticle = null },
-            onSave = { newTitle, newContent, newMeds, newCats ->
-                viewModel.updateArticle(article, newTitle, newContent, newMeds, newCats)
+            onSave = { newTitle, newContent, newMeds, newCats, newPhotoUrl ->
+                viewModel.updateArticle(article, newTitle, newContent, newMeds, newCats, newPhotoUrl)
                 editingArticle = null
             }
         )
@@ -162,8 +169,8 @@ fun AdminScreen(
                 0 -> AddPostTab(
                     isLoading = uiState.isLoading,
                     isSuccess = uiState.isSuccess,
-                    onSubmit = { title, content, meds, cats, isPinned ->
-                        viewModel.submitArticle(title, content, meds, cats, isPinned)
+                    onSubmit = { title, content, meds, cats, photoUrl, isPinned ->
+                        viewModel.submitArticle(title, content, meds, cats, photoUrl, isPinned)
                     }
                 )
                 1 -> ManagePostsTab(
@@ -192,11 +199,13 @@ fun AdminScreen(
 private fun AddPostTab(
     isLoading: Boolean,
     isSuccess: Boolean,
-    onSubmit: (String, String, String, List<String>, Boolean) -> Unit
+    onSubmit: (String, String, String, List<String>, String, Boolean) -> Unit
 ) {
+    val context = LocalContext.current
     var title by remember { mutableStateOf("") }
     var content by remember { mutableStateOf("") }
     var medicines by remember { mutableStateOf("") }
+    var photoUrl by remember { mutableStateOf("") }
     var selectedCategories by remember { mutableStateOf(setOf<String>()) }
     var isPinned by remember { mutableStateOf(false) }
 
@@ -205,6 +214,7 @@ private fun AddPostTab(
             title = ""
             content = ""
             medicines = ""
+            photoUrl = ""
             selectedCategories = emptySet()
             isPinned = false
         }
@@ -223,6 +233,48 @@ private fun AddPostTab(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp)
             )
+        }
+
+        item {
+            OutlinedTextField(
+                value = photoUrl,
+                onValueChange = { photoUrl = it },
+                label = { Text("🖼️ কভার ফটো / থাম্বনেইল CDN লিংক (ঐচ্ছিক)") },
+                placeholder = { Text("https://example.com/image.jpg") },
+                singleLine = true,
+                leadingIcon = { Icon(Icons.Default.Image, null) },
+                trailingIcon = {
+                    if (photoUrl.isNotBlank()) {
+                        IconButton(onClick = { photoUrl = "" }) {
+                            Icon(Icons.Default.Clear, null)
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp)
+            )
+        }
+
+        if (photoUrl.startsWith("http://") || photoUrl.startsWith("https://")) {
+            item {
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data(photoUrl.trim())
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = "কভার প্রিভিউ",
+                        contentScale = ContentScale.FillWidth,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .wrapContentHeight()
+                            .heightIn(max = 200.dp)
+                    )
+                }
+            }
         }
 
         item {
@@ -298,7 +350,7 @@ private fun AddPostTab(
         item {
             Button(
                 onClick = {
-                    onSubmit(title, content, medicines, selectedCategories.toList(), isPinned)
+                    onSubmit(title, content, medicines, selectedCategories.toList(), photoUrl, isPinned)
                 },
                 modifier = Modifier.fillMaxWidth().height(54.dp),
                 enabled = !isLoading,
@@ -482,18 +534,24 @@ private fun ManagePostsTab(
 private fun EditArticleDialog(
     article: Article,
     onDismiss: () -> Unit,
-    onSave: (String, String, String, String) -> Unit
+    onSave: (String, String, String, String, String) -> Unit
 ) {
     var title by remember { mutableStateOf(article.title) }
     var content by remember { mutableStateOf(article.content) }
     var medicines by remember { mutableStateOf(article.medicines.joinToString(",")) }
     var cats by remember { mutableStateOf(article.categories.joinToString(",")) }
+    var photoUrl by remember {
+        mutableStateOf(if (article.photoPath.startsWith("http")) article.photoPath else "")
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("✏️ পোস্ট রিভিউ ও এডিট") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
@@ -501,10 +559,17 @@ private fun EditArticleDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
+                    value = photoUrl,
+                    onValueChange = { photoUrl = it },
+                    label = { Text("🖼️ কভার ফটো CDN লিংক (https://...)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
                     value = content,
                     onValueChange = { content = it },
                     label = { Text("বিস্তারিত") },
-                    modifier = Modifier.fillMaxWidth().height(160.dp)
+                    modifier = Modifier.fillMaxWidth().height(150.dp)
                 )
                 OutlinedTextField(
                     value = medicines,
@@ -521,7 +586,7 @@ private fun EditArticleDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { onSave(title, content, medicines, cats) }) {
+            Button(onClick = { onSave(title, content, medicines, cats, photoUrl) }) {
                 Text("সেভ ও আপডেট করুন")
             }
         },

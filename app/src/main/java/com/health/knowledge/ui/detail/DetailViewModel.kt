@@ -32,6 +32,11 @@ class DetailViewModel @Inject constructor(
 
     fun loadArticle(id: Int) {
         _articleId.value = id
+        viewModelScope.launch {
+            repository.getById(id)?.toDomain()?.let { loaded ->
+                repository.refreshLiveReactions(loaded)
+            }
+        }
     }
 
     fun increaseFontSize() {

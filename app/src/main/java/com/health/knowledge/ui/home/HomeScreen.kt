@@ -3,11 +3,14 @@ package com.health.knowledge.ui.home
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -16,10 +19,12 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -29,6 +34,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.health.knowledge.domain.model.Article
 
 val categories = listOf(
@@ -62,6 +69,37 @@ fun HomeScreen(
     val isAdminMode by viewModel.isAdminMode.collectAsState()
 
     val context = LocalContext.current
+
+    // Hoisted LazyListStates preserved across DetailScreen / AdminScreen navigation
+    val homeListState = rememberSaveable(saver = LazyListState.Saver) {
+        LazyListState(
+            firstVisibleItemIndex = viewModel.savedScrollIndex,
+            firstVisibleItemScrollOffset = viewModel.savedScrollOffset
+        )
+    }
+    val bookmarkListState = rememberSaveable(saver = LazyListState.Saver) {
+        LazyListState(
+            firstVisibleItemIndex = viewModel.savedBookmarkScrollIndex,
+            firstVisibleItemScrollOffset = viewModel.savedBookmarkScrollOffset
+        )
+    }
+
+    // Continuously persist scroll offset to ViewModel
+    LaunchedEffect(homeListState) {
+        snapshotFlow {
+            homeListState.firstVisibleItemIndex to homeListState.firstVisibleItemScrollOffset
+        }.collect { (index, offset) ->
+            viewModel.saveHomeScrollPosition(index, offset)
+        }
+    }
+
+    LaunchedEffect(bookmarkListState) {
+        snapshotFlow {
+            bookmarkListState.firstVisibleItemIndex to bookmarkListState.firstVisibleItemScrollOffset
+        }.collect { (index, offset) ->
+            viewModel.saveBookmarkScrollPosition(index, offset)
+        }
+    }
 
     // 5-click detector on Header Title for Hidden Admin Mode
     var tapCount by remember { mutableIntStateOf(0) }
@@ -253,6 +291,7 @@ fun HomeScreen(
             "bookmarks" -> {
                 ArticleList(
                     articles = bookmarked,
+                    listState = bookmarkListState,
                     isAdminMode = isAdminMode,
                     onArticleClick = onArticleClick,
                     onBookmarkToggle = { id, state -> viewModel.toggleBookmark(id, state) },
@@ -265,12 +304,15 @@ fun HomeScreen(
             }
             else -> {
                 LazyColumn(
-                    modifier = Modifier.padding(paddingValues),
+                    state = homeListState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
                     contentPadding = PaddingValues(bottom = 16.dp)
                 ) {
                     // Category chips
                     if (searchQuery.isBlank()) {
-                        item {
+                        item(key = "category_chips", contentType = "header_chips") {
                             CategoryChips(
                                 categories = categories,
                                 selectedCategory = selectedCategory,
@@ -280,7 +322,7 @@ fun HomeScreen(
                     }
 
                     // Results header
-                    item {
+                    item(key = "results_header", contentType = "header_text") {
                         val headerText = when {
                             selectedCategory != null -> "\"${selectedCategory!!.replace("_", " ")}\" বিষয়ক: ${articles.size}টি"
                             searchQuery.isNotBlank() -> "\"$searchQuery\" এর ফলাফল: ${articles.size}টি"
@@ -294,8 +336,8 @@ fun HomeScreen(
                         )
                     }
 
-                    if (articles.isEmpty()) {
-                        item {
+                    if (articles.isEmpty() && searchQuery.isNotBlank()) {
+                        item(key = "empty_state") {
                             Box(
                                 modifier = Modifier.fillMaxWidth().padding(48.dp),
                                 contentAlignment = Alignment.Center
@@ -312,7 +354,11 @@ fun HomeScreen(
                             }
                         }
                     } else {
-                        items(articles, key = { it.id }) { article ->
+                        items(
+                            items = articles,
+                            key = { it.id },
+                            contentType = { "article_card" }
+                        ) { article ->
                             ArticleCard(
                                 article = article,
                                 isAdminMode = isAdminMode,
@@ -467,6 +513,11 @@ fun ArticleCard(
     onPinToggle: () -> Unit,
     onDeleteClick: () -> Unit
 ) {
+    val context = LocalContext.current
+    val hasCdnImage = remember(article.photoPath) {
+        article.photoPath.startsWith("http://") || article.photoPath.startsWith("https://")
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -483,6 +534,26 @@ fun ArticleCard(
         )
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
+            // Cover Photo / Thumbnail from CDN URL (auto-fit screen width)
+            if (hasCdnImage) {
+                AsyncImage(
+                    model = remember(article.photoPath) {
+                        ImageRequest.Builder(context)
+                            .data(article.photoPath)
+                            .crossfade(true)
+                            .build()
+                    },
+                    contentDescription = article.title,
+                    contentScale = ContentScale.FillWidth,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .wrapContentHeight()
+                        .heightIn(max = 220.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                )
+                Spacer(Modifier.height(10.dp))
+            }
+
             // Header row: Pinned / New badges + Bookmark / Admin actions
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -585,13 +656,18 @@ fun ArticleCard(
 
             Spacer(Modifier.height(10.dp))
 
-            // Tags row
+            // Lightweight Row instead of nested LazyRow for 60/120fps smooth scrolling
             if (article.categories.isNotEmpty() || article.medicines.isNotEmpty()) {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(article.categories.take(3)) { cat ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    article.categories.take(3).forEach { cat ->
                         TagChip(text = cat.replace("_", " "), color = MaterialTheme.colorScheme.primaryContainer)
                     }
-                    items(article.medicines.take(2)) { med ->
+                    article.medicines.take(2).forEach { med ->
                         TagChip(text = "💊 $med", color = MaterialTheme.colorScheme.secondaryContainer)
                     }
                 }
@@ -659,6 +735,7 @@ fun TagChip(text: String, color: Color) {
 @Composable
 fun ArticleList(
     articles: List<Article>,
+    listState: LazyListState,
     isAdminMode: Boolean,
     onArticleClick: (Int) -> Unit,
     onBookmarkToggle: (Int, Boolean) -> Unit,
@@ -668,9 +745,13 @@ fun ArticleList(
     emptyMessage: String,
     modifier: Modifier = Modifier
 ) {
-    LazyColumn(modifier = modifier, contentPadding = PaddingValues(bottom = 16.dp)) {
+    LazyColumn(
+        state = listState,
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 16.dp)
+    ) {
         if (articles.isEmpty()) {
-            item {
+            item(key = "empty_bookmarks") {
                 Box(
                     modifier = Modifier.fillMaxWidth().padding(48.dp),
                     contentAlignment = Alignment.Center
@@ -679,7 +760,11 @@ fun ArticleList(
                 }
             }
         } else {
-            items(articles, key = { it.id }) { article ->
+            items(
+                items = articles,
+                key = { it.id },
+                contentType = { "article_card" }
+            ) { article ->
                 ArticleCard(
                     article = article,
                     isAdminMode = isAdminMode,

@@ -9,10 +9,6 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import java.util.concurrent.TimeUnit
 
-/**
- * Background worker that syncs new Firebase articles and global admin actions
- * (pin, edit, delete, reactions) to local Room DB.
- */
 @HiltWorker
 class SyncWorker @AssistedInject constructor(
     @Assisted context: Context,
@@ -43,7 +39,7 @@ class SyncWorker @AssistedInject constructor(
                 }
             }
 
-            // 2. Fetch global postMeta overrides (pins, edits, global deletes, reactions)
+            // 2. Fetch global postMeta overrides (pins, edits, global deletes, reactions, cover photos)
             val metaList = firestoreDataSource.fetchAllPostMeta()
             for (meta in metaList) {
                 val targetEntity = when {
@@ -70,19 +66,22 @@ class SyncWorker @AssistedInject constructor(
 
                 if (meta.hasContentOverride && meta.title.isNotBlank() && meta.content.isNotBlank()) {
                     val keywords = "${meta.title} ${meta.content} ${meta.medicines} ${meta.categories}".lowercase()
+                    val resolvedPhoto = meta.photoUrl.ifBlank { targetEntity.photoPath }
                     articleDao.updateArticleContent(
                         id = targetEntity.id,
                         title = meta.title,
                         content = meta.content,
                         medicines = meta.medicines,
                         categories = meta.categories,
+                        photoPath = resolvedPhoto,
+                        hasPhoto = resolvedPhoto.isNotBlank(),
                         searchKeywords = keywords,
                         isReviewed = meta.isReviewed
                     )
                 }
 
                 meta.reactions?.let { remoteReactions ->
-                    if (remoteReactions > targetEntity.reactions) {
+                    if (remoteReactions >= 0) {
                         articleDao.updateReactionsCountOnly(targetEntity.id, remoteReactions)
                     }
                 }
