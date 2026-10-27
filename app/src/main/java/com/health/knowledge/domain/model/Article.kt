@@ -14,7 +14,12 @@ data class Article(
     val hasPhoto: Boolean,
     val photoPath: String,
     val syncedFromFirebase: Boolean,
-    val isBookmarked: Boolean
+    val firebaseDocId: String,
+    val isBookmarked: Boolean,
+    val isPinned: Boolean,
+    val isReacted: Boolean,
+    val isReviewed: Boolean,
+    val postKey: String
 )
 
 fun ArticleEntity.toDomain() = Article(
@@ -24,10 +29,15 @@ fun ArticleEntity.toDomain() = Article(
     content = content,
     date = date,
     reactions = reactions,
-    medicines = medicines.split(",").filter { it.isNotBlank() },
-    categories = categories.split(",").filter { it.isNotBlank() },
+    medicines = medicines.split(",").map { it.trim() }.filter { it.isNotBlank() },
+    categories = categories.split(",").map { it.trim() }.filter { it.isNotBlank() },
     hasPhoto = hasPhoto,
     photoPath = photoPath,
     syncedFromFirebase = syncedFromFirebase,
-    isBookmarked = isBookmarked
+    firebaseDocId = firebaseDocId,
+    isBookmarked = isBookmarked,
+    isPinned = isPinned,
+    isReacted = isReacted,
+    isReviewed = isReviewed,
+    postKey = postKey
 )

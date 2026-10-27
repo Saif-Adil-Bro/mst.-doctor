@@ -1,14 +1,16 @@
 package com.health.knowledge.ui.home
 
-import androidx.compose.animation.*
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -18,7 +20,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -53,44 +59,159 @@ fun HomeScreen(
     val bookmarked by viewModel.bookmarkedArticles.collectAsState()
     val activeTab by viewModel.activeTab.collectAsState()
     val totalCount by viewModel.totalCount.collectAsState()
+    val isAdminMode by viewModel.isAdminMode.collectAsState()
+
+    val context = LocalContext.current
+
+    // 5-click detector on Header Title for Hidden Admin Mode
+    var tapCount by remember { mutableIntStateOf(0) }
+    var lastTapTime by remember { mutableLongStateOf(0L) }
+    var showPasswordDialog by remember { mutableStateOf(false) }
+    var articleToDelete by remember { mutableStateOf<Article?>(null) }
+
+    if (showPasswordDialog) {
+        AdminPasswordDialog(
+            onDismiss = { showPasswordDialog = false },
+            onUnlock = { password ->
+                val ok = viewModel.unlockAdmin(password)
+                if (ok) {
+                    showPasswordDialog = false
+                    Toast.makeText(context, "🔓 অ্যাডমিন মোড আনলক হয়েছে!", Toast.LENGTH_SHORT).show()
+                }
+                ok
+            }
+        )
+    }
+
+    articleToDelete?.let { target ->
+        AlertDialog(
+            onDismissRequest = { articleToDelete = null },
+            title = { Text("পোস্ট ডিলিট নিশ্চিত করুন") },
+            text = { Text("আপনি কি নিশ্চিত যে \"${target.title.take(50)}...\" পোস্টটি গ্লোবালি ডিলিট করতে চান?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deleteArticle(target)
+                        articleToDelete = null
+                        Toast.makeText(context, "পোস্টটি গ্লোবালি ডিলিট করা হয়েছে", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("ডিলিট করুন")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { articleToDelete = null }) {
+                    Text("বাতিল")
+                }
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
             Column(
                 modifier = Modifier
+                    .fillMaxWidth()
                     .background(MaterialTheme.colorScheme.primary)
-                    .padding(bottom = 8.dp)
+                    .statusBarsPadding()
+                    .padding(top = 6.dp, bottom = 12.dp)
             ) {
-                // App Title
+                // App Title + Hidden 5-Click Admin Trigger
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(
+                        modifier = Modifier.clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }
+                        ) {
+                            val now = System.currentTimeMillis()
+                            if (now - lastTapTime > 2500L) {
+                                tapCount = 1
+                            } else {
+                                tapCount++
+                            }
+                            lastTapTime = now
+                            if (tapCount >= 5) {
+                                tapCount = 0
+                                if (!isAdminMode) {
+                                    showPasswordDialog = true
+                                } else {
+                                    onAdminClick()
+                                }
+                            }
+                        }
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "🌿 স্বাস্থ্য জ্ঞান",
+                                color = Color.White,
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            if (isAdminMode) {
+                                Spacer(Modifier.width(8.dp))
+                                Surface(
+                                    color = MaterialTheme.colorScheme.secondary,
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text(
+                                        text = "ADMIN",
+                                        color = Color.White,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
                         Text(
-                            text = "🌿 স্বাস্থ্য জ্ঞান",
-                            color = Color.White,
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "$totalCount টি স্বাস্থ্যতথ্য",
-                            color = Color.White.copy(alpha = 0.8f),
+                            text = "$totalCount টি স্বাস্থ্যতথ্য • অফলাইন ও অনলাইন",
+                            color = Color.White.copy(alpha = 0.85f),
                             fontSize = 12.sp
                         )
                     }
-                    IconButton(onClick = onAdminClick) {
-                        Icon(
-                            Icons.Default.Add,
-                            contentDescription = "নতুন যোগ করুন",
-                            tint = Color.White,
-                            modifier = Modifier
-                                .background(Color.White.copy(alpha = 0.2f), CircleShape)
-                                .padding(4.dp)
-                        )
+
+                    // Show Admin Controls ONLY when Admin Mode is unlocked
+                    if (isAdminMode) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilledTonalButton(
+                                onClick = onAdminClick,
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = Color.White,
+                                    contentColor = MaterialTheme.colorScheme.primary
+                                ),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Icon(Icons.Default.AdminPanelSettings, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("ম্যানেজ", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                            IconButton(
+                                onClick = {
+                                    viewModel.lockAdmin()
+                                    Toast.makeText(context, "🔒 অ্যাডমিন মোড বন্ধ করা হয়েছে", Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(Color.White.copy(alpha = 0.2f), CircleShape)
+                            ) {
+                                Icon(
+                                    Icons.Default.Lock,
+                                    contentDescription = "লক অ্যাডমিন",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
                     }
                 }
 
@@ -132,8 +253,12 @@ fun HomeScreen(
             "bookmarks" -> {
                 ArticleList(
                     articles = bookmarked,
+                    isAdminMode = isAdminMode,
                     onArticleClick = onArticleClick,
                     onBookmarkToggle = { id, state -> viewModel.toggleBookmark(id, state) },
+                    onReactionClick = { viewModel.toggleReaction(it) },
+                    onPinToggle = { viewModel.togglePin(it) },
+                    onDeleteClick = { articleToDelete = it },
                     emptyMessage = "কোনো সেভ করা আর্টিকেল নেই",
                     modifier = Modifier.padding(paddingValues)
                 )
@@ -157,9 +282,9 @@ fun HomeScreen(
                     // Results header
                     item {
                         val headerText = when {
-                            selectedCategory != null -> "\"$selectedCategory\" বিষয়ক: ${articles.size}টি"
+                            selectedCategory != null -> "\"${selectedCategory!!.replace("_", " ")}\" বিষয়ক: ${articles.size}টি"
                             searchQuery.isNotBlank() -> "\"$searchQuery\" এর ফলাফল: ${articles.size}টি"
-                            else -> "সকল স্বাস্থ্যতথ্য"
+                            else -> "সকল স্বাস্থ্যতথ্য (${articles.size}টি)"
                         }
                         Text(
                             text = headerText,
@@ -190,9 +315,12 @@ fun HomeScreen(
                         items(articles, key = { it.id }) { article ->
                             ArticleCard(
                                 article = article,
-                                searchQuery = searchQuery,
+                                isAdminMode = isAdminMode,
                                 onClick = { onArticleClick(article.id) },
-                                onBookmarkToggle = { viewModel.toggleBookmark(article.id, article.isBookmarked) }
+                                onBookmarkToggle = { viewModel.toggleBookmark(article.id, article.isBookmarked) },
+                                onReactionClick = { viewModel.toggleReaction(article) },
+                                onPinToggle = { viewModel.togglePin(article) },
+                                onDeleteClick = { articleToDelete = article }
                             )
                         }
                     }
@@ -200,6 +328,71 @@ fun HomeScreen(
             }
         }
     }
+}
+
+@Composable
+fun AdminPasswordDialog(
+    onDismiss: () -> Unit,
+    onUnlock: (String) -> Boolean
+) {
+    var password by remember { mutableStateOf("") }
+    var isError by remember { mutableStateOf(false) }
+    var showPassword by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.AdminPanelSettings, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+        title = { Text("🔐 অ্যাডমিন মোড আনলক", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("অ্যাডমিন প্যানেল চালু করতে পাসওয়ার্ড দিন:", style = MaterialTheme.typography.bodyMedium)
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = {
+                        password = it
+                        isError = false
+                    },
+                    label = { Text("পাসওয়ার্ড") },
+                    singleLine = true,
+                    isError = isError,
+                    visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    trailingIcon = {
+                        IconButton(onClick = { showPassword = !showPassword }) {
+                            Icon(
+                                if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                contentDescription = null
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (isError) {
+                    Text(
+                        "❌ ভুল পাসওয়ার্ড! আবার চেষ্টা করুন।",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (!onUnlock(password)) {
+                        isError = true
+                    }
+                }
+            ) {
+                Text("আনলক করুন")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("বাতিল")
+            }
+        }
+    )
 }
 
 @Composable
@@ -227,6 +420,8 @@ fun SearchBar(
         colors = OutlinedTextFieldDefaults.colors(
             focusedContainerColor = Color.White,
             unfocusedContainerColor = Color.White,
+            focusedTextColor = Color(0xFF1A1A1A),
+            unfocusedTextColor = Color(0xFF1A1A1A),
             focusedBorderColor = Color.Transparent,
             unfocusedBorderColor = Color.Transparent
         )
@@ -265,60 +460,108 @@ fun CategoryChips(
 @Composable
 fun ArticleCard(
     article: Article,
-    searchQuery: String,
+    isAdminMode: Boolean,
     onClick: () -> Unit,
-    onBookmarkToggle: () -> Unit
+    onBookmarkToggle: () -> Unit,
+    onReactionClick: () -> Unit,
+    onPinToggle: () -> Unit,
+    onDeleteClick: () -> Unit
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 6.dp)
             .clickable(onClick = onClick),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (article.isPinned) 4.dp else 2.dp),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (article.syncedFromFirebase)
-                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
-            else
-                MaterialTheme.colorScheme.surface
+            containerColor = when {
+                article.isPinned -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                article.syncedFromFirebase -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.25f)
+                else -> MaterialTheme.colorScheme.surface
+            }
         )
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            // Header row
+            // Header row: Pinned / New badges + Bookmark / Admin actions
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // New badge for Firebase synced
-                if (article.syncedFromFirebase) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.secondary,
-                        shape = RoundedCornerShape(4.dp),
-                        modifier = Modifier.padding(end = 8.dp)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (article.isPinned) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.primary,
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                "📌 পিন করা",
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                    if (article.syncedFromFirebase) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.secondary,
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                "নতুন",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondary
+                            )
+                        }
+                    }
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (isAdminMode) {
+                        IconButton(
+                            onClick = onPinToggle,
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.PushPin,
+                                contentDescription = "পিন করুন",
+                                tint = if (article.isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        IconButton(
+                            onClick = onDeleteClick,
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.DeleteOutline,
+                                contentDescription = "ডিলিট করুন",
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                    IconButton(
+                        onClick = onBookmarkToggle,
+                        modifier = Modifier.size(28.dp)
                     ) {
-                        Text(
-                            "নতুন",
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSecondary
+                        Icon(
+                            if (article.isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                            contentDescription = "বুকমার্ক",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
-                IconButton(
-                    onClick = onBookmarkToggle,
-                    modifier = Modifier.size(24.dp)
-                ) {
-                    Icon(
-                        if (article.isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
             }
 
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(6.dp))
 
             // Title
             Text(
@@ -352,29 +595,45 @@ fun ArticleCard(
                         TagChip(text = "💊 $med", color = MaterialTheme.colorScheme.secondaryContainer)
                     }
                 }
+                Spacer(Modifier.height(10.dp))
             }
 
-            Spacer(Modifier.height(8.dp))
-
-            // Footer
+            // Footer: Date + Interactive Per-IP Reaction Button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = article.date,
+                    text = "📅 ${article.date}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
-                if (article.reactions > 0) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("❤️", fontSize = 12.sp)
-                        Spacer(Modifier.width(2.dp))
+
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = if (article.isReacted)
+                        Color(0xFFFFEBEE)
+                    else
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable(onClick = onReactionClick)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (article.isReacted) "❤️" else "🤍",
+                            fontSize = 13.sp
+                        )
+                        Spacer(Modifier.width(4.dp))
                         Text(
                             text = article.reactions.toString(),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = if (article.isReacted) FontWeight.Bold else FontWeight.Normal,
+                            color = if (article.isReacted) Color(0xFFD32F2F) else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -400,8 +659,12 @@ fun TagChip(text: String, color: Color) {
 @Composable
 fun ArticleList(
     articles: List<Article>,
+    isAdminMode: Boolean,
     onArticleClick: (Int) -> Unit,
     onBookmarkToggle: (Int, Boolean) -> Unit,
+    onReactionClick: (Article) -> Unit,
+    onPinToggle: (Article) -> Unit,
+    onDeleteClick: (Article) -> Unit,
     emptyMessage: String,
     modifier: Modifier = Modifier
 ) {
@@ -419,9 +682,12 @@ fun ArticleList(
             items(articles, key = { it.id }) { article ->
                 ArticleCard(
                     article = article,
-                    searchQuery = "",
+                    isAdminMode = isAdminMode,
                     onClick = { onArticleClick(article.id) },
-                    onBookmarkToggle = { onBookmarkToggle(article.id, article.isBookmarked) }
+                    onBookmarkToggle = { onBookmarkToggle(article.id, article.isBookmarked) },
+                    onReactionClick = { onReactionClick(article) },
+                    onPinToggle = { onPinToggle(article) },
+                    onDeleteClick = { onDeleteClick(article) }
                 )
             }
         }

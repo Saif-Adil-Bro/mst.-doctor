@@ -4,12 +4,14 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.health.knowledge.data.local.dao.ArticleDao
 import com.health.knowledge.data.local.entity.ArticleEntity
 
 @Database(
     entities = [ArticleEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class HealthDatabase : RoomDatabase() {
@@ -19,14 +21,22 @@ abstract class HealthDatabase : RoomDatabase() {
     companion object {
         const val DATABASE_NAME = "health_knowledge.db"
 
-        // Seeding of bundled data is done by DatabaseSeeder from HealthKnowledgeApp.onCreate()
-        // (kept out of here to avoid a Hilt dependency cycle: Database -> Seeder -> Dao -> Database)
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE articles ADD COLUMN isPinned INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE articles ADD COLUMN isDeleted INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE articles ADD COLUMN isReacted INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE articles ADD COLUMN isReviewed INTEGER NOT NULL DEFAULT 1")
+            }
+        }
+
         fun create(context: Context): HealthDatabase {
             return Room.databaseBuilder(
                 context.applicationContext,
                 HealthDatabase::class.java,
                 DATABASE_NAME
             )
+            .addMigrations(MIGRATION_1_2)
             .fallbackToDestructiveMigration()
             .build()
         }

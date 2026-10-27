@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.health.knowledge.data.repository.ArticleRepository
 import com.health.knowledge.domain.model.Article
 import com.health.knowledge.domain.model.toDomain
+import com.health.knowledge.util.UserPreferencesManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
@@ -15,7 +16,8 @@ import javax.inject.Inject
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class HomeViewModel @Inject constructor(
-    private val repository: ArticleRepository
+    private val repository: ArticleRepository,
+    private val prefsManager: UserPreferencesManager
 ) : ViewModel() {
 
     // Search query state
@@ -30,9 +32,12 @@ class HomeViewModel @Inject constructor(
     private val _activeTab = MutableStateFlow("home")
     val activeTab: StateFlow<String> = _activeTab.asStateFlow()
 
-    // Articles result (instant search with 300ms debounce)
+    // Admin Mode state
+    val isAdminMode: StateFlow<Boolean> = prefsManager.isAdminMode
+
+    // Articles result (instant search with 250ms debounce, pinned first)
     val articles: StateFlow<List<Article>> = combine(
-        _searchQuery.debounce(300),
+        _searchQuery.debounce(250),
         _selectedCategory
     ) { query, category ->
         Pair(query, category)
@@ -50,12 +55,14 @@ class HomeViewModel @Inject constructor(
         .map { entities -> entities.map { it.toDomain() } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val totalCount: StateFlow<Int> = flow { emit(repository.getTotalCount()) }
+    val totalCount: StateFlow<Int> = repository.observeActiveCount()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     fun onSearchQueryChange(query: String) {
         _searchQuery.value = query
-        _selectedCategory.value = null
+        if (query.isNotBlank()) {
+            _selectedCategory.value = null
+        }
     }
 
     fun onCategorySelected(category: String?) {
@@ -71,6 +78,32 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             repository.updateBookmark(articleId, !currentState)
         }
+    }
+
+    fun toggleReaction(article: Article) {
+        viewModelScope.launch {
+            repository.toggleReaction(article)
+        }
+    }
+
+    fun togglePin(article: Article) {
+        viewModelScope.launch {
+            repository.togglePinArticle(article)
+        }
+    }
+
+    fun deleteArticle(article: Article) {
+        viewModelScope.launch {
+            repository.deleteArticleGlobally(article)
+        }
+    }
+
+    fun unlockAdmin(password: String): Boolean {
+        return prefsManager.verifyAndUnlockAdmin(password)
+    }
+
+    fun lockAdmin() {
+        prefsManager.lockAdminMode()
     }
 
     fun clearSearch() {

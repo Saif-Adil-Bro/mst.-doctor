@@ -20,5 +20,13 @@ data class ArticleEntity(
     val syncedFromFirebase: Boolean = false,
     val firebaseDocId: String = "",
     val isBookmarked: Boolean = false,
+    val isPinned: Boolean = false,
+    val isDeleted: Boolean = false,
+    val isReacted: Boolean = false,
+    val isReviewed: Boolean = true,
     val createdAt: Long = System.currentTimeMillis()
-)
+) {
+    val postKey: String
+        get() = if (firebaseDocId.isNotBlank()) "fb_$firebaseDocId"
+        else "bundled_${messageId.ifBlank { id.toString() }}"
+}

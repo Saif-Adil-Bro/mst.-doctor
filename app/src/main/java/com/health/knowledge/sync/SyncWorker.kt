@@ -10,13 +10,8 @@ import dagger.assisted.AssistedInject
 import java.util.concurrent.TimeUnit
 
 /**
- * Background worker that syncs new Firebase articles to local Room DB.
- *
- * HOW IT WORKS:
- * 1. Runs automatically every 6 hours (when internet available)
- * 2. Fetches only NEW articles from Firestore (after last sync time)
- * 3. Saves them to Room DB — now available OFFLINE forever
- * 4. User sees updated content even without internet next time
+ * Background worker that syncs new Firebase articles and global admin actions
+ * (pin, edit, delete, reactions) to local Room DB.
  */
 @HiltWorker
 class SyncWorker @AssistedInject constructor(
@@ -31,7 +26,7 @@ class SyncWorker @AssistedInject constructor(
             val prefs = applicationContext.getSharedPreferences("sync_prefs", Context.MODE_PRIVATE)
             val lastSync = prefs.getLong("last_sync_timestamp", 0L)
 
-            // Fetch only articles newer than last sync
+            // 1. Fetch new articles from Firestore
             val newArticles = if (lastSync == 0L) {
                 firestoreDataSource.fetchAllArticles()
             } else {
@@ -40,14 +35,59 @@ class SyncWorker @AssistedInject constructor(
 
             if (newArticles.isNotEmpty()) {
                 val entities = newArticles.mapNotNull { firebaseArticle ->
-                    // Skip if already exists in local DB
                     val exists = articleDao.countByFirebaseDocId(firebaseArticle.firebaseDocId) > 0
                     if (exists) null else firebaseArticle.toEntity()
                 }
-                articleDao.insertAll(entities)
+                if (entities.isNotEmpty()) {
+                    articleDao.insertAll(entities)
+                }
             }
 
-            // Save last sync time
+            // 2. Fetch global postMeta overrides (pins, edits, global deletes, reactions)
+            val metaList = firestoreDataSource.fetchAllPostMeta()
+            for (meta in metaList) {
+                val targetEntity = when {
+                    meta.postKey.startsWith("fb_") -> {
+                        val docId = meta.postKey.removePrefix("fb_")
+                        articleDao.getByFirebaseDocId(docId)
+                    }
+                    meta.postKey.startsWith("bundled_") -> {
+                        val keyPart = meta.postKey.removePrefix("bundled_")
+                        articleDao.getByMessageId(keyPart)
+                            ?: keyPart.toIntOrNull()?.let { articleDao.getById(it) }
+                    }
+                    else -> null
+                } ?: continue
+
+                if (meta.isDeleted) {
+                    articleDao.markDeleted(targetEntity.id)
+                    continue
+                }
+
+                meta.isPinned?.let { pinned ->
+                    articleDao.updatePin(targetEntity.id, pinned)
+                }
+
+                if (meta.hasContentOverride && meta.title.isNotBlank() && meta.content.isNotBlank()) {
+                    val keywords = "${meta.title} ${meta.content} ${meta.medicines} ${meta.categories}".lowercase()
+                    articleDao.updateArticleContent(
+                        id = targetEntity.id,
+                        title = meta.title,
+                        content = meta.content,
+                        medicines = meta.medicines,
+                        categories = meta.categories,
+                        searchKeywords = keywords,
+                        isReviewed = meta.isReviewed
+                    )
+                }
+
+                meta.reactions?.let { remoteReactions ->
+                    if (remoteReactions > targetEntity.reactions) {
+                        articleDao.updateReactionsCountOnly(targetEntity.id, remoteReactions)
+                    }
+                }
+            }
+
             prefs.edit()
                 .putLong("last_sync_timestamp", System.currentTimeMillis())
                 .apply()
@@ -61,10 +101,6 @@ class SyncWorker @AssistedInject constructor(
     companion object {
         const val WORK_NAME = "HealthKnowledge_SyncWorker"
 
-        /**
-         * Schedule periodic sync every 6 hours, only when internet is available.
-         * This is the KEY method to call at app startup.
-         */
         fun schedule(context: Context) {
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
@@ -77,14 +113,11 @@ class SyncWorker @AssistedInject constructor(
 
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 WORK_NAME,
-                ExistingPeriodicWorkPolicy.KEEP,  // Don't restart if already scheduled
+                ExistingPeriodicWorkPolicy.KEEP,
                 syncRequest
             )
         }
 
-        /**
-         * Trigger an immediate one-time sync (e.g., on app open).
-         */
         fun syncNow(context: Context) {
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
