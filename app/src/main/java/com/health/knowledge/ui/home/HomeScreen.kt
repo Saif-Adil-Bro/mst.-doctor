@@ -349,7 +349,7 @@ fun ArticleCard(
                         TagChip(text = cat.replace("_", " "), color = MaterialTheme.colorScheme.primaryContainer)
                     }
                     items(article.medicines.take(2)) { med ->
-                        TagChip(text = "💊 $med", color = MaterialTheme.colorScheme.tertiaryContainer ?: MaterialTheme.colorScheme.secondaryContainer)
+                        TagChip(text = "💊 $med", color = MaterialTheme.colorScheme.secondaryContainer)
                     }
                 }
             }
