@@ -25,7 +25,10 @@ data class Article(
     val userNote: String = "",
     val isDraft: Boolean = false,
     val isMine: Boolean = false,
-    val authorDeviceId: String = ""
+    val authorDeviceId: String = "",
+    val source: String = "",
+    val verifiedCount: Int = 0,
+    val isVerified: Boolean = false
 )
 
 fun ArticleEntity.toDomain() = Article(
@@ -51,5 +54,8 @@ fun ArticleEntity.toDomain() = Article(
     userNote = userNote,
     isDraft = isDraft,
     isMine = isMine,
-    authorDeviceId = authorDeviceId
+    authorDeviceId = authorDeviceId,
+    source = source,
+    verifiedCount = verifiedCount,
+    isVerified = isVerified
 )

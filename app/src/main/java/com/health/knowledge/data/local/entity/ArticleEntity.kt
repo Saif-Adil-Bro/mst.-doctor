@@ -29,7 +29,10 @@ data class ArticleEntity(
     val userNote: String = "",
     val isDraft: Boolean = false,
     val isMine: Boolean = false,
-    val authorDeviceId: String = ""
+    val authorDeviceId: String = "",
+    val source: String = "",
+    val verifiedCount: Int = 0,
+    val isVerified: Boolean = false
 ) {
     val postKey: String
         get() = if (firebaseDocId.isNotBlank()) "fb_$firebaseDocId"

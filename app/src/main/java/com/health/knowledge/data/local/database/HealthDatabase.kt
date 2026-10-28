@@ -11,7 +11,7 @@ import com.health.knowledge.data.local.entity.ArticleEntity
 
 @Database(
     entities = [ArticleEntity::class],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class HealthDatabase : RoomDatabase() {
@@ -45,13 +45,21 @@ abstract class HealthDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE articles ADD COLUMN source TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE articles ADD COLUMN verifiedCount INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE articles ADD COLUMN isVerified INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         fun create(context: Context): HealthDatabase {
             return Room.databaseBuilder(
                 context.applicationContext,
                 HealthDatabase::class.java,
                 DATABASE_NAME
             )
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
             .fallbackToDestructiveMigration()
             .build()
         }

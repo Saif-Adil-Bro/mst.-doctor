@@ -23,6 +23,7 @@ data class AdminUiState(
 data class AdminAnalyticsState(
     val totalActivePosts: Int = 0,
     val totalReactions: Int = 0,
+    val totalVerifications: Int = 0,
     val pinnedCount: Int = 0,
     val cloudSyncedCount: Int = 0,
     val draftCount: Int = 0,
@@ -87,6 +88,7 @@ class AdminViewModel @Inject constructor(
             AdminAnalyticsState(
                 totalActivePosts = active.size,
                 totalReactions = active.sumOf { it.reactions },
+                totalVerifications = active.sumOf { it.verifiedCount },
                 pinnedCount = active.count { it.isPinned },
                 cloudSyncedCount = active.count { it.syncedFromFirebase },
                 draftCount = drafts.size,
@@ -113,7 +115,8 @@ class AdminViewModel @Inject constructor(
         medicines: String,
         selectedCategories: List<String>,
         photoUrl: String,
-        isPinned: Boolean
+        isPinned: Boolean,
+        source: String = ""
     ) {
         if (title.isBlank() || content.isBlank()) {
             _uiState.value = _uiState.value.copy(error = "শিরোনাম এবং বিষয়বস্তু পূরণ করুন")
@@ -130,7 +133,8 @@ class AdminViewModel @Inject constructor(
                 photoUrl = photoUrl.trim(),
                 date = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault())
                     .format(java.util.Date()),
-                isPinned = isPinned
+                isPinned = isPinned,
+                source = source.trim()
             )
             _uiState.value = if (result.isSuccess) {
                 AdminUiState(isSuccess = true, message = "✅ সফলভাবে পোস্ট যোগ ও গ্লোবাল সিঙ্ক হয়েছে!")
@@ -146,7 +150,8 @@ class AdminViewModel @Inject constructor(
         medicines: String,
         selectedCategories: List<String>,
         photoUrl: String,
-        isPinned: Boolean
+        isPinned: Boolean,
+        source: String = ""
     ) {
         if (title.isBlank() || content.isBlank()) {
             _uiState.value = _uiState.value.copy(error = "ড্রাফট সেভ করতে অন্তত শিরোনাম এবং বিষয়বস্তু লিখুন")
@@ -163,7 +168,8 @@ class AdminViewModel @Inject constructor(
                 photoUrl = photoUrl.trim(),
                 date = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault())
                     .format(java.util.Date()),
-                isPinned = isPinned
+                isPinned = isPinned,
+                source = source.trim()
             )
             _uiState.value = AdminUiState(isSuccess = true, message = "📝 পোস্টটি ড্রাফট হিসেবে সেভ করা হয়েছে!")
         }
@@ -207,7 +213,8 @@ class AdminViewModel @Inject constructor(
         content: String,
         medicines: String,
         categories: String,
-        photoUrl: String
+        photoUrl: String,
+        source: String = ""
     ) {
         if (title.isBlank() || content.isBlank()) {
             _uiState.value = AdminUiState(error = "শিরোনাম এবং বিষয়বস্তু খালি রাখা যাবে না")
@@ -222,7 +229,8 @@ class AdminViewModel @Inject constructor(
                 medicines = medicines.trim(),
                 categories = categories.trim(),
                 photoUrl = photoUrl.trim(),
-                isReviewed = true
+                isReviewed = true,
+                source = source.trim()
             )
             _uiState.value = AdminUiState(isSuccess = true, message = "✅ পোস্ট আপডেট ও রিভিউ সম্পন্ন হয়েছে!")
         }
@@ -253,14 +261,21 @@ class AdminViewModel @Inject constructor(
         }
     }
 
-    fun changePassword(newPassword: String): Boolean {
-        val ok = prefsManager.changeAdminPassword(newPassword)
-        if (ok) {
-            _uiState.value = AdminUiState(isSuccess = true, message = "🔑 অ্যাডমিন পাসওয়ার্ড পরিবর্তন হয়েছে!")
-        } else {
-            _uiState.value = AdminUiState(error = "পাসওয়ার্ড কমপক্ষে ৪ অক্ষরের হতে হবে")
+    fun changePasswordGlobal(newPassword: String, newRecoveryCode: String = "") {
+        viewModelScope.launch {
+            _uiState.value = AdminUiState(isLoading = true)
+            val res = repository.changeAdminPasswordGlobal(newPassword, newRecoveryCode)
+            if (res.isSuccess) {
+                _uiState.value = AdminUiState(
+                    isSuccess = true,
+                    message = "🔐 পাসওয়ার্ড SHA-256 এনক্রিপ্টেড করে Firestore-এ সিঙ্ক করা হয়েছে!"
+                )
+            } else {
+                _uiState.value = AdminUiState(
+                    error = res.exceptionOrNull()?.localizedMessage ?: "পাসওয়ার্ড কমপক্ষে ৪ অক্ষরের হতে হবে"
+                )
+            }
         }
-        return ok
     }
 
     fun lockAdminMode() {

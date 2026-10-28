@@ -131,7 +131,8 @@ fun DetailScreen(
                     OutlinedButton(
                         onClick = {
                             showShareDialog = false
-                            val shareText = "${art.title}\n\n${art.content}"
+                            val sourceFooter = if (art.source.isNotBlank()) "\n\n📚 সূত্র: ${art.source}" else ""
+                            val shareText = "${art.title}\n\n${art.content}$sourceFooter"
                             val intent = Intent(Intent.ACTION_SEND).apply {
                                 type = "text/plain"
                                 putExtra(Intent.EXTRA_TEXT, shareText)
@@ -207,7 +208,8 @@ fun DetailScreen(
                         }
                         // Copy
                         IconButton(onClick = {
-                            clipboardManager.setText(AnnotatedString("${art.title}\n\n${art.content}"))
+                            val sourceFooter = if (art.source.isNotBlank()) "\n\n📚 সূত্র: ${art.source}" else ""
+                            clipboardManager.setText(AnnotatedString("${art.title}\n\n${art.content}$sourceFooter"))
                             showCopied = true
                         }) {
                             Icon(Icons.Default.ContentCopy, "কপি")
@@ -325,71 +327,106 @@ fun DetailScreen(
                     }
                 }
 
-                // ── Meta info + Interactive Global Per-IP Reaction Button ────
+                // ── Meta info + Interactive Global Reaction & Verification ───
                 item {
                     Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    "📅 ${art.date}",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                if (art.isPinned) {
-                                    Surface(
-                                        color = MaterialTheme.colorScheme.primary,
-                                        shape = RoundedCornerShape(4.dp)
-                                    ) {
-                                        Text(
-                                            "📌 পিন করা",
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onPrimary
-                                        )
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        "📅 ${art.date}",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    if (art.isPinned) {
+                                        Surface(
+                                            color = MaterialTheme.colorScheme.primary,
+                                            shape = RoundedCornerShape(4.dp)
+                                        ) {
+                                            Text(
+                                                "📌 পিন করা",
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onPrimary
+                                            )
+                                        }
+                                    }
+                                    if (art.verifiedCount > 0 || art.isVerified) {
+                                        Surface(
+                                            color = Color(0xFFE8F5E9),
+                                            shape = RoundedCornerShape(6.dp),
+                                            border = BorderStroke(1.dp, Color(0xFF2E7D32).copy(alpha = 0.4f))
+                                        ) {
+                                            Text(
+                                                "✅ পরীক্ষিত (${art.verifiedCount})",
+                                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF1B5E20)
+                                            )
+                                        }
                                     }
                                 }
-                                if (art.syncedFromFirebase) {
-                                    Surface(
-                                        color = MaterialTheme.colorScheme.secondary,
-                                        shape = RoundedCornerShape(4.dp)
+
+                                // Reaction Button (1 per IP, synced globally via Firestore)
+                                Surface(
+                                    shape = RoundedCornerShape(20.dp),
+                                    color = if (art.isReacted) Color(0xFFFFEBEE) else MaterialTheme.colorScheme.surfaceVariant,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(20.dp))
+                                        .clickable { viewModel.toggleReaction(art) }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
+                                        Text(if (art.isReacted) "❤️" else "🤍", fontSize = 15.sp)
+                                        Spacer(Modifier.width(6.dp))
                                         Text(
-                                            "নতুন",
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSecondary
+                                            text = if (art.isReacted) "পছন্দ (${art.reactions})" else "পছন্দ করুন (${art.reactions})",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (art.isReacted) Color(0xFFD32F2F) else MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                 }
                             }
 
-                            // Reaction Button (1 per IP, synced globally via Firestore)
-                            Surface(
-                                shape = RoundedCornerShape(20.dp),
-                                color = if (art.isReacted) Color(0xFFFFEBEE) else MaterialTheme.colorScheme.surfaceVariant,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(20.dp))
-                                    .clickable { viewModel.toggleReaction(art) }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                            // Source / Reference Badge (if provided)
+                            if (art.source.isNotBlank()) {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f),
+                                    shape = RoundedCornerShape(10.dp),
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f)),
+                                    modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Text(if (art.isReacted) "❤️" else "🤍", fontSize = 15.sp)
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(
-                                        text = if (art.isReacted) "পছন্দ করেছেন (${art.reactions})" else "পছন্দ করুন (${art.reactions})",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = if (art.isReacted) Color(0xFFD32F2F) else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Default.MenuBook,
+                                            contentDescription = "তথ্যসূত্র",
+                                            tint = MaterialTheme.colorScheme.secondary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        SelectionContainer {
+                                            Text(
+                                                text = "📚 তথ্যসূত্র: ${art.source}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = FontWeight.Medium,
+                                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -503,6 +540,94 @@ fun DetailScreen(
                                     lineHeight = (fontSizeSp * 1.65f).sp,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
+                            }
+                        }
+                    }
+                }
+
+                // ── Global User Verification Card ("পরীক্ষিত / কাজ হয়েছে") ────
+                item {
+                    Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (art.isVerified) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
+                            ),
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = if (art.isVerified) Color(0xFF2E7D32) else MaterialTheme.colorScheme.outlineVariant
+                            ),
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            Icons.Default.Verified,
+                                            contentDescription = null,
+                                            tint = Color(0xFF2E7D32),
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(
+                                            text = "পরীক্ষিত ও ফলাফল যাচাই",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (art.isVerified) Color(0xFF1B5E20) else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                    Surface(
+                                        color = Color(0xFF2E7D32).copy(alpha = 0.14f),
+                                        shape = RoundedCornerShape(20.dp)
+                                    ) {
+                                        Text(
+                                            text = "${art.verifiedCount} জন ভেরিফাই করেছেন",
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF1B5E20)
+                                        )
+                                    }
+                                }
+
+                                Text(
+                                    text = "এই পরামর্শ বা ভেষজ সমাধানটি কি আপনার পরীক্ষিত অথবা এর দ্বারা আপনার উপকার/কাজ হয়েছে? নিচে ভেরিফাই করলে তা গ্লোবালি সকল ইউজার দেখতে পাবেন।",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (art.isVerified) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+
+                                Button(
+                                    onClick = { viewModel.toggleVerification(art) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (art.isVerified) Color(0xFF2E7D32) else MaterialTheme.colorScheme.primary
+                                    )
+                                ) {
+                                    Icon(
+                                        if (art.isVerified) Icons.Default.CheckCircle else Icons.Default.VerifiedUser,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        text = if (art.isVerified) {
+                                            "✅ আপনার পরীক্ষিত হিসেবে ভেরিফাইড (${art.verifiedCount})"
+                                        } else {
+                                            "☑️ হ্যাঁ, এটি আমার পরীক্ষিত / কাজ হয়েছে (${art.verifiedCount})"
+                                        },
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
                         }
                     }

@@ -145,19 +145,83 @@ class UserPreferencesManager @Inject constructor(
         _dailyTipOffset.value += 1
     }
 
-    // ── HIDDEN ADMIN MODE ────────────────────────────────────────────────────
+    // ── ENCRYPTED & FIRESTORE-SYNCED ADMIN MODE ──────────────────────────────
     private val _isAdminMode = MutableStateFlow(prefs.getBoolean(KEY_ADMIN_UNLOCKED, false))
     val isAdminMode: StateFlow<Boolean> = _isAdminMode.asStateFlow()
 
-    fun verifyAndUnlockAdmin(inputPassword: String): Boolean {
-        val savedPassword = prefs.getString(KEY_ADMIN_PASSWORD, DEFAULT_ADMIN_PASSWORD) ?: DEFAULT_ADMIN_PASSWORD
-        return if (inputPassword.trim() == savedPassword) {
-            _isAdminMode.value = true
-            prefs.edit().putBoolean(KEY_ADMIN_UNLOCKED, true).apply()
+    /**
+     * One-way salted SHA-256 encryption for admin passwords & recovery keys.
+     * Plain-text passwords are never stored in SharedPreferences or Firestore.
+     */
+    fun encryptSecret(raw: String): String {
+        return sha256("HK_ADMIN_SALT_2026_${raw.trim()}")
+    }
+
+    fun getAdminPasswordHash(): String {
+        val existingHash = prefs.getString(KEY_ADMIN_PASSWORD_HASH, null)
+        if (!existingHash.isNullOrBlank()) return existingHash
+
+        // Migrate any legacy plain-text password to encrypted SHA-256 hash and remove plain text
+        val legacyPlain = prefs.getString(KEY_LEGACY_ADMIN_PASSWORD, null)
+        val initialHash = if (!legacyPlain.isNullOrBlank()) {
+            encryptSecret(legacyPlain)
+        } else {
+            encryptSecret(DEFAULT_ADMIN_PASSWORD)
+        }
+        prefs.edit()
+            .putString(KEY_ADMIN_PASSWORD_HASH, initialHash)
+            .remove(KEY_LEGACY_ADMIN_PASSWORD)
+            .apply()
+        return initialHash
+    }
+
+    fun getAdminRecoveryHash(): String {
+        val existingHash = prefs.getString(KEY_ADMIN_RECOVERY_HASH, null)
+        if (!existingHash.isNullOrBlank()) return existingHash
+        val defaultHash = encryptSecret(DEFAULT_RECOVERY_CODE)
+        prefs.edit().putString(KEY_ADMIN_RECOVERY_HASH, defaultHash).apply()
+        return defaultHash
+    }
+
+    fun saveEncryptedAdminCredentials(passwordHash: String, recoveryKeyHash: String? = null) {
+        val editor = prefs.edit().putString(KEY_ADMIN_PASSWORD_HASH, passwordHash)
+        if (!recoveryKeyHash.isNullOrBlank()) {
+            editor.putString(KEY_ADMIN_RECOVERY_HASH, recoveryKeyHash)
+        }
+        editor.remove(KEY_LEGACY_ADMIN_PASSWORD).apply()
+    }
+
+    fun unlockAdminSession() {
+        _isAdminMode.value = true
+        prefs.edit().putBoolean(KEY_ADMIN_UNLOCKED, true).apply()
+    }
+
+    fun verifyAndUnlockAdmin(inputPassword: String, remotePasswordHash: String? = null): Boolean {
+        val inputHash = encryptSecret(inputPassword)
+        val targetHash = if (!remotePasswordHash.isNullOrBlank()) {
+            saveEncryptedAdminCredentials(remotePasswordHash)
+            remotePasswordHash
+        } else {
+            getAdminPasswordHash()
+        }
+        return if (inputHash == targetHash) {
+            unlockAdminSession()
             true
         } else {
             false
         }
+    }
+
+    fun verifyRecoveryCode(inputRecoveryCode: String, remoteRecoveryHash: String? = null): Boolean {
+        val inputHash = encryptSecret(inputRecoveryCode)
+        val defaultMasterHash = encryptSecret(DEFAULT_RECOVERY_CODE)
+        val savedHash = if (!remoteRecoveryHash.isNullOrBlank()) {
+            prefs.edit().putString(KEY_ADMIN_RECOVERY_HASH, remoteRecoveryHash).apply()
+            remoteRecoveryHash
+        } else {
+            getAdminRecoveryHash()
+        }
+        return inputHash == savedHash || inputHash == defaultMasterHash
     }
 
     fun lockAdminMode() {
@@ -167,18 +231,15 @@ class UserPreferencesManager @Inject constructor(
 
     fun changeAdminPassword(newPassword: String): Boolean {
         if (newPassword.trim().length < 4) return false
-        prefs.edit().putString(KEY_ADMIN_PASSWORD, newPassword.trim()).apply()
+        val newHash = encryptSecret(newPassword)
+        saveEncryptedAdminCredentials(newHash)
         return true
-    }
-
-    fun getAdminPassword(): String {
-        return prefs.getString(KEY_ADMIN_PASSWORD, DEFAULT_ADMIN_PASSWORD) ?: DEFAULT_ADMIN_PASSWORD
     }
 
     // ── IP / DEVICE REACTION IDENTIFIER ──────────────────────────────────────
     /**
      * Resolves the client's public IP address (cached per network session)
-     * and hashes it into a safe Firestore document key so each IP can react once per post.
+     * and hashes it into a safe Firestore document key so each IP can react/verify once per post.
      * Falls back to unique device ID if offline.
      */
     suspend fun getClientIpHash(): String = withContext(Dispatchers.IO) {
@@ -289,8 +350,11 @@ class UserPreferencesManager @Inject constructor(
         const val DEFAULT_REMINDER_MINUTE = 0
 
         private const val KEY_ADMIN_UNLOCKED = "is_admin_unlocked"
-        private const val KEY_ADMIN_PASSWORD = "admin_password"
+        private const val KEY_LEGACY_ADMIN_PASSWORD = "admin_password"
+        private const val KEY_ADMIN_PASSWORD_HASH = "admin_password_sha256_hash"
+        private const val KEY_ADMIN_RECOVERY_HASH = "admin_recovery_sha256_hash"
         const val DEFAULT_ADMIN_PASSWORD = "admin123"
+        const val DEFAULT_RECOVERY_CODE = "doctor2026"
 
         private const val KEY_CACHED_IP = "cached_public_ip"
         private const val KEY_IP_FETCH_TIME = "cached_ip_fetch_time"

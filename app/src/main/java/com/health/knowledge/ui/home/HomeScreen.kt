@@ -3,6 +3,7 @@ package com.health.knowledge.ui.home
 import android.widget.Toast
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -158,13 +159,23 @@ fun HomeScreen(
     if (showPasswordDialog) {
         AdminPasswordDialog(
             onDismiss = { showPasswordDialog = false },
-            onUnlock = { password ->
-                val ok = viewModel.unlockAdmin(password)
-                if (ok) {
-                    showPasswordDialog = false
-                    Toast.makeText(context, "🔓 অ্যাডমিন মোড আনলক হয়েছে!", Toast.LENGTH_SHORT).show()
+            onUnlockAsync = { password, onResult ->
+                viewModel.verifyAdminGlobal(password) { ok ->
+                    if (ok) {
+                        showPasswordDialog = false
+                        Toast.makeText(context, "🔓 অ্যাডমিন মোড আনলক হয়েছে!", Toast.LENGTH_SHORT).show()
+                    }
+                    onResult(ok)
                 }
-                ok
+            },
+            onResetPasswordAsync = { recoveryCode, newPassword, onResult ->
+                viewModel.resetAdminPasswordGlobal(recoveryCode, newPassword) { ok, msg ->
+                    if (ok) {
+                        showPasswordDialog = false
+                        Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                    }
+                    onResult(ok, msg)
+                }
             }
         )
     }
@@ -215,8 +226,8 @@ fun HomeScreen(
     if (showUserPostDialog) {
         UserSubmitPostDialog(
             onDismiss = { showUserPostDialog = false },
-            onSubmit = { title, content, meds, cats, photoUrl ->
-                viewModel.submitUserPost(title, content, meds, cats, photoUrl) { success, msg ->
+            onSubmit = { title, content, meds, cats, photoUrl, source ->
+                viewModel.submitUserPost(title, content, meds, cats, photoUrl, source) { _, msg ->
                     showUserPostDialog = false
                     Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                 }
@@ -460,7 +471,7 @@ fun HomeScreen(
                                     val msg = if (newAdded > 0) {
                                         "☁️ $newAdded টি নতুন পোস্ট ক্লাউড থেকে যুক্ত হয়েছে!"
                                     } else {
-                                        "✅ সব তথ্য ও রিঅ্যাকশন আপ-টু-ডেট আছে"
+                                        "✅ সব তথ্য, ভেরিফিকেশন ও রিঅ্যাকশন আপ-টু-ডেট আছে"
                                     }
                                     Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                                 }
@@ -589,6 +600,7 @@ fun HomeScreen(
                                             onClick = { onArticleClick(article.id) },
                                             onBookmarkToggle = { viewModel.toggleBookmark(article.id, article.isBookmarked) },
                                             onReactionClick = { viewModel.toggleReaction(article) },
+                                            onVerifyClick = { viewModel.toggleVerification(article) },
                                             onPinToggle = { viewModel.togglePin(article) },
                                             onDeleteClick = { articleToDelete = article }
                                         )
@@ -633,62 +645,192 @@ fun HomeScreen(
 @Composable
 fun AdminPasswordDialog(
     onDismiss: () -> Unit,
-    onUnlock: (String) -> Boolean
+    onUnlockAsync: (String, (Boolean) -> Unit) -> Unit,
+    onResetPasswordAsync: (String, String, (Boolean, String) -> Unit) -> Unit
 ) {
+    var isResetMode by remember { mutableStateOf(false) }
     var password by remember { mutableStateOf("") }
+    var recoveryCode by remember { mutableStateOf("") }
+    var newPassword by remember { mutableStateOf("") }
     var isError by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(false) }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Default.AdminPanelSettings, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-        title = { Text("🔐 অ্যাডমিন মোড আনলক", fontWeight = FontWeight.Bold) },
+        onDismissRequest = { if (!isLoading) onDismiss() },
+        icon = {
+            Icon(
+                if (isResetMode) Icons.Default.LockReset else Icons.Default.AdminPanelSettings,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+        },
+        title = {
+            Text(
+                if (isResetMode) "🔄 পাসওয়ার্ড রিসেট (Firestore)" else "🔐 অ্যাডমিন মোড আনলক",
+                fontWeight = FontWeight.Bold
+            )
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("অ্যাডমিন প্যানেল চালু করতে পাসওয়ার্ড দিন:", style = MaterialTheme.typography.bodyMedium)
-                OutlinedTextField(
-                    value = password,
-                    onValueChange = {
-                        password = it
-                        isError = false
-                    },
-                    label = { Text("পাসওয়ার্ড") },
-                    singleLine = true,
-                    isError = isError,
-                    visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    trailingIcon = {
-                        IconButton(onClick = { showPassword = !showPassword }) {
-                            Icon(
-                                if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                contentDescription = null
-                            )
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                if (isError) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (!isResetMode) {
                     Text(
-                        "❌ ভুল পাসওয়ার্ড! আবার চেষ্টা করুন।",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.labelSmall
+                        "অ্যাডমিন প্যানেল চালু করতে পাসওয়ার্ড দিন (SHA-256 এনক্রিপ্টেড ও Firestore সিঙ্কড):",
+                        style = MaterialTheme.typography.bodySmall
                     )
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = {
+                            password = it
+                            isError = false
+                        },
+                        label = { Text("অ্যাডমিন পাসওয়ার্ড") },
+                        singleLine = true,
+                        isError = isError,
+                        enabled = !isLoading,
+                        visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        trailingIcon = {
+                            IconButton(onClick = { showPassword = !showPassword }) {
+                                Icon(
+                                    if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = null
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (isError) {
+                        Text(
+                            errorMessage.ifBlank { "❌ ভুল পাসওয়ার্ড! আবার চেষ্টা করুন।" },
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                    TextButton(
+                        onClick = {
+                            isResetMode = true
+                            isError = false
+                            errorMessage = ""
+                        },
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Text(
+                            "পাসওয়ার্ড ভুলে গেছেন? রিসেট করুন →",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                } else {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text(
+                            text = "☁️ রিকভারি কোড ব্যবহার করে নতুন পাসওয়ার্ড সেট করলে সেটি SHA-256 এনক্রিপ্টেড অবস্থায় Firestore-এ সিঙ্ক হবে।",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(10.dp)
+                        )
+                    }
+
+                    OutlinedTextField(
+                        value = recoveryCode,
+                        onValueChange = {
+                            recoveryCode = it
+                            isError = false
+                        },
+                        label = { Text("মাস্টার রিকভারি কোড *") },
+                        placeholder = { Text("যেমন: doctor2026") },
+                        singleLine = true,
+                        isError = isError,
+                        enabled = !isLoading,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = newPassword,
+                        onValueChange = {
+                            newPassword = it
+                            isError = false
+                        },
+                        label = { Text("নতুন পাসওয়ার্ড (কমপক্ষে ৪ অক্ষর) *") },
+                        singleLine = true,
+                        isError = isError,
+                        enabled = !isLoading,
+                        visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { showPassword = !showPassword }) {
+                                Icon(
+                                    if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = null
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    if (isError) {
+                        Text(
+                            errorMessage.ifBlank { "❌ রিকভারি কোড বা নতুন পাসওয়ার্ড সঠিক নয়!" },
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+
+                    TextButton(
+                        onClick = {
+                            isResetMode = false
+                            isError = false
+                            errorMessage = ""
+                        },
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Text("← লগইন পেজে ফিরে যান", style = MaterialTheme.typography.labelMedium)
+                    }
                 }
             }
         },
         confirmButton = {
             Button(
+                enabled = !isLoading,
                 onClick = {
-                    if (!onUnlock(password)) {
-                        isError = true
+                    if (!isResetMode) {
+                        isLoading = true
+                        onUnlockAsync(password) { ok ->
+                            isLoading = false
+                            if (!ok) {
+                                isError = true
+                                errorMessage = "❌ ভুল পাসওয়ার্ড! আবার চেষ্টা করুন।"
+                            }
+                        }
+                    } else {
+                        isLoading = true
+                        onResetPasswordAsync(recoveryCode, newPassword) { ok, msg ->
+                            isLoading = false
+                            if (!ok) {
+                                isError = true
+                                errorMessage = "❌ $msg"
+                            }
+                        }
                     }
                 }
             ) {
-                Text("আনলক করুন")
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(Modifier.width(6.dp))
+                }
+                Text(if (isResetMode) "রিসেট ও আনলক" else "আনলক করুন")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, enabled = !isLoading) {
                 Text("বাতিল")
             }
         }
@@ -764,6 +906,7 @@ fun ArticleCard(
     onClick: () -> Unit,
     onBookmarkToggle: () -> Unit,
     onReactionClick: () -> Unit,
+    onVerifyClick: () -> Unit = {},
     onPinToggle: () -> Unit,
     onDeleteClick: () -> Unit
 ) {
@@ -951,6 +1094,18 @@ fun ArticleCard(
                 overflow = TextOverflow.Ellipsis
             )
 
+            if (article.source.isNotBlank()) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "📚 সূত্র: ${article.source}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
             Spacer(Modifier.height(10.dp))
 
             // Lightweight Row instead of nested LazyRow for 60/120fps smooth scrolling
@@ -971,7 +1126,7 @@ fun ArticleCard(
                 Spacer(Modifier.height(10.dp))
             }
 
-            // Footer: Date + Interactive Per-IP Reaction Button
+            // Footer: Date + Global Verification ("পরীক্ষিত") + Interactive Per-IP Reaction Button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -983,31 +1138,69 @@ fun ArticleCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
 
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = if (article.isReacted)
-                        Color(0xFFFFEBEE)
-                    else
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(16.dp))
-                        .clickable(onClick = onReactionClick)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    // Global Verification Button ("পরীক্ষিত")
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (article.isVerified)
+                            Color(0xFFE8F5E9)
+                        else
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                        border = if (article.isVerified || article.verifiedCount > 0)
+                            BorderStroke(1.dp, Color(0xFF2E7D32).copy(alpha = 0.35f))
+                        else null,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable(onClick = onVerifyClick)
                     ) {
-                        Text(
-                            text = if (article.isReacted) "❤️" else "🤍",
-                            fontSize = 13.sp
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            text = article.reactions.toString(),
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = if (article.isReacted) FontWeight.Bold else FontWeight.Normal,
-                            color = if (article.isReacted) Color(0xFFD32F2F) else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (article.isVerified) "✅" else "☑️",
+                                fontSize = 12.sp
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = if (article.verifiedCount > 0) "পরীক্ষিত (${article.verifiedCount})" else "পরীক্ষিত",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = if (article.isVerified) FontWeight.Bold else FontWeight.Medium,
+                                color = if (article.isVerified) Color(0xFF1B5E20) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    // Reaction Button
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (article.isReacted)
+                            Color(0xFFFFEBEE)
+                        else
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable(onClick = onReactionClick)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (article.isReacted) "❤️" else "🤍",
+                                fontSize = 13.sp
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = article.reactions.toString(),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = if (article.isReacted) FontWeight.Bold else FontWeight.Normal,
+                                color = if (article.isReacted) Color(0xFFD32F2F) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }
@@ -1148,11 +1341,12 @@ fun InitialDatabaseLoadingView(modifier: Modifier = Modifier) {
 @Composable
 fun UserSubmitPostDialog(
     onDismiss: () -> Unit,
-    onSubmit: (title: String, content: String, medicines: String, categories: List<String>, photoUrl: String) -> Unit
+    onSubmit: (title: String, content: String, medicines: String, categories: List<String>, photoUrl: String, source: String) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var content by remember { mutableStateOf("") }
     var medicines by remember { mutableStateOf("") }
+    var source by remember { mutableStateOf("") }
     var photoUrl by remember { mutableStateOf("") }
     var selectedCats by remember { mutableStateOf(setOf<String>()) }
     var isSubmitting by remember { mutableStateOf(false) }
@@ -1251,6 +1445,18 @@ fun UserSubmitPostDialog(
 
                     item {
                         OutlinedTextField(
+                            value = source,
+                            onValueChange = { source = it },
+                            label = { Text("📚 তথ্যসূত্র / সোর্স (ঐচ্ছিক)") },
+                            placeholder = { Text("যেমন: আয়ুর্বেদ শাস্ত্র / ডা. পরামর্শ / নিজস্ব অভিজ্ঞতা") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true
+                        )
+                    }
+
+                    item {
+                        OutlinedTextField(
                             value = photoUrl,
                             onValueChange = { photoUrl = it },
                             label = { Text("কভার ফটো CDN লিংক (ঐচ্ছিক)") },
@@ -1291,7 +1497,7 @@ fun UserSubmitPostDialog(
                 Button(
                     onClick = {
                         isSubmitting = true
-                        onSubmit(title, content, medicines, selectedCats.toList(), photoUrl)
+                        onSubmit(title, content, medicines, selectedCats.toList(), photoUrl, source)
                     },
                     enabled = title.isNotBlank() && content.isNotBlank() && !isSubmitting,
                     modifier = Modifier.fillMaxWidth(),

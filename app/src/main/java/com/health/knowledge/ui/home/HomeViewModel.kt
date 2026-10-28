@@ -48,7 +48,7 @@ class HomeViewModel @Inject constructor(
     private val _activeTab = MutableStateFlow("home")
     val activeTab: StateFlow<String> = _activeTab.asStateFlow()
 
-    // Saved sub-tab inside "bookmarks": "bookmarks" | "history" | "notes"
+    // Saved sub-tab inside "bookmarks": "bookmarks" | "history" | "notes" | "my_posts"
     private val _savedSubTab = MutableStateFlow("bookmarks")
     val savedSubTab: StateFlow<String> = _savedSubTab.asStateFlow()
 
@@ -294,6 +294,7 @@ class HomeViewModel @Inject constructor(
         medicines: String,
         categories: List<String>,
         photoUrl: String,
+        source: String = "",
         onComplete: (Boolean, String) -> Unit
     ) {
         if (title.isBlank() || content.isBlank()) {
@@ -314,7 +315,8 @@ class HomeViewModel @Inject constructor(
                     medicines = medsCsv,
                     categories = catsCsv,
                     photoUrl = cleanPhoto,
-                    date = today
+                    date = today,
+                    source = source.trim()
                 )
 
                 if (res.isSuccess) {
@@ -432,6 +434,12 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    fun toggleVerification(article: Article) {
+        viewModelScope.launch {
+            repository.toggleVerification(article)
+        }
+    }
+
     fun togglePin(article: Article) {
         viewModelScope.launch {
             repository.togglePinArticle(article)
@@ -470,8 +478,26 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    fun unlockAdmin(password: String): Boolean {
-        return prefsManager.verifyAndUnlockAdmin(password)
+    fun verifyAdminGlobal(password: String, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val ok = repository.verifyAndUnlockAdminGlobal(password)
+            onResult(ok)
+        }
+    }
+
+    fun resetAdminPasswordGlobal(
+        recoveryCode: String,
+        newPassword: String,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val res = repository.resetAdminPasswordWithRecoveryGlobal(recoveryCode, newPassword)
+            if (res.isSuccess) {
+                onResult(true, "🔐 পাসওয়ার্ড সফলভাবে রিসেট ও Firestore-এ এনক্রিপ্ট করে সিঙ্ক করা হয়েছে!")
+            } else {
+                onResult(false, res.exceptionOrNull()?.localizedMessage ?: "রিসেট ব্যর্থ হয়েছে!")
+            }
+        }
     }
 
     fun lockAdmin() {

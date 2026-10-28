@@ -15,6 +15,42 @@ class FirestoreDataSource @Inject constructor() {
     private val db: FirebaseFirestore = Firebase.firestore
     private val collection = db.collection("healthArticles")
     private val metaCollection = db.collection("postMeta")
+    private val configCollection = db.collection("appConfig")
+
+    /**
+     * Fetches encrypted admin auth configuration (passwordHash & recoveryKeyHash) from Firestore.
+     */
+    suspend fun fetchAdminAuthConfig(): AdminAuthConfig? {
+        return try {
+            val doc = configCollection.document("adminAuth").get().await()
+            if (doc.exists()) {
+                doc.toObject(AdminAuthConfig::class.java)
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Saves encrypted admin passwordHash and recoveryKeyHash to Firestore (`appConfig/adminAuth`).
+     */
+    suspend fun saveAdminAuthConfig(passwordHash: String, recoveryKeyHash: String): Result<Unit> {
+        return try {
+            val data = mutableMapOf<String, Any>(
+                "passwordHash" to passwordHash,
+                "updatedAt" to System.currentTimeMillis()
+            )
+            if (recoveryKeyHash.isNotBlank()) {
+                data["recoveryKeyHash"] = recoveryKeyHash
+            }
+            configCollection.document("adminAuth").set(data, SetOptions.merge()).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 
     /**
      * Fetches all articles from Firestore.
@@ -54,7 +90,7 @@ class FirestoreDataSource @Inject constructor() {
     }
 
     /**
-     * Fetches global overrides (pins, edits, deletes, global reaction counts, cover photos).
+     * Fetches global overrides (pins, edits, deletes, global reaction & verified counts, cover photos).
      */
     suspend fun fetchAllPostMeta(): List<PostMetaOverride> {
         return try {
@@ -88,7 +124,27 @@ class FirestoreDataSource @Inject constructor() {
     }
 
     /**
-     * Admin: Upload a new article to Firestore.
+     * Fetches live global verification count ("পরীক্ষিত / কাজ হয়েছে") & user verification status for a single post.
+     */
+    suspend fun fetchLiveVerificationStatus(postKey: String, ipHash: String): Pair<Int?, Boolean?> {
+        return try {
+            val metaDoc = metaCollection.document(postKey).get().await()
+            val verifierDoc = metaCollection.document(postKey)
+                .collection("verifiers")
+                .document(ipHash)
+                .get()
+                .await()
+
+            val globalVerifiedCount = metaDoc.getLong("verifiedCount")?.toInt()
+            val hasIpVerified = if (metaDoc.exists()) verifierDoc.exists() else null
+            Pair(globalVerifiedCount, hasIpVerified)
+        } catch (e: Exception) {
+            Pair(null, null)
+        }
+    }
+
+    /**
+     * Admin / User: Upload a new article to Firestore.
      */
     suspend fun addArticle(article: FirestoreArticle): Result<String> {
         return try {
@@ -141,7 +197,7 @@ class FirestoreDataSource @Inject constructor() {
     }
 
     /**
-     * Admin: Edit / Review an article globally (including CDN cover photo URL).
+     * Admin: Edit / Review an article globally (including CDN cover photo URL and source).
      */
     suspend fun updateArticleGlobal(
         postKey: String,
@@ -151,7 +207,8 @@ class FirestoreDataSource @Inject constructor() {
         medicines: String,
         categories: String,
         photoUrl: String,
-        isReviewed: Boolean
+        isReviewed: Boolean,
+        source: String = ""
     ): Result<Unit> {
         return try {
             val now = System.currentTimeMillis()
@@ -165,6 +222,7 @@ class FirestoreDataSource @Inject constructor() {
                 "photoUrl" to photoUrl,
                 "hasPhoto" to hasPhoto,
                 "isReviewed" to isReviewed,
+                "source" to source,
                 "hasContentOverride" to true,
                 "updatedAt" to now
             )
@@ -178,7 +236,8 @@ class FirestoreDataSource @Inject constructor() {
                         "categories" to categories,
                         "photoUrl" to photoUrl,
                         "hasPhoto" to hasPhoto,
-                        "isReviewed" to isReviewed
+                        "isReviewed" to isReviewed,
+                        "source" to source
                     ),
                     SetOptions.merge()
                 ).await()
@@ -257,6 +316,80 @@ class FirestoreDataSource @Inject constructor() {
         }
     }
 
+    /**
+     * Atomic Global Per-IP / Device Verification ("পরীক্ষিত / কাজ হয়েছে") using Firestore Transaction:
+     * - Checks if `postMeta/{postKey}/verifiers/{ipHash}` exists in Firestore
+     * - Atomically increments or decrements the global `verifiedCount` counter
+     * - Returns Pair(globalVerifiedCount, isVerifiedByThisUser)
+     */
+    suspend fun toggleVerificationGlobalTransaction(
+        postKey: String,
+        firebaseDocId: String,
+        ipHash: String,
+        wantVerify: Boolean,
+        fallbackBaseCount: Int
+    ): Result<Pair<Int, Boolean>> {
+        return try {
+            val metaRef = metaCollection.document(postKey)
+            val verifierRef = metaRef.collection("verifiers").document(ipHash)
+
+            val resultPair = db.runTransaction { transaction ->
+                val metaSnap = transaction.get(metaRef)
+                val verifierSnap = transaction.get(verifierRef)
+
+                val currentGlobalCount = metaSnap.getLong("verifiedCount")?.toInt() ?: fallbackBaseCount
+                val alreadyVerifiedInCloud = verifierSnap.exists()
+
+                val updatedCount = when {
+                    wantVerify && !alreadyVerifiedInCloud -> {
+                        transaction.set(
+                            verifierRef,
+                            mapOf(
+                                "ipHash" to ipHash,
+                                "verifiedAt" to System.currentTimeMillis()
+                            )
+                        )
+                        currentGlobalCount + 1
+                    }
+                    !wantVerify && alreadyVerifiedInCloud -> {
+                        transaction.delete(verifierRef)
+                        (currentGlobalCount - 1).coerceAtLeast(0)
+                    }
+                    else -> currentGlobalCount
+                }
+
+                transaction.set(
+                    metaRef,
+                    mapOf(
+                        "postKey" to postKey,
+                        "verifiedCount" to updatedCount,
+                        "updatedAt" to System.currentTimeMillis()
+                    ),
+                    SetOptions.merge()
+                )
+
+                Pair(updatedCount, wantVerify)
+            }.await()
+
+            if (firebaseDocId.isNotBlank()) {
+                collection.document(firebaseDocId).set(
+                    mapOf("verifiedCount" to resultPair.first),
+                    SetOptions.merge()
+                ).await()
+            }
+
+            Result.success(resultPair)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    data class AdminAuthConfig(
+        val passwordHash: String = "",
+        val recoveryKeyHash: String = "",
+        val updatedAt: Long = 0L
+    )
+
     data class FirestoreArticle(
         val firebaseDocId: String = "",
         val title: String = "",
@@ -271,7 +404,9 @@ class FirestoreDataSource @Inject constructor() {
         val isReviewed: Boolean = true,
         val createdAt: Long = System.currentTimeMillis(),
         val addedByAdmin: Boolean = true,
-        val authorDeviceId: String = ""
+        val authorDeviceId: String = "",
+        val source: String = "",
+        val verifiedCount: Int = 0
     ) {
         fun toEntity(myDeviceId: String = "", myDocIds: Set<String> = emptySet()): ArticleEntity {
             val isSubmittedByMe = (authorDeviceId.isNotBlank() && authorDeviceId == myDeviceId) ||
@@ -289,10 +424,12 @@ class FirestoreDataSource @Inject constructor() {
                 firebaseDocId = firebaseDocId,
                 isPinned = isPinned,
                 isReviewed = isReviewed,
-                searchKeywords = "$title $content $medicines $categories".lowercase(),
+                searchKeywords = "$title $content $medicines $categories $source".lowercase(),
                 createdAt = createdAt,
                 isMine = isSubmittedByMe,
-                authorDeviceId = authorDeviceId
+                authorDeviceId = authorDeviceId,
+                source = source,
+                verifiedCount = verifiedCount
             )
         }
     }
@@ -310,6 +447,8 @@ class FirestoreDataSource @Inject constructor() {
         val isDeleted: Boolean = false,
         val isReviewed: Boolean = true,
         val reactions: Int? = null,
+        val verifiedCount: Int? = null,
+        val source: String = "",
         val updatedAt: Long = 0L
     )
 }

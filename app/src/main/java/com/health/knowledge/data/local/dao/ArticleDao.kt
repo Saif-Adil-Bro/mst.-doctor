@@ -144,7 +144,14 @@ interface ArticleDao {
     @Query("UPDATE articles SET reactions = :reactions WHERE id = :id")
     suspend fun updateReactionsCountOnly(id: Int, reactions: Int)
 
-    // ── EDIT / REVIEW (includes CDN photoUrl) ────────────────────────────────
+    // ── USER VERIFICATION (পরীক্ষিত / কার্যকরী) ──────────────────────────────
+    @Query("UPDATE articles SET verifiedCount = :verifiedCount, isVerified = :isVerified WHERE id = :id")
+    suspend fun updateVerification(id: Int, verifiedCount: Int, isVerified: Boolean)
+
+    @Query("UPDATE articles SET verifiedCount = :verifiedCount WHERE id = :id")
+    suspend fun updateVerifiedCountOnly(id: Int, verifiedCount: Int)
+
+    // ── EDIT / REVIEW (includes CDN photoUrl & source) ───────────────────────
     @Query("""
         UPDATE articles 
         SET title = :title,
@@ -154,7 +161,8 @@ interface ArticleDao {
             photoPath = :photoPath,
             hasPhoto = :hasPhoto,
             searchKeywords = :searchKeywords,
-            isReviewed = :isReviewed
+            isReviewed = :isReviewed,
+            source = :source
         WHERE id = :id
     """)
     suspend fun updateArticleContent(
@@ -166,7 +174,8 @@ interface ArticleDao {
         photoPath: String,
         hasPhoto: Boolean,
         searchKeywords: String,
-        isReviewed: Boolean
+        isReviewed: Boolean,
+        source: String = ""
     )
 
     // ── INSERT (used for seeding & Firebase sync) ────────────────────────────

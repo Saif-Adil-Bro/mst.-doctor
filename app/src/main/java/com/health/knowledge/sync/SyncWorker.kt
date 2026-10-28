@@ -53,7 +53,7 @@ class SyncWorker @AssistedInject constructor(
                 }
             }
 
-            // 2. Fetch global postMeta overrides (pins, edits, global deletes, reactions, cover photos)
+            // 2. Fetch global postMeta overrides (pins, edits, global deletes, reactions, verifiedCount, source, cover photos)
             val metaList = firestoreDataSource.fetchAllPostMeta()
             for (meta in metaList) {
                 val targetEntity = when {
@@ -79,7 +79,8 @@ class SyncWorker @AssistedInject constructor(
                 }
 
                 if (meta.hasContentOverride && meta.title.isNotBlank() && meta.content.isNotBlank()) {
-                    val keywords = "${meta.title} ${meta.content} ${meta.medicines} ${meta.categories}".lowercase()
+                    val resolvedSource = meta.source.ifBlank { targetEntity.source }
+                    val keywords = "${meta.title} ${meta.content} ${meta.medicines} ${meta.categories} $resolvedSource".lowercase()
                     val resolvedPhoto = meta.photoUrl.ifBlank { targetEntity.photoPath }
                     articleDao.updateArticleContent(
                         id = targetEntity.id,
@@ -90,13 +91,20 @@ class SyncWorker @AssistedInject constructor(
                         photoPath = resolvedPhoto,
                         hasPhoto = resolvedPhoto.isNotBlank(),
                         searchKeywords = keywords,
-                        isReviewed = meta.isReviewed
+                        isReviewed = meta.isReviewed,
+                        source = resolvedSource
                     )
                 }
 
                 meta.reactions?.let { remoteReactions ->
                     if (remoteReactions >= 0) {
                         articleDao.updateReactionsCountOnly(targetEntity.id, remoteReactions)
+                    }
+                }
+
+                meta.verifiedCount?.let { remoteVerified ->
+                    if (remoteVerified >= 0) {
+                        articleDao.updateVerifiedCountOnly(targetEntity.id, remoteVerified)
                     }
                 }
             }

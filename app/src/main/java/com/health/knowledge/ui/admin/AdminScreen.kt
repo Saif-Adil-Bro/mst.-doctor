@@ -3,7 +3,6 @@ package com.health.knowledge.ui.admin
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -57,13 +56,13 @@ fun AdminScreen(
         }
     }
 
-    // Edit / Review Dialog (includes Cover Photo CDN URL)
+    // Edit / Review Dialog (includes Cover Photo CDN URL & Source)
     editingArticle?.let { article ->
         EditArticleDialog(
             article = article,
             onDismiss = { editingArticle = null },
-            onSave = { newTitle, newContent, newMeds, newCats, newPhotoUrl ->
-                viewModel.updateArticle(article, newTitle, newContent, newMeds, newCats, newPhotoUrl)
+            onSave = { newTitle, newContent, newMeds, newCats, newPhotoUrl, newSource ->
+                viewModel.updateArticle(article, newTitle, newContent, newMeds, newCats, newPhotoUrl, newSource)
                 editingArticle = null
             }
         )
@@ -189,11 +188,11 @@ fun AdminScreen(
                 0 -> AddPostTab(
                     isLoading = uiState.isLoading,
                     isSuccess = uiState.isSuccess,
-                    onSubmit = { title, content, meds, cats, photoUrl, isPinned ->
-                        viewModel.submitArticle(title, content, meds, cats, photoUrl, isPinned)
+                    onSubmit = { title, content, meds, cats, photoUrl, isPinned, source ->
+                        viewModel.submitArticle(title, content, meds, cats, photoUrl, isPinned, source)
                     },
-                    onSaveDraft = { title, content, meds, cats, photoUrl, isPinned ->
-                        viewModel.saveAsDraft(title, content, meds, cats, photoUrl, isPinned)
+                    onSaveDraft = { title, content, meds, cats, photoUrl, isPinned, source ->
+                        viewModel.saveAsDraft(title, content, meds, cats, photoUrl, isPinned, source)
                     }
                 )
                 1 -> ManagePostsTab(
@@ -212,7 +211,10 @@ fun AdminScreen(
                 )
                 2 -> AdminAnalyticsTab(analytics = analytics)
                 3 -> AdminSettingsTab(
-                    onChangePassword = { newPass -> viewModel.changePassword(newPass) },
+                    isLoading = uiState.isLoading,
+                    onChangePasswordGlobal = { newPass, newRec ->
+                        viewModel.changePasswordGlobal(newPass, newRec)
+                    },
                     onExportBackup = viewModel::exportFullBackup,
                     onImportBackup = viewModel::importFullBackup,
                     onLockAdmin = {
@@ -229,13 +231,14 @@ fun AdminScreen(
 private fun AddPostTab(
     isLoading: Boolean,
     isSuccess: Boolean,
-    onSubmit: (String, String, String, List<String>, String, Boolean) -> Unit,
-    onSaveDraft: (String, String, String, List<String>, String, Boolean) -> Unit
+    onSubmit: (String, String, String, List<String>, String, Boolean, String) -> Unit,
+    onSaveDraft: (String, String, String, List<String>, String, Boolean, String) -> Unit
 ) {
     val context = LocalContext.current
     var title by remember { mutableStateOf("") }
     var content by remember { mutableStateOf("") }
     var medicines by remember { mutableStateOf("") }
+    var source by remember { mutableStateOf("") }
     var photoUrl by remember { mutableStateOf("") }
     var selectedCategories by remember { mutableStateOf(setOf<String>()) }
     var isPinned by remember { mutableStateOf(false) }
@@ -245,6 +248,7 @@ private fun AddPostTab(
             title = ""
             content = ""
             medicines = ""
+            source = ""
             photoUrl = ""
             selectedCategories = emptySet()
             isPinned = false
@@ -335,6 +339,19 @@ private fun AddPostTab(
         }
 
         item {
+            OutlinedTextField(
+                value = source,
+                onValueChange = { source = it },
+                label = { Text("📚 তথ্যসূত্র / সোর্স (ঐচ্ছিক)") },
+                placeholder = { Text("যেমন: আয়ুর্বেদ শাস্ত্র / ডা. পরামর্শ / রিসার্চ জার্নাল") },
+                singleLine = true,
+                leadingIcon = { Icon(Icons.Default.MenuBook, null) },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp)
+            )
+        }
+
+        item {
             Card(
                 shape = RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
@@ -391,7 +408,7 @@ private fun AddPostTab(
             ) {
                 OutlinedButton(
                     onClick = {
-                        onSaveDraft(title, content, medicines, selectedCategories.toList(), photoUrl, isPinned)
+                        onSaveDraft(title, content, medicines, selectedCategories.toList(), photoUrl, isPinned, source)
                     },
                     modifier = Modifier
                         .weight(1f)
@@ -406,7 +423,7 @@ private fun AddPostTab(
 
                 Button(
                     onClick = {
-                        onSubmit(title, content, medicines, selectedCategories.toList(), photoUrl, isPinned)
+                        onSubmit(title, content, medicines, selectedCategories.toList(), photoUrl, isPinned, source)
                     },
                     modifier = Modifier
                         .weight(1.3f)
@@ -573,7 +590,7 @@ private fun ManagePostsTab(
                                     }
                                 }
                                 Text(
-                                    "📅 ${article.date} • ❤️ ${article.reactions}",
+                                    "📅 ${article.date} • ❤️ ${article.reactions} • ✅ ${article.verifiedCount}",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -599,6 +616,18 @@ private fun ManagePostsTab(
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
+
+                        if (article.source.isNotBlank()) {
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = "📚 সূত্র: ${article.source}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
 
                         Spacer(Modifier.height(10.dp))
 
@@ -697,9 +726,9 @@ private fun AdminAnalyticsTab(analytics: AdminAnalyticsState) {
                     modifier = Modifier.weight(1f)
                 )
                 MetricStatCard(
-                    title = "পিন করা",
-                    value = "${analytics.pinnedCount}",
-                    icon = "📌",
+                    title = "পরীক্ষিত ভেরিফাই",
+                    value = "${analytics.totalVerifications}",
+                    icon = "✅",
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -721,9 +750,9 @@ private fun AdminAnalyticsTab(analytics: AdminAnalyticsState) {
                     modifier = Modifier.weight(1f)
                 )
                 MetricStatCard(
-                    title = "বুকমার্কড",
-                    value = "${analytics.bookmarkedCount}",
-                    icon = "🔖",
+                    title = "পিন করা",
+                    value = "${analytics.pinnedCount}",
+                    icon = "📌",
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -815,7 +844,7 @@ private fun AdminAnalyticsTab(analytics: AdminAnalyticsState) {
                                 )
                                 Spacer(Modifier.width(8.dp))
                                 Text(
-                                    text = "❤️ ${art.reactions}",
+                                    text = "❤️ ${art.reactions} • ✅ ${art.verifiedCount}",
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.primary
@@ -861,12 +890,13 @@ private fun MetricStatCard(
 private fun EditArticleDialog(
     article: Article,
     onDismiss: () -> Unit,
-    onSave: (String, String, String, String, String) -> Unit
+    onSave: (String, String, String, String, String, String) -> Unit
 ) {
     var title by remember { mutableStateOf(article.title) }
     var content by remember { mutableStateOf(article.content) }
     var medicines by remember { mutableStateOf(article.medicines.joinToString(",")) }
     var cats by remember { mutableStateOf(article.categories.joinToString(",")) }
+    var source by remember { mutableStateOf(article.source) }
     var photoUrl by remember {
         mutableStateOf(if (article.photoPath.startsWith("http")) article.photoPath else "")
     }
@@ -907,6 +937,13 @@ private fun EditArticleDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
+                    value = source,
+                    onValueChange = { source = it },
+                    label = { Text("📚 তথ্যসূত্র / সোর্স (ঐচ্ছিক)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
                     value = cats,
                     onValueChange = { cats = it },
                     label = { Text("বিভাগ (কমা দিয়ে)") },
@@ -915,7 +952,7 @@ private fun EditArticleDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { onSave(title, content, medicines, cats, photoUrl) }) {
+            Button(onClick = { onSave(title, content, medicines, cats, photoUrl, source) }) {
                 Text("সেভ ও আপডেট করুন")
             }
         },
@@ -929,13 +966,15 @@ private fun EditArticleDialog(
 
 @Composable
 private fun AdminSettingsTab(
-    onChangePassword: (String) -> Boolean,
+    isLoading: Boolean,
+    onChangePasswordGlobal: (String, String) -> Unit,
     onExportBackup: ((String) -> Unit) -> Unit,
     onImportBackup: (String) -> Unit,
     onLockAdmin: () -> Unit
 ) {
     val context = LocalContext.current
     var newPassword by remember { mutableStateOf("") }
+    var newRecoveryCode by remember { mutableStateOf("") }
     var pendingExportJson by remember { mutableStateOf<String?>(null) }
 
     val exportLauncher = rememberLauncherForActivityResult(
@@ -1022,7 +1061,7 @@ private fun AdminSettingsTab(
             }
         }
 
-        // 2. Admin Password Change Card
+        // 2. Encrypted & Firestore-Synced Admin Password & Recovery Code Card
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(14.dp)
@@ -1031,28 +1070,45 @@ private fun AdminSettingsTab(
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text("🔑 অ্যাডমিন পাসওয়ার্ড পরিবর্তন", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(
-                    "ডিফল্ট পাসওয়ার্ড: admin123\nহোমপেজের হেডারে ৫ বার ক্লিক করলে এই পাসওয়ার্ড দিয়ে অ্যাডমিন মোড খুলবে।",
+                    "🔐 এনক্রিপ্টেড পাসওয়ার্ড ও রিকভারি সিস্টেম (Firestore Sync)",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "• পাসওয়ার্ড ও রিকভারি কোড SHA-256 হ্যাশ দিয়ে এনক্রিপ্ট করে Firestore (`appConfig/adminAuth`)-এ সংরক্ষিত থাকে।\n" +
+                    "• ডিফল্ট পাসওয়ার্ড: admin123 | ডিফল্ট রিকভারি কোড: doctor2026\n" +
+                    "• পাসওয়ার্ড ভুলে গেলে লগইন ডায়ালগ থেকে রিকভারি কোড দিয়ে সরাসরি রিসেট করা যাবে।",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 OutlinedTextField(
                     value = newPassword,
                     onValueChange = { newPassword = it },
-                    label = { Text("নতুন পাসওয়ার্ড (কমপক্ষে ৪ অক্ষর)") },
+                    label = { Text("নতুন অ্যাডমিন পাসওয়ার্ড (কমপক্ষে ৪ অক্ষর) *") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = newRecoveryCode,
+                    onValueChange = { newRecoveryCode = it },
+                    label = { Text("নতুন মাস্টার রিকভারি কোড (ঐচ্ছিক, কমপক্ষে ৪ অক্ষর)") },
+                    placeholder = { Text("খালি রাখলে আগের রিকভারি কোড বহাল থাকবে") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Button(
+                    enabled = newPassword.trim().length >= 4 && !isLoading,
                     onClick = {
-                        if (onChangePassword(newPassword)) {
-                            newPassword = ""
-                        }
+                        onChangePasswordGlobal(newPassword, newRecoveryCode)
+                        newPassword = ""
+                        newRecoveryCode = ""
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("পাসওয়ার্ড আপডেট করুন")
+                    Icon(Icons.Default.CloudSync, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("এনক্রিপ্ট ও Firestore-এ আপডেট করুন")
                 }
             }
         }

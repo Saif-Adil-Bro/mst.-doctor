@@ -109,6 +109,12 @@ class DetailViewModel @Inject constructor(
         }
     }
 
+    fun toggleVerification(article: Article) {
+        viewModelScope.launch {
+            repository.toggleVerification(article)
+        }
+    }
+
     fun togglePin(article: Article) {
         viewModelScope.launch {
             repository.togglePinArticle(article)

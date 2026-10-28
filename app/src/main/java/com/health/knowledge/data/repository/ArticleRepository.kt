@@ -82,6 +82,98 @@ class ArticleRepository @Inject constructor(
 
     suspend fun getFirebaseSyncedCount(): Int = articleDao.getFirebaseSyncedCount()
 
+    // ── Encrypted & Firestore-Synced Admin Auth + Reset System ───────────────
+    suspend fun verifyAndUnlockAdminGlobal(rawPassword: String): Boolean = withContext(Dispatchers.IO) {
+        val remoteConfig = withTimeoutOrNull(3500L) {
+            firestoreDataSource.fetchAdminAuthConfig()
+        }
+        if (remoteConfig != null && remoteConfig.recoveryKeyHash.isNotBlank()) {
+            prefsManager.saveEncryptedAdminCredentials(
+                passwordHash = remoteConfig.passwordHash.ifBlank { prefsManager.getAdminPasswordHash() },
+                recoveryKeyHash = remoteConfig.recoveryKeyHash
+            )
+        }
+        val unlocked = prefsManager.verifyAndUnlockAdmin(
+            inputPassword = rawPassword,
+            remotePasswordHash = remoteConfig?.passwordHash
+        )
+        // If Firestore did not have adminAuth initialized yet and login succeeded, seed encrypted hashes to Firestore
+        if (unlocked && (remoteConfig == null || remoteConfig.passwordHash.isBlank())) {
+            withTimeoutOrNull(3000L) {
+                firestoreDataSource.saveAdminAuthConfig(
+                    passwordHash = prefsManager.getAdminPasswordHash(),
+                    recoveryKeyHash = prefsManager.getAdminRecoveryHash()
+                )
+            }
+        }
+        unlocked
+    }
+
+    suspend fun resetAdminPasswordWithRecoveryGlobal(
+        recoveryCode: String,
+        newPassword: String
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        if (newPassword.trim().length < 4) {
+            return@withContext Result.failure(IllegalArgumentException("নতুন পাসওয়ার্ড কমপক্ষে ৪ অক্ষরের হতে হবে"))
+        }
+        val remoteConfig = withTimeoutOrNull(4000L) {
+            firestoreDataSource.fetchAdminAuthConfig()
+        }
+        val isRecoveryValid = prefsManager.verifyRecoveryCode(
+            inputRecoveryCode = recoveryCode,
+            remoteRecoveryHash = remoteConfig?.recoveryKeyHash
+        )
+        if (!isRecoveryValid) {
+            return@withContext Result.failure(IllegalArgumentException("রিকভারি কোড সঠিক নয়!"))
+        }
+
+        val encryptedNewPassword = prefsManager.encryptSecret(newPassword)
+        val recoveryHashToKeep = remoteConfig?.recoveryKeyHash?.takeIf { it.isNotBlank() }
+            ?: prefsManager.getAdminRecoveryHash()
+
+        prefsManager.saveEncryptedAdminCredentials(
+            passwordHash = encryptedNewPassword,
+            recoveryKeyHash = recoveryHashToKeep
+        )
+        prefsManager.unlockAdminSession()
+
+        withTimeoutOrNull(4500L) {
+            firestoreDataSource.saveAdminAuthConfig(
+                passwordHash = encryptedNewPassword,
+                recoveryKeyHash = recoveryHashToKeep
+            )
+        }
+        Result.success(Unit)
+    }
+
+    suspend fun changeAdminPasswordGlobal(
+        newPassword: String,
+        newRecoveryCode: String = ""
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        if (newPassword.trim().length < 4) {
+            return@withContext Result.failure(IllegalArgumentException("নতুন পাসওয়ার্ড কমপক্ষে ৪ অক্ষরের হতে হবে"))
+        }
+        val newPassHash = prefsManager.encryptSecret(newPassword)
+        val newRecHash = if (newRecoveryCode.trim().length >= 4) {
+            prefsManager.encryptSecret(newRecoveryCode)
+        } else {
+            prefsManager.getAdminRecoveryHash()
+        }
+
+        prefsManager.saveEncryptedAdminCredentials(
+            passwordHash = newPassHash,
+            recoveryKeyHash = newRecHash
+        )
+
+        withTimeoutOrNull(4500L) {
+            firestoreDataSource.saveAdminAuthConfig(
+                passwordHash = newPassHash,
+                recoveryKeyHash = newRecHash
+            )
+        }
+        Result.success(Unit)
+    }
+
     // ── Pull-to-Refresh Live Cloud Sync ──────────────────────────────────────
     suspend fun syncFromCloudNow(): Int = withContext(Dispatchers.IO) {
         var addedOrUpdated = 0
@@ -104,6 +196,9 @@ class ArticleRepository @Inject constructor(
                         }
                         if (existing.isReviewed != fbArt.isReviewed && fbArt.isReviewed) {
                             articleDao.approveArticle(existing.id)
+                        }
+                        if (fbArt.verifiedCount > existing.verifiedCount) {
+                            articleDao.updateVerifiedCountOnly(existing.id, fbArt.verifiedCount)
                         }
                         null
                     } else {
@@ -144,7 +239,8 @@ class ArticleRepository @Inject constructor(
                 }
 
                 if (meta.hasContentOverride && meta.title.isNotBlank() && meta.content.isNotBlank()) {
-                    val keywords = "${meta.title} ${meta.content} ${meta.medicines} ${meta.categories}".lowercase()
+                    val resolvedSource = meta.source.ifBlank { targetEntity.source }
+                    val keywords = "${meta.title} ${meta.content} ${meta.medicines} ${meta.categories} $resolvedSource".lowercase()
                     val resolvedPhoto = meta.photoUrl.ifBlank { targetEntity.photoPath }
                     articleDao.updateArticleContent(
                         id = targetEntity.id,
@@ -155,13 +251,20 @@ class ArticleRepository @Inject constructor(
                         photoPath = resolvedPhoto,
                         hasPhoto = resolvedPhoto.isNotBlank(),
                         searchKeywords = keywords,
-                        isReviewed = meta.isReviewed
+                        isReviewed = meta.isReviewed,
+                        source = resolvedSource
                     )
                 }
 
                 meta.reactions?.let { remoteReactions ->
                     if (remoteReactions >= 0) {
                         articleDao.updateReactionsCountOnly(targetEntity.id, remoteReactions)
+                    }
+                }
+
+                meta.verifiedCount?.let { remoteVerified ->
+                    if (remoteVerified >= 0) {
+                        articleDao.updateVerifiedCountOnly(targetEntity.id, remoteVerified)
                     }
                 }
             }
@@ -207,11 +310,47 @@ class ArticleRepository @Inject constructor(
         }
     }
 
+    // ── Global User Verification ("পরীক্ষিত / কাজ হয়েছে") via Firestore ──────
+    suspend fun toggleVerification(article: Article) {
+        val wantVerify = !article.isVerified
+        val optimisticCount = if (wantVerify) {
+            article.verifiedCount + 1
+        } else {
+            (article.verifiedCount - 1).coerceAtLeast(0)
+        }
+
+        // 1. Optimistic local update for instant UI feedback
+        articleDao.updateVerification(
+            id = article.id,
+            verifiedCount = optimisticCount,
+            isVerified = wantVerify
+        )
+
+        // 2. Atomic Firestore Transaction to count globally across all users
+        withTimeoutOrNull(5000L) {
+            val ipHash = prefsManager.getClientIpHash()
+            val txResult = firestoreDataSource.toggleVerificationGlobalTransaction(
+                postKey = article.postKey,
+                firebaseDocId = article.firebaseDocId,
+                ipHash = ipHash,
+                wantVerify = wantVerify,
+                fallbackBaseCount = article.verifiedCount
+            )
+            txResult.getOrNull()?.let { (globalVerifiedCount, verifiedState) ->
+                articleDao.updateVerification(
+                    id = article.id,
+                    verifiedCount = globalVerifiedCount,
+                    isVerified = verifiedState
+                )
+            }
+        }
+    }
+
     /**
-     * Refreshes the live global reaction count from Firestore when viewing a post.
+     * Refreshes the live global reaction & verification counts from Firestore when viewing a post.
      */
     suspend fun refreshLiveReactions(article: Article) {
-        withTimeoutOrNull(4000L) {
+        withTimeoutOrNull(4500L) {
             val ipHash = prefsManager.getClientIpHash()
             val (globalCount, hasIpReacted) = firestoreDataSource.fetchLiveReactionStatus(
                 postKey = article.postKey,
@@ -222,6 +361,18 @@ class ArticleRepository @Inject constructor(
                     id = article.id,
                     reactions = globalCount,
                     isReacted = hasIpReacted ?: article.isReacted
+                )
+            }
+
+            val (globalVerifiedCount, hasIpVerified) = firestoreDataSource.fetchLiveVerificationStatus(
+                postKey = article.postKey,
+                ipHash = ipHash
+            )
+            if (globalVerifiedCount != null) {
+                articleDao.updateVerification(
+                    id = article.id,
+                    verifiedCount = globalVerifiedCount,
+                    isVerified = hasIpVerified ?: article.isVerified
                 )
             }
         }
@@ -235,10 +386,12 @@ class ArticleRepository @Inject constructor(
         categories: String,
         photoUrl: String,
         date: String,
-        isPinned: Boolean = false
+        isPinned: Boolean = false,
+        source: String = ""
     ): Result<String> {
         val now = System.currentTimeMillis()
         val cleanPhotoUrl = photoUrl.trim()
+        val cleanSource = source.trim()
         val firestoreArticle = FirestoreDataSource.FirestoreArticle(
             title = title,
             content = content,
@@ -249,7 +402,8 @@ class ArticleRepository @Inject constructor(
             photoUrl = cleanPhotoUrl,
             isPinned = isPinned,
             isReviewed = true,
-            createdAt = now
+            createdAt = now,
+            source = cleanSource
         )
 
         val remoteDocId = withTimeoutOrNull(5000L) {
@@ -269,10 +423,12 @@ class ArticleRepository @Inject constructor(
         medicines: String,
         categories: String,
         photoUrl: String,
-        date: String
+        date: String,
+        source: String = ""
     ): Result<String> {
         val now = System.currentTimeMillis()
         val cleanPhotoUrl = photoUrl.trim()
+        val cleanSource = source.trim()
         val myDeviceId = prefsManager.getDeviceAuthorId()
         val firestoreArticle = FirestoreDataSource.FirestoreArticle(
             title = title,
@@ -286,7 +442,8 @@ class ArticleRepository @Inject constructor(
             isReviewed = false, // Pending admin review
             addedByAdmin = false,
             createdAt = now,
-            authorDeviceId = myDeviceId
+            authorDeviceId = myDeviceId,
+            source = cleanSource
         )
 
         val remoteDocId = withTimeoutOrNull(6000L) {
@@ -300,7 +457,7 @@ class ArticleRepository @Inject constructor(
 
         val entity = firestoreArticle.copy(firebaseDocId = remoteDocId)
             .toEntity(myDeviceId = myDeviceId, myDocIds = prefsManager.getMySubmittedDocIds())
-            .copy(isMine = true, authorDeviceId = myDeviceId)
+            .copy(isMine = true, authorDeviceId = myDeviceId, source = cleanSource)
         articleDao.insert(entity)
 
         return Result.success(remoteDocId)
@@ -322,7 +479,8 @@ class ArticleRepository @Inject constructor(
                 medicines = medsCsv,
                 categories = catsCsv,
                 photoUrl = cleanPhotoUrl,
-                isReviewed = true
+                isReviewed = true,
+                source = article.source
             )
         }
 
@@ -345,10 +503,12 @@ class ArticleRepository @Inject constructor(
         categories: String,
         photoUrl: String,
         date: String,
-        isPinned: Boolean = false
+        isPinned: Boolean = false,
+        source: String = ""
     ): Long {
         val now = System.currentTimeMillis()
         val cleanPhotoUrl = photoUrl.trim()
+        val cleanSource = source.trim()
         val entity = ArticleEntity(
             title = title,
             content = content,
@@ -361,8 +521,9 @@ class ArticleRepository @Inject constructor(
             isReviewed = true,
             isDraft = true,
             syncedFromFirebase = false,
-            searchKeywords = "$title $content $medicines $categories".lowercase(),
-            createdAt = now
+            searchKeywords = "$title $content $medicines $categories $cleanSource".lowercase(),
+            createdAt = now,
+            source = cleanSource
         )
         return articleDao.insert(entity)
     }
@@ -386,7 +547,8 @@ class ArticleRepository @Inject constructor(
             photoUrl = cleanPhotoUrl,
             isPinned = article.isPinned,
             isReviewed = true,
-            createdAt = now
+            createdAt = now,
+            source = article.source
         )
 
         val remoteDocId = withTimeoutOrNull(5000L) {
@@ -417,7 +579,7 @@ class ArticleRepository @Inject constructor(
         }
     }
 
-    // ── Admin: Edit / Review post globally (including CDN photoUrl) ──────────
+    // ── Admin: Edit / Review post globally (including CDN photoUrl & source) ─
     suspend fun updateArticleGlobally(
         article: Article,
         title: String,
@@ -425,10 +587,12 @@ class ArticleRepository @Inject constructor(
         medicines: String,
         categories: String,
         photoUrl: String,
-        isReviewed: Boolean = true
+        isReviewed: Boolean = true,
+        source: String = ""
     ) {
         val cleanPhotoUrl = photoUrl.trim()
-        val keywords = "$title $content $medicines $categories".lowercase()
+        val cleanSource = source.trim()
+        val keywords = "$title $content $medicines $categories $cleanSource".lowercase()
         articleDao.updateArticleContent(
             id = article.id,
             title = title,
@@ -438,7 +602,8 @@ class ArticleRepository @Inject constructor(
             photoPath = cleanPhotoUrl,
             hasPhoto = cleanPhotoUrl.isNotBlank(),
             searchKeywords = keywords,
-            isReviewed = isReviewed
+            isReviewed = isReviewed,
+            source = cleanSource
         )
 
         if (!article.isDraft) {
@@ -451,7 +616,8 @@ class ArticleRepository @Inject constructor(
                     medicines = medicines,
                     categories = categories,
                     photoUrl = cleanPhotoUrl,
-                    isReviewed = isReviewed
+                    isReviewed = isReviewed,
+                    source = cleanSource
                 )
             }
         }
@@ -484,7 +650,8 @@ class ArticleRepository @Inject constructor(
         val userNote: String = "",
         val lastReadAt: Long = 0L,
         val isPinned: Boolean = false,
-        val syncedFromFirebase: Boolean = false
+        val syncedFromFirebase: Boolean = false,
+        val source: String = ""
     )
 
     data class AppBackupPayload(
@@ -513,7 +680,8 @@ class ArticleRepository @Inject constructor(
                 userNote = entity.userNote,
                 lastReadAt = entity.lastReadAt,
                 isPinned = entity.isPinned,
-                syncedFromFirebase = entity.syncedFromFirebase
+                syncedFromFirebase = entity.syncedFromFirebase,
+                source = entity.source
             )
         }
         GsonBuilder().setPrettyPrinting().create().toJson(AppBackupPayload(entries = entries))
@@ -565,7 +733,8 @@ class ArticleRepository @Inject constructor(
                         lastReadAt = entry.lastReadAt,
                         isPinned = entry.isPinned,
                         syncedFromFirebase = entry.syncedFromFirebase,
-                        searchKeywords = "${entry.title} ${entry.content} ${entry.medicines} ${entry.categories}".lowercase()
+                        source = entry.source,
+                        searchKeywords = "${entry.title} ${entry.content} ${entry.medicines} ${entry.categories} ${entry.source}".lowercase()
                     )
                     articleDao.insert(newEntity)
                     restoredCount++
