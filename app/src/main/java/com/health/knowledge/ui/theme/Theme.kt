@@ -7,6 +7,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
@@ -101,9 +102,16 @@ fun onePxDp(): Dp = with(LocalDensity.current) { 1f.toDp() }
  * Standard 1px subtle border for cards and surfaces.
  */
 @Composable
-fun onePxBorder(color: Color = MaterialTheme.colorScheme.outlineVariant): BorderStroke {
+fun onePxBorder(color: Color = MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)): BorderStroke {
     return BorderStroke(width = onePxDp(), color = color)
 }
+
+/**
+ * Blends a translucent color onto the current theme surface so that Card containerColors
+ * remain 100% opaque (eliminating hardware shadow inner-frame artifacts on Android).
+ */
+@Composable
+fun Color.solidOverSurface(): Color = this.compositeOver(MaterialTheme.colorScheme.surface)
 
 @Composable
 fun HealthKnowledgeTheme(

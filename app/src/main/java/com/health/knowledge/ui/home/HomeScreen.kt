@@ -45,6 +45,7 @@ import coil.request.ImageRequest
 import com.health.knowledge.domain.model.Article
 import com.health.knowledge.ui.detail.VerificationConsentDialog
 import com.health.knowledge.ui.theme.onePxBorder
+import com.health.knowledge.ui.theme.solidOverSurface
 import com.health.knowledge.util.UserPreferencesManager
 
 val categories = listOf(
@@ -965,19 +966,19 @@ fun ArticleCard(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 5.dp)
             .clickable(onClick = onClick),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         border = onePxBorder(
             when {
                 article.isPinned -> MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
                 article.isMine && !article.isReviewed -> Color(0xFFFFB300).copy(alpha = 0.55f)
-                else -> MaterialTheme.colorScheme.outlineVariant
+                else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
             }
         ),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = when {
                 article.isMine && !article.isReviewed -> Color(0xFFFFFBF0)
-                article.isPinned -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.22f)
+                article.isPinned -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.22f).solidOverSurface()
                 else -> MaterialTheme.colorScheme.surface
             }
         )

@@ -44,6 +44,7 @@ import coil.request.ImageRequest
 import com.health.knowledge.domain.model.Article
 import com.health.knowledge.ui.home.TagChip
 import com.health.knowledge.ui.theme.onePxBorder
+import com.health.knowledge.ui.theme.solidOverSurface
 import com.health.knowledge.util.ShareCardGenerator
 import com.health.knowledge.util.UserPreferencesManager
 import kotlinx.coroutines.launch
@@ -298,7 +299,7 @@ fun DetailScreen(
                             Card(
                                 shape = RoundedCornerShape(16.dp),
                                 border = onePxBorder(),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable { showFullscreenPhoto = true }
@@ -539,7 +540,7 @@ fun DetailScreen(
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surface
                         ),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp)
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                     ) {
                         Column(
                             modifier = Modifier
@@ -595,9 +596,9 @@ fun DetailScreen(
                             ),
                             border = onePxBorder(
                                 if (art.isVerified) Color(0xFF2E7D32).copy(alpha = 0.45f)
-                                else MaterialTheme.colorScheme.outlineVariant
+                                else MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
                             ),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                             shape = RoundedCornerShape(16.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -737,10 +738,10 @@ fun DetailScreen(
                     Box(modifier = Modifier.padding(horizontal = 16.dp)) {
                         Card(
                             colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f).solidOverSurface()
                             ),
                             border = onePxBorder(),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                             shape = RoundedCornerShape(14.dp)
                         ) {
                             Column(
@@ -838,7 +839,7 @@ fun DetailScreen(
                                         colors = CardDefaults.cardColors(
                                             containerColor = MaterialTheme.colorScheme.surface
                                         ),
-                                        elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp)
+                                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                                     ) {
                                         Column(
                                             modifier = Modifier
@@ -1431,7 +1432,7 @@ fun SectionCard(title: String, content: @Composable () -> Unit) {
         shape = RoundedCornerShape(16.dp),
         border = onePxBorder(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)

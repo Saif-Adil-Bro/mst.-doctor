@@ -30,6 +30,7 @@ import coil.request.ImageRequest
 import com.health.knowledge.domain.model.Article
 import com.health.knowledge.ui.home.categories
 import com.health.knowledge.ui.theme.onePxBorder
+import com.health.knowledge.ui.theme.solidOverSurface
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -355,7 +356,9 @@ private fun AddPostTab(
         item {
             Card(
                 shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                border = onePxBorder(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f).solidOverSurface())
             ) {
                 Row(
                     modifier = Modifier
@@ -532,11 +535,11 @@ private fun ManagePostsTab(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
-                    border = onePxBorder(MaterialTheme.colorScheme.outlineVariant),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
+                    border = onePxBorder(),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = if (article.isDraft)
-                            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f)
+                            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f).solidOverSurface()
                         else if (!article.isReviewed)
                             Color(0xFFFFF8E1)
                         else
@@ -765,8 +768,9 @@ private fun AdminAnalyticsTab(analytics: AdminAnalyticsState) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
-                border = onePxBorder(MaterialTheme.colorScheme.outlineVariant),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp)
+                border = onePxBorder(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -817,8 +821,9 @@ private fun AdminAnalyticsTab(analytics: AdminAnalyticsState) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
-                border = onePxBorder(MaterialTheme.colorScheme.outlineVariant),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp)
+                border = onePxBorder(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -874,10 +879,10 @@ private fun MetricStatCard(
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(14.dp),
-        border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
+        border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f).solidOverSurface()
         )
     ) {
         Column(
@@ -1024,8 +1029,9 @@ private fun AdminSettingsTab(
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(14.dp),
-            border = onePxBorder(MaterialTheme.colorScheme.outlineVariant),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp)
+            border = onePxBorder(),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
@@ -1075,8 +1081,9 @@ private fun AdminSettingsTab(
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(14.dp),
-            border = onePxBorder(MaterialTheme.colorScheme.outlineVariant),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp)
+            border = onePxBorder(),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),

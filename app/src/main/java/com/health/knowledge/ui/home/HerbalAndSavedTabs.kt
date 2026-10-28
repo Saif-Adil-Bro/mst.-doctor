@@ -24,10 +24,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 import com.health.knowledge.domain.model.Article
 import com.health.knowledge.ui.theme.onePxBorder
+import com.health.knowledge.ui.theme.solidOverSurface
 import com.health.knowledge.util.UserPreferencesManager
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -48,10 +52,10 @@ fun DailyHealthTipCard(
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .clickable(onClick = onReadClick),
         shape = RoundedCornerShape(18.dp),
-        border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
+        border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
+            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f).solidOverSurface()
         )
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -275,10 +279,22 @@ fun ThemeAndReminderDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp),
+        shape = RoundedCornerShape(20.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
         icon = { Icon(Icons.Default.Palette, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
         title = { Text("🎨 রিডিং থিম ও রিমাইন্ডার", fontWeight = FontWeight.Bold) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 Text("আপনার চোখের আরামের জন্য পছন্দের রিডিং মোড বেছে নিন:", style = MaterialTheme.typography.bodySmall)
 
                 val themes = listOf(
@@ -292,7 +308,13 @@ fun ThemeAndReminderDialog(
                     val isSelected = currentThemeMode == mode
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        color = if (isSelected)
+                            MaterialTheme.colorScheme.primaryContainer.solidOverSurface()
+                        else
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f).solidOverSurface(),
+                        border = onePxBorder(
+                            if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
+                        ),
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
@@ -312,7 +334,7 @@ fun ThemeAndReminderDialog(
                     }
                 }
 
-                HorizontalDivider()
+                HorizontalDivider(thickness = com.health.knowledge.ui.theme.onePxDp())
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -339,7 +361,8 @@ fun ThemeAndReminderDialog(
                 if (reminderEnabled) {
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f).solidOverSurface(),
+                        border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
@@ -361,7 +384,9 @@ fun ThemeAndReminderDialog(
                             }
                     ) {
                         Row(
-                            modifier = Modifier.padding(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
@@ -389,6 +414,7 @@ fun ThemeAndReminderDialog(
                                     )
                                 }
                             }
+                            Spacer(Modifier.width(8.dp))
                             Surface(
                                 color = MaterialTheme.colorScheme.primary,
                                 shape = RoundedCornerShape(8.dp)
@@ -398,7 +424,8 @@ fun ThemeAndReminderDialog(
                                     color = MaterialTheme.colorScheme.onPrimary,
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    maxLines = 1,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                                 )
                             }
                         }
@@ -408,6 +435,7 @@ fun ThemeAndReminderDialog(
                         onClick = onSendTestNotification,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(10.dp),
+                        border = onePxBorder(),
                         contentPadding = PaddingValues(vertical = 8.dp)
                     ) {
                         Icon(Icons.Default.NotificationsActive, null, modifier = Modifier.size(16.dp))
@@ -458,10 +486,10 @@ fun HerbalIndexTabContent(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 10.dp),
                 shape = RoundedCornerShape(16.dp),
-                border = onePxBorder(MaterialTheme.colorScheme.outlineVariant),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
+                border = onePxBorder(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f).solidOverSurface()
                 )
             ) {
                 Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -701,10 +729,10 @@ fun SavedAndHistoryTabContent(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             shape = RoundedCornerShape(16.dp),
-            border = onePxBorder(MaterialTheme.colorScheme.outlineVariant),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
+            border = onePxBorder(),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f).solidOverSurface()
             )
         ) {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -816,10 +844,10 @@ fun SavedAndHistoryTabContent(
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 6.dp),
                         shape = RoundedCornerShape(16.dp),
-                        border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
+                        border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f).solidOverSurface()
                         )
                     ) {
                         Column(modifier = Modifier.padding(14.dp)) {
