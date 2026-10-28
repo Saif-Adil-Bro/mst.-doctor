@@ -270,24 +270,31 @@ class FirestoreDataSource @Inject constructor() {
         val isPinned: Boolean = false,
         val isReviewed: Boolean = true,
         val createdAt: Long = System.currentTimeMillis(),
-        val addedByAdmin: Boolean = true
+        val addedByAdmin: Boolean = true,
+        val authorDeviceId: String = ""
     ) {
-        fun toEntity(): ArticleEntity = ArticleEntity(
-            title = title,
-            content = content,
-            date = date,
-            reactions = reactions,
-            medicines = medicines,
-            categories = categories,
-            hasPhoto = hasPhoto || photoUrl.isNotBlank(),
-            photoPath = photoUrl,
-            syncedFromFirebase = true,
-            firebaseDocId = firebaseDocId,
-            isPinned = isPinned,
-            isReviewed = isReviewed,
-            searchKeywords = "$title $content $medicines $categories".lowercase(),
-            createdAt = createdAt
-        )
+        fun toEntity(myDeviceId: String = "", myDocIds: Set<String> = emptySet()): ArticleEntity {
+            val isSubmittedByMe = (authorDeviceId.isNotBlank() && authorDeviceId == myDeviceId) ||
+                    (firebaseDocId.isNotBlank() && firebaseDocId in myDocIds)
+            return ArticleEntity(
+                title = title,
+                content = content,
+                date = date,
+                reactions = reactions,
+                medicines = medicines,
+                categories = categories,
+                hasPhoto = hasPhoto || photoUrl.isNotBlank(),
+                photoPath = photoUrl,
+                syncedFromFirebase = true,
+                firebaseDocId = firebaseDocId,
+                isPinned = isPinned,
+                isReviewed = isReviewed,
+                searchKeywords = "$title $content $medicines $categories".lowercase(),
+                createdAt = createdAt,
+                isMine = isSubmittedByMe,
+                authorDeviceId = authorDeviceId
+            )
+        }
     }
 
     data class PostMetaOverride(

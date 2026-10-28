@@ -90,6 +90,11 @@ fun HomeScreen(
     val dailyTipArticle by viewModel.dailyTipArticle.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
 
+    val myArticles by viewModel.myArticles.collectAsState()
+    val myPendingCount by viewModel.myPendingCount.collectAsState()
+    val myApprovedCount by viewModel.myApprovedCount.collectAsState()
+    val myTotalReactions by viewModel.myTotalReactions.collectAsState()
+
     val herbalIndex by viewModel.herbalIndex.collectAsState()
     val herbSearchQuery by viewModel.herbSearchQuery.collectAsState()
     val selectedHerb by viewModel.selectedHerb.collectAsState()
@@ -423,6 +428,10 @@ fun HomeScreen(
                         bookmarkedArticles = bookmarked,
                         historyArticles = readingHistory,
                         notedArticles = notedArticles,
+                        myArticles = myArticles,
+                        myPendingCount = myPendingCount,
+                        myApprovedCount = myApprovedCount,
+                        myTotalReactions = myTotalReactions,
                         listState = bookmarkListState,
                         isAdminMode = isAdminMode,
                         onSubTabChange = viewModel::onSavedSubTabChange,
@@ -486,6 +495,50 @@ fun HomeScreen(
                                                     onNextTipClick = viewModel::nextDailyTip,
                                                     onToggleReminder = { showThemeDialog = true }
                                                 )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (myPendingCount > 0 && searchQuery.isBlank() && selectedCategory == null) {
+                                    item(key = "my_pending_posts_banner") {
+                                        Surface(
+                                            color = Color(0xFFFFF8E1),
+                                            shape = RoundedCornerShape(12.dp),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp, vertical = 6.dp)
+                                                .clickable {
+                                                    viewModel.onTabSelected("bookmarks")
+                                                    viewModel.onSavedSubTabChange("my_posts")
+                                                }
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    modifier = Modifier.weight(1f)
+                                                ) {
+                                                    Text("⏳", fontSize = 18.sp)
+                                                    Spacer(Modifier.width(8.dp))
+                                                    Column {
+                                                        Text(
+                                                            "আপনার $myPendingCount টি পোস্ট পেন্ডিং রয়েছে",
+                                                            style = MaterialTheme.typography.labelMedium,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = Color(0xFFE65100)
+                                                        )
+                                                        Text(
+                                                            "স্ট্যাটাস ও অ্যানালিটিক্স দেখতে ট্যাপ করুন",
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = Color(0xFFBF360C)
+                                                        )
+                                                    }
+                                                }
+                                                Text("→", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFFE65100))
                                             }
                                         }
                                     }
@@ -728,6 +781,7 @@ fun ArticleCard(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = when {
+                article.isMine && !article.isReviewed -> Color(0xFFFFF8E1)
                 article.isPinned -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
                 article.syncedFromFirebase -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.25f)
                 else -> MaterialTheme.colorScheme.surface
@@ -765,6 +819,35 @@ fun ArticleCard(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    if (article.isMine) {
+                        if (!article.isReviewed && !article.isDraft) {
+                            Surface(
+                                color = Color(0xFFFFB300),
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Text(
+                                    "⏳ আপনার পোস্ট • পেন্ডিং",
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.Black,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        } else if (article.isReviewed) {
+                            Surface(
+                                color = Color(0xFF2E7D32),
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Text(
+                                    "✅ আপনার পোস্ট",
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
                     if (article.isPinned) {
                         Surface(
                             color = MaterialTheme.colorScheme.primary,

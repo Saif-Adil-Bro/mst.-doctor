@@ -27,10 +27,11 @@ class ArticleRepository @Inject constructor(
 ) {
     // ── Read from LOCAL Room DB (always fast, always offline) ────────────────
     fun searchArticles(query: String): Flow<List<ArticleEntity>> {
+        val myDeviceId = prefsManager.getDeviceAuthorId()
         return if (query.isBlank()) {
-            articleDao.getAllArticles()
+            articleDao.getAllArticles(myDeviceId)
         } else {
-            articleDao.searchArticles(query.trim())
+            articleDao.searchArticles(query.trim(), myDeviceId)
         }
     }
 
@@ -42,10 +43,14 @@ class ArticleRepository @Inject constructor(
         }
     }
 
-    fun getAllArticles(): Flow<List<ArticleEntity>> = articleDao.getAllArticles()
+    fun getAllArticles(): Flow<List<ArticleEntity>> =
+        articleDao.getAllArticles(prefsManager.getDeviceAuthorId())
+
+    fun getMyArticles(): Flow<List<ArticleEntity>> =
+        articleDao.getMyArticles(prefsManager.getDeviceAuthorId())
 
     fun getByCategory(category: String): Flow<List<ArticleEntity>> =
-        articleDao.getByCategory(category)
+        articleDao.getByCategory(category, prefsManager.getDeviceAuthorId())
 
     fun getBookmarked(): Flow<List<ArticleEntity>> = articleDao.getBookmarked()
 
@@ -85,10 +90,25 @@ class ArticleRepository @Inject constructor(
                 firestoreDataSource.fetchAllArticles()
             } ?: emptyList()
 
+            val myDeviceId = prefsManager.getDeviceAuthorId()
+            val myDocIds = prefsManager.getMySubmittedDocIds()
+
             if (remoteArticles.isNotEmpty()) {
                 val newEntities = remoteArticles.mapNotNull { fbArt ->
-                    val exists = articleDao.countByFirebaseDocId(fbArt.firebaseDocId) > 0
-                    if (exists) null else fbArt.toEntity()
+                    val isMine = (fbArt.authorDeviceId.isNotBlank() && fbArt.authorDeviceId == myDeviceId) ||
+                            (fbArt.firebaseDocId.isNotBlank() && fbArt.firebaseDocId in myDocIds)
+                    val existing = articleDao.getByFirebaseDocId(fbArt.firebaseDocId)
+                    if (existing != null) {
+                        if (isMine && !existing.isMine) {
+                            articleDao.markAsMine(existing.id, myDeviceId)
+                        }
+                        if (existing.isReviewed != fbArt.isReviewed && fbArt.isReviewed) {
+                            articleDao.approveArticle(existing.id)
+                        }
+                        null
+                    } else {
+                        fbArt.toEntity(myDeviceId = myDeviceId, myDocIds = myDocIds)
+                    }
                 }
                 if (newEntities.isNotEmpty()) {
                     articleDao.insertAll(newEntities)
@@ -253,6 +273,7 @@ class ArticleRepository @Inject constructor(
     ): Result<String> {
         val now = System.currentTimeMillis()
         val cleanPhotoUrl = photoUrl.trim()
+        val myDeviceId = prefsManager.getDeviceAuthorId()
         val firestoreArticle = FirestoreDataSource.FirestoreArticle(
             title = title,
             content = content,
@@ -264,14 +285,22 @@ class ArticleRepository @Inject constructor(
             isPinned = false,
             isReviewed = false, // Pending admin review
             addedByAdmin = false,
-            createdAt = now
+            createdAt = now,
+            authorDeviceId = myDeviceId
         )
 
         val remoteDocId = withTimeoutOrNull(6000L) {
             firestoreDataSource.addArticle(firestoreArticle).getOrNull()
         } ?: ""
 
-        val entity = firestoreArticle.copy(firebaseDocId = remoteDocId).toEntity()
+        if (remoteDocId.isNotBlank()) {
+            prefsManager.addMySubmittedDocId(remoteDocId)
+            prefsManager.addMySubmittedDocId("fb_$remoteDocId")
+        }
+
+        val entity = firestoreArticle.copy(firebaseDocId = remoteDocId)
+            .toEntity(myDeviceId = myDeviceId, myDocIds = prefsManager.getMySubmittedDocIds())
+            .copy(isMine = true, authorDeviceId = myDeviceId)
         articleDao.insert(entity)
 
         return Result.success(remoteDocId)

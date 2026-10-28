@@ -20,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -630,6 +631,10 @@ fun SavedAndHistoryTabContent(
     bookmarkedArticles: List<Article>,
     historyArticles: List<Article>,
     notedArticles: List<Article>,
+    myArticles: List<Article> = emptyList(),
+    myPendingCount: Int = 0,
+    myApprovedCount: Int = 0,
+    myTotalReactions: Int = 0,
     listState: LazyListState,
     isAdminMode: Boolean,
     onSubTabChange: (String) -> Unit,
@@ -692,28 +697,38 @@ fun SavedAndHistoryTabContent(
             )
         ) {
             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(
+                LazyRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    FilterChip(
-                        selected = savedSubTab == "bookmarks",
-                        onClick = { onSubTabChange("bookmarks") },
-                        label = { Text("🔖 সেভ (${bookmarkedArticles.size})", fontSize = 12.sp) },
-                        modifier = Modifier.weight(1f)
-                    )
-                    FilterChip(
-                        selected = savedSubTab == "history",
-                        onClick = { onSubTabChange("history") },
-                        label = { Text("🕒 হিস্ট্রি (${historyArticles.size})", fontSize = 12.sp) },
-                        modifier = Modifier.weight(1f)
-                    )
-                    FilterChip(
-                        selected = savedSubTab == "notes",
-                        onClick = { onSubTabChange("notes") },
-                        label = { Text("📓 নোটস (${notedArticles.size})", fontSize = 12.sp) },
-                        modifier = Modifier.weight(1f)
-                    )
+                    item {
+                        FilterChip(
+                            selected = savedSubTab == "bookmarks",
+                            onClick = { onSubTabChange("bookmarks") },
+                            label = { Text("🔖 সেভ (${bookmarkedArticles.size})", fontSize = 12.sp) }
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = savedSubTab == "my_posts",
+                            onClick = { onSubTabChange("my_posts") },
+                            label = { Text("✍️ আমার পোস্ট (${myArticles.size})", fontSize = 12.sp) }
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = savedSubTab == "history",
+                            onClick = { onSubTabChange("history") },
+                            label = { Text("🕒 হিস্ট্রি (${historyArticles.size})", fontSize = 12.sp) }
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = savedSubTab == "notes",
+                            onClick = { onSubTabChange("notes") },
+                            label = { Text("📓 নোটস (${notedArticles.size})", fontSize = 12.sp) }
+                        )
+                    }
                 }
 
                 Row(
@@ -766,12 +781,14 @@ fun SavedAndHistoryTabContent(
         val activeList = when (savedSubTab) {
             "history" -> historyArticles
             "notes" -> notedArticles
+            "my_posts" -> myArticles
             else -> bookmarkedArticles
         }
 
         val emptyMessage = when (savedSubTab) {
             "history" -> "এখনো কোনো আর্টিকেল পড়া হয়নি"
             "notes" -> "কোনো আর্টিকেলে এখনো ব্যক্তিগত নোট যোগ করা হয়নি"
+            "my_posts" -> "এই ডিভাইস থেকে এখনও কোনো পোস্ট যোগ করা হয়নি। হোম পেজের '+ পোস্ট করুন' বাটন থেকে পোস্ট করতে পারবেন!"
             else -> "কোনো সেভ করা আর্টিকেল নেই"
         }
 
@@ -780,6 +797,66 @@ fun SavedAndHistoryTabContent(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 16.dp)
         ) {
+            // Analytics Dashboard for My Posts
+            if (savedSubTab == "my_posts" && myArticles.isNotEmpty()) {
+                item(key = "my_post_analytics_dashboard") {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text("📊", fontSize = 16.sp)
+                                Text(
+                                    "আপনার পোস্টের লাইভ অ্যানালিটিক্স",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Spacer(Modifier.height(10.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                MyMetricBox(
+                                    title = "মোট পোস্ট",
+                                    value = "${myArticles.size}",
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                MyMetricBox(
+                                    title = "⏳ পেন্ডিং",
+                                    value = "$myPendingCount",
+                                    color = Color(0xFFFF8F00),
+                                    modifier = Modifier.weight(1f)
+                                )
+                                MyMetricBox(
+                                    title = "✅ অনুমোদিত",
+                                    value = "$myApprovedCount",
+                                    color = Color(0xFF2E7D32),
+                                    modifier = Modifier.weight(1f)
+                                )
+                                MyMetricBox(
+                                    title = "❤️ রিয়্যাকশন",
+                                    value = "$myTotalReactions",
+                                    color = Color(0xFFE91E63),
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             if (activeList.isEmpty()) {
                 item(key = "empty_saved_subtab") {
                     Box(
@@ -793,6 +870,7 @@ fun SavedAndHistoryTabContent(
                                 when (savedSubTab) {
                                     "history" -> "🕒"
                                     "notes" -> "📓"
+                                    "my_posts" -> "✍️"
                                     else -> "🔖"
                                 },
                                 fontSize = 42.sp
@@ -836,6 +914,39 @@ fun SavedAndHistoryTabContent(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun MyMetricBox(
+    title: String,
+    value: String,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        color = color.copy(alpha = 0.14f),
+        shape = RoundedCornerShape(10.dp),
+        modifier = modifier
+    ) {
+        Column(
+            modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = value,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = color
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = title,
+                fontSize = 10.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
         }
     }
 }

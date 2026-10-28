@@ -226,6 +226,27 @@ class UserPreferencesManager @Inject constructor(
         return null
     }
 
+    fun getDeviceAuthorId(): String {
+        return getFallbackDeviceId()
+    }
+
+    fun getMySubmittedDocIds(): Set<String> {
+        return prefs.getStringSet(KEY_MY_SUBMISSIONS, emptySet()) ?: emptySet()
+    }
+
+    fun addMySubmittedDocId(docIdOrKey: String) {
+        if (docIdOrKey.isBlank()) return
+        val current = getMySubmittedDocIds().toMutableSet()
+        current.add(docIdOrKey.trim())
+        prefs.edit().putStringSet(KEY_MY_SUBMISSIONS, current).apply()
+    }
+
+    fun isMySubmittedPost(postKey: String, firebaseDocId: String): Boolean {
+        val mine = getMySubmittedDocIds()
+        return (postKey.isNotBlank() && postKey in mine) ||
+               (firebaseDocId.isNotBlank() && firebaseDocId in mine)
+    }
+
     private fun getFallbackDeviceId(): String {
         val existing = prefs.getString(KEY_DEVICE_FALLBACK_ID, null)
         if (!existing.isNullOrBlank()) return existing
@@ -274,5 +295,6 @@ class UserPreferencesManager @Inject constructor(
         private const val KEY_CACHED_IP = "cached_public_ip"
         private const val KEY_IP_FETCH_TIME = "cached_ip_fetch_time"
         private const val KEY_DEVICE_FALLBACK_ID = "device_fallback_id"
+        private const val KEY_MY_SUBMISSIONS = "my_submitted_articles_keys"
     }
 }

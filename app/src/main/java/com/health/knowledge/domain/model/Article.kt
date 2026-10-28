@@ -23,7 +23,9 @@ data class Article(
     val createdAt: Long = 0L,
     val lastReadAt: Long = 0L,
     val userNote: String = "",
-    val isDraft: Boolean = false
+    val isDraft: Boolean = false,
+    val isMine: Boolean = false,
+    val authorDeviceId: String = ""
 )
 
 fun ArticleEntity.toDomain() = Article(
@@ -47,5 +49,7 @@ fun ArticleEntity.toDomain() = Article(
     createdAt = createdAt,
     lastReadAt = lastReadAt,
     userNote = userNote,
-    isDraft = isDraft
+    isDraft = isDraft,
+    isMine = isMine,
+    authorDeviceId = authorDeviceId
 )

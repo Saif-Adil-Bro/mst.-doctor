@@ -223,6 +223,23 @@ class HomeViewModel @Inject constructor(
         .map { entities -> entities.map { it.toDomain() } }
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
+    // ── My Posts & Analytics (created from this device) ──────────────────────
+    val myArticles: StateFlow<List<Article>> = repository.getMyArticles()
+        .map { entities -> entities.map { it.toDomain() } }
+        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    val myPendingCount: StateFlow<Int> = myArticles
+        .map { list -> list.count { !it.isReviewed && !it.isDraft } }
+        .stateIn(viewModelScope, SharingStarted.Lazily, 0)
+
+    val myApprovedCount: StateFlow<Int> = myArticles
+        .map { list -> list.count { it.isReviewed && !it.isDraft } }
+        .stateIn(viewModelScope, SharingStarted.Lazily, 0)
+
+    val myTotalReactions: StateFlow<Int> = myArticles
+        .map { list -> list.sumOf { it.reactions } }
+        .stateIn(viewModelScope, SharingStarted.Lazily, 0)
+
     val totalCount: StateFlow<Int> = repository.observeActiveCount()
         .stateIn(viewModelScope, SharingStarted.Lazily, 0)
 

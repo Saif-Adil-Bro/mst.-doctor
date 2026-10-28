@@ -7,17 +7,18 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface ArticleDao {
 
-    // ── SEARCH (Pinned first, excludes deleted, unreviewed & drafts) ─────────
+    // ── SEARCH (Pinned first, excludes deleted & unreviewed unless submitted by this device) ──
     @Query("""
         SELECT * FROM articles 
-        WHERE isDeleted = 0 AND isDraft = 0 AND isReviewed = 1
+        WHERE isDeleted = 0 AND isDraft = 0 
+          AND (isReviewed = 1 OR isMine = 1 OR (:deviceId != '' AND authorDeviceId = :deviceId))
           AND (title LIKE '%' || :query || '%'
            OR content LIKE '%' || :query || '%'
            OR medicines LIKE '%' || :query || '%'
            OR categories LIKE '%' || :query || '%')
-        ORDER BY isPinned DESC, reactions DESC, createdAt DESC
+        ORDER BY (isMine = 1 AND isReviewed = 0) DESC, isPinned DESC, reactions DESC, createdAt DESC
     """)
-    fun searchArticles(query: String): Flow<List<ArticleEntity>>
+    fun searchArticles(query: String, deviceId: String = ""): Flow<List<ArticleEntity>>
 
     // ── ADMIN SEARCH (includes drafts & pending reviews) ─────────────────────
     @Query("""
@@ -31,9 +32,14 @@ interface ArticleDao {
     """)
     fun searchArticlesAdmin(query: String): Flow<List<ArticleEntity>>
 
-    // ── GET ALL (Pinned first, excludes deleted, unreviewed & drafts) ────────
-    @Query("SELECT * FROM articles WHERE isDeleted = 0 AND isDraft = 0 AND isReviewed = 1 ORDER BY isPinned DESC, reactions DESC, createdAt DESC")
-    fun getAllArticles(): Flow<List<ArticleEntity>>
+    // ── GET ALL (Excludes deleted & unreviewed unless submitted by this device) ──
+    @Query("""
+        SELECT * FROM articles 
+        WHERE isDeleted = 0 AND isDraft = 0 
+          AND (isReviewed = 1 OR isMine = 1 OR (:deviceId != '' AND authorDeviceId = :deviceId))
+        ORDER BY (isMine = 1 AND isReviewed = 0) DESC, isPinned DESC, reactions DESC, createdAt DESC
+    """)
+    fun getAllArticles(deviceId: String = ""): Flow<List<ArticleEntity>>
 
     @Query("SELECT * FROM articles WHERE isDeleted = 0 ORDER BY isReviewed ASC, isDraft DESC, isPinned DESC, reactions DESC, createdAt DESC")
     fun getAllArticlesAdmin(): Flow<List<ArticleEntity>>
@@ -41,14 +47,34 @@ interface ArticleDao {
     @Query("SELECT * FROM articles WHERE isDeleted = 0 AND isDraft = 0 AND isReviewed = 1")
     suspend fun getAllActiveSnapshot(): List<ArticleEntity>
 
+    // ── MY POSTS (posts submitted from this device, pending & approved) ──────
+    @Query("""
+        SELECT * FROM articles 
+        WHERE isDeleted = 0 
+          AND (isMine = 1 OR (:deviceId != '' AND authorDeviceId = :deviceId))
+        ORDER BY isReviewed ASC, createdAt DESC
+    """)
+    fun getMyArticles(deviceId: String = ""): Flow<List<ArticleEntity>>
+
+    @Query("""
+        SELECT * FROM articles 
+        WHERE isDeleted = 0 
+          AND (isMine = 1 OR (:deviceId != '' AND authorDeviceId = :deviceId))
+    """)
+    suspend fun getMyArticlesSnapshot(deviceId: String = ""): List<ArticleEntity>
+
+    @Query("UPDATE articles SET isMine = 1, authorDeviceId = :deviceId WHERE id = :id")
+    suspend fun markAsMine(id: Int, deviceId: String)
+
     // ── GET BY CATEGORY ──────────────────────────────────────────────────────
     @Query("""
         SELECT * FROM articles 
-        WHERE isDeleted = 0 AND isDraft = 0 AND isReviewed = 1
+        WHERE isDeleted = 0 AND isDraft = 0 
+          AND (isReviewed = 1 OR isMine = 1 OR (:deviceId != '' AND authorDeviceId = :deviceId))
           AND categories LIKE '%' || :category || '%'
-        ORDER BY isPinned DESC, reactions DESC, createdAt DESC
+        ORDER BY (isMine = 1 AND isReviewed = 0) DESC, isPinned DESC, reactions DESC, createdAt DESC
     """)
-    fun getByCategory(category: String): Flow<List<ArticleEntity>>
+    fun getByCategory(category: String, deviceId: String = ""): Flow<List<ArticleEntity>>
 
     // ── GET SINGLE ───────────────────────────────────────────────────────────
     @Query("SELECT * FROM articles WHERE id = :id AND isDeleted = 0")
