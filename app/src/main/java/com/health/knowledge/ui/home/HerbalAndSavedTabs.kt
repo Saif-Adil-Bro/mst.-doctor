@@ -35,6 +35,7 @@ import java.util.Locale
 fun DailyHealthTipCard(
     article: Article,
     reminderEnabled: Boolean,
+    reminderTimeText: String = "",
     onReadClick: () -> Unit,
     onNextTipClick: () -> Unit,
     onToggleReminder: () -> Unit
@@ -74,6 +75,36 @@ fun DailyHealthTipCard(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (reminderEnabled && reminderTimeText.isNotBlank()) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable(onClick = onToggleReminder)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Filled.NotificationsActive,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = reminderTimeText,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                        Spacer(Modifier.width(4.dp))
+                    }
+
                     IconButton(
                         onClick = onToggleReminder,
                         modifier = Modifier.size(32.dp)
@@ -219,8 +250,13 @@ private fun SortChipItem(
 fun ThemeAndReminderDialog(
     currentThemeMode: String,
     reminderEnabled: Boolean,
+    reminderHour: Int = 8,
+    reminderMinute: Int = 0,
+    formattedReminderTime: String = "সকাল ০৮:০০ (AM)",
     onSelectTheme: (String) -> Unit,
     onToggleReminder: (Boolean) -> Unit,
+    onTimeSelected: (hour: Int, minute: Int) -> Unit = { _, _ -> },
+    onSendTestNotification: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -281,7 +317,7 @@ fun ThemeAndReminderDialog(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text("🔔 দৈনিক স্বাস্থ্য টিপস রিমাইন্ডার", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
-                        Text("প্রতিদিন একটি নির্বাচিত ভেষজ স্বাস্থ্য টিপস নোটিফিকেশন পান", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("প্রতিদিনের কাস্টমাইজড টাইমে পুশ নোটিফিকেশন পান", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(
                         checked = reminderEnabled,
@@ -293,6 +329,87 @@ fun ThemeAndReminderDialog(
                             }
                         }
                     )
+                }
+
+                // Customized Notification Time Selector
+                if (reminderEnabled) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable {
+                                android.app.TimePickerDialog(
+                                    context,
+                                    { _, selectedHour, selectedMinute ->
+                                        onTimeSelected(selectedHour, selectedMinute)
+                                        Toast.makeText(
+                                            context,
+                                            "🔔 রিমাইন্ডারের সময় সেট করা হয়েছে!",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    },
+                                    reminderHour,
+                                    reminderMinute,
+                                    false
+                                ).show()
+                            }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    Icons.Default.Schedule,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                                Spacer(Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        "নোটিফিকেশনের সময়",
+                                        fontWeight = FontWeight.SemiBold,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Text(
+                                        "ডিফল্ট: সকাল ০৮:০০ টা (ট্যাপ করে পরিবর্তন করুন)",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            Surface(
+                                color = MaterialTheme.colorScheme.primary,
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    text = formattedReminderTime,
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    OutlinedButton(
+                        onClick = onSendTestNotification,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(vertical = 8.dp)
+                    ) {
+                        Icon(Icons.Default.NotificationsActive, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("টেস্ট নোটিফিকেশন দেখুন", style = MaterialTheme.typography.labelMedium)
+                    }
                 }
             }
         },

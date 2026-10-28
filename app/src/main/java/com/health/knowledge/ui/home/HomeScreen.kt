@@ -85,6 +85,8 @@ fun HomeScreen(
     val sortOrder by viewModel.sortOrder.collectAsState()
     val themeMode by viewModel.themeMode.collectAsState()
     val dailyReminderEnabled by viewModel.dailyReminderEnabled.collectAsState()
+    val dailyReminderHour by viewModel.dailyReminderHour.collectAsState()
+    val dailyReminderMinute by viewModel.dailyReminderMinute.collectAsState()
     val dailyTipArticle by viewModel.dailyTipArticle.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
 
@@ -166,8 +168,16 @@ fun HomeScreen(
         ThemeAndReminderDialog(
             currentThemeMode = themeMode,
             reminderEnabled = dailyReminderEnabled,
+            reminderHour = dailyReminderHour,
+            reminderMinute = dailyReminderMinute,
+            formattedReminderTime = viewModel.getFormattedReminderTime(),
             onSelectTheme = { viewModel.setThemeMode(it) },
             onToggleReminder = { enabled -> viewModel.setDailyReminderEnabled(context, enabled) },
+            onTimeSelected = { hour, minute -> viewModel.setDailyReminderTime(context, hour, minute) },
+            onSendTestNotification = {
+                viewModel.sendTestDailyTipNotification(context)
+                Toast.makeText(context, "🔔 টেস্ট নোটিফিকেশন পাঠানো হয়েছে!", Toast.LENGTH_SHORT).show()
+            },
             onDismiss = { showThemeDialog = false }
         )
     }
@@ -471,6 +481,7 @@ fun HomeScreen(
                                                 DailyHealthTipCard(
                                                     article = tip,
                                                     reminderEnabled = dailyReminderEnabled,
+                                                    reminderTimeText = viewModel.getFormattedReminderTime(),
                                                     onReadClick = { onArticleClick(tip.id) },
                                                     onNextTipClick = viewModel::nextDailyTip,
                                                     onToggleReminder = { showThemeDialog = true }

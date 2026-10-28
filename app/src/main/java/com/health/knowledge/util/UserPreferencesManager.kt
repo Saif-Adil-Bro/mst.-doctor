@@ -82,6 +82,62 @@ class UserPreferencesManager @Inject constructor(
         prefs.edit().putBoolean(KEY_DAILY_REMINDER, enabled).apply()
     }
 
+    private val _dailyReminderHour = MutableStateFlow(prefs.getInt(KEY_DAILY_REMINDER_HOUR, DEFAULT_REMINDER_HOUR))
+    val dailyReminderHour: StateFlow<Int> = _dailyReminderHour.asStateFlow()
+
+    private val _dailyReminderMinute = MutableStateFlow(prefs.getInt(KEY_DAILY_REMINDER_MINUTE, DEFAULT_REMINDER_MINUTE))
+    val dailyReminderMinute: StateFlow<Int> = _dailyReminderMinute.asStateFlow()
+
+    fun setDailyReminderTime(hour: Int, minute: Int) {
+        val safeHour = hour.coerceIn(0, 23)
+        val safeMinute = minute.coerceIn(0, 59)
+        _dailyReminderHour.value = safeHour
+        _dailyReminderMinute.value = safeMinute
+        prefs.edit()
+            .putInt(KEY_DAILY_REMINDER_HOUR, safeHour)
+            .putInt(KEY_DAILY_REMINDER_MINUTE, safeMinute)
+            .apply()
+    }
+
+    fun getFormattedReminderTime(): String {
+        return formatReminderTime(_dailyReminderHour.value, _dailyReminderMinute.value)
+    }
+
+    fun formatReminderTime(hour: Int, minute: Int): String {
+        val period = when (hour) {
+            in 5..11 -> "সকাল"
+            in 12..14 -> "দুপুর"
+            in 15..17 -> "বিকাল"
+            in 18..19 -> "সন্ধ্যা"
+            else -> "রাত"
+        }
+        val h12 = when {
+            hour == 0 -> 12
+            hour > 12 -> hour - 12
+            else -> hour
+        }
+        val amPm = if (hour < 12) "AM" else "PM"
+        fun toBn(n: Int): String {
+            val s = "%02d".format(n)
+            return s.map { ch ->
+                when (ch) {
+                    '0' -> '০'
+                    '1' -> '১'
+                    '2' -> '২'
+                    '3' -> '৩'
+                    '4' -> '৪'
+                    '5' -> '৫'
+                    '6' -> '৬'
+                    '7' -> '৭'
+                    '8' -> '৮'
+                    '9' -> '৯'
+                    else -> ch
+                }
+            }.joinToString("")
+        }
+        return "$period ${toBn(h12)}:${toBn(minute)} ($amPm)"
+    }
+
     private val _dailyTipOffset = MutableStateFlow(0)
     val dailyTipOffset: StateFlow<Int> = _dailyTipOffset.asStateFlow()
 
@@ -206,6 +262,10 @@ class UserPreferencesManager @Inject constructor(
         const val SORT_OLDEST = "oldest"
 
         private const val KEY_DAILY_REMINDER = "daily_tip_reminder_enabled"
+        private const val KEY_DAILY_REMINDER_HOUR = "daily_tip_reminder_hour"
+        private const val KEY_DAILY_REMINDER_MINUTE = "daily_tip_reminder_minute"
+        const val DEFAULT_REMINDER_HOUR = 8 // Default 8:00 AM (সকাল ৮:০০ টা)
+        const val DEFAULT_REMINDER_MINUTE = 0
 
         private const val KEY_ADMIN_UNLOCKED = "is_admin_unlocked"
         private const val KEY_ADMIN_PASSWORD = "admin_password"

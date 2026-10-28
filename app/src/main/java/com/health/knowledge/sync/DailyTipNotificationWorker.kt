@@ -1,19 +1,10 @@
 package com.health.knowledge.sync
 
-import android.Manifest
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
-import androidx.core.app.NotificationCompat
-import androidx.core.content.ContextCompat
 import androidx.hilt.work.HiltWorker
 import androidx.work.*
-import com.health.knowledge.MainActivity
 import com.health.knowledge.data.local.dao.ArticleDao
+import com.health.knowledge.util.HealthNotificationHelper
 import com.health.knowledge.util.UserPreferencesManager
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -39,87 +30,72 @@ class DailyTipNotificationWorker @AssistedInject constructor(
         val dayOfYear = Calendar.getInstance().get(Calendar.DAY_OF_YEAR)
         val featured = activeArticles[dayOfYear % activeArticles.size]
 
+        // Requirement: Show only title in the notification; clicking it opens the article detail page
         showTipNotification(
             context = appContext,
             articleId = featured.id,
-            title = "🌿 আজকের স্বাস্থ্য টিপস: ${featured.title}",
-            body = featured.content.take(160).replace("\n", " ") + "..."
+            title = featured.title
         )
         return Result.success()
     }
 
     companion object {
         private const val WORK_NAME = "HealthKnowledge_DailyTipReminder"
-        private const val CHANNEL_ID = "daily_health_tips_channel"
-        private const val NOTIFICATION_ID = 2026
 
-        fun scheduleOrCancel(context: Context, enabled: Boolean) {
+        /**
+         * Schedules or cancels daily recurring health tip notification.
+         * Default time is morning 8:00 AM (targetHour = 8, targetMinute = 0).
+         * Calculates initial delay so it triggers precisely at the user's chosen time.
+         */
+        fun scheduleOrCancel(
+            context: Context,
+            enabled: Boolean,
+            targetHour: Int = 8,
+            targetMinute: Int = 0
+        ) {
             val workManager = WorkManager.getInstance(context)
             if (!enabled) {
                 workManager.cancelUniqueWork(WORK_NAME)
                 return
             }
 
+            val initialDelayMs = calculateInitialDelayMs(targetHour, targetMinute)
+
             val request = PeriodicWorkRequestBuilder<DailyTipNotificationWorker>(24, TimeUnit.HOURS)
-                .setInitialDelay(12, TimeUnit.HOURS)
+                .setInitialDelay(initialDelayMs, TimeUnit.MILLISECONDS)
                 .build()
 
             workManager.enqueueUniquePeriodicWork(
                 WORK_NAME,
-                ExistingPeriodicWorkPolicy.KEEP,
+                ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE,
                 request
             )
+        }
+
+        fun calculateInitialDelayMs(targetHour: Int, targetMinute: Int): Long {
+            val now = Calendar.getInstance()
+            val target = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, targetHour)
+                set(Calendar.MINUTE, targetMinute)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+                if (before(now) || timeInMillis <= now.timeInMillis) {
+                    add(Calendar.DAY_OF_YEAR, 1)
+                }
+            }
+            return (target.timeInMillis - now.timeInMillis).coerceAtLeast(0L)
         }
 
         fun showTipNotification(
             context: Context,
             articleId: Int,
-            title: String,
-            body: String
+            title: String
         ) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                val granted = ContextCompat.checkSelfPermission(
-                    context,
-                    Manifest.permission.POST_NOTIFICATIONS
-                ) == PackageManager.PERMISSION_GRANTED
-                if (!granted) return
-            }
-
-            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val channel = NotificationChannel(
-                    CHANNEL_ID,
-                    "দৈনিক স্বাস্থ্য টিপস রিমাইন্ডার",
-                    NotificationManager.IMPORTANCE_DEFAULT
-                ).apply {
-                    description = "প্রতিদিন একটি উপকারী আয়ুর্বেদিক ও প্রাকৃতিক স্বাস্থ্য টিপস"
-                }
-                manager.createNotificationChannel(channel)
-            }
-
-            val intent = Intent(context, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                putExtra("open_article_id", articleId)
-            }
-
-            val pendingIntent = PendingIntent.getActivity(
-                context,
-                articleId,
-                intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            HealthNotificationHelper.showDailyTipNotification(
+                context = context,
+                articleId = articleId,
+                title = title
             )
-
-            val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setContentTitle(title)
-                .setContentText(body)
-                .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-                .setContentIntent(pendingIntent)
-                .setAutoCancel(true)
-                .build()
-
-            manager.notify(NOTIFICATION_ID, notification)
         }
     }
 }

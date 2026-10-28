@@ -45,8 +45,13 @@ class MainActivity : ComponentActivity() {
         SyncWorker.schedule(this)
         // Also try immediate sync on app open
         SyncWorker.syncNow(this)
-        // Schedule daily health tip reminder if enabled
-        DailyTipNotificationWorker.scheduleOrCancel(this, prefsManager.dailyReminderEnabled.value)
+        // Schedule daily health tip reminder if enabled (default 8:00 AM or user-customized)
+        DailyTipNotificationWorker.scheduleOrCancel(
+            context = this,
+            enabled = prefsManager.dailyReminderEnabled.value,
+            targetHour = prefsManager.dailyReminderHour.value,
+            targetMinute = prefsManager.dailyReminderMinute.value
+        )
 
         val initialId = intent?.getIntExtra("open_article_id", -1) ?: -1
         if (initialId > 0) {

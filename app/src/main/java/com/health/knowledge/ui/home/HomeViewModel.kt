@@ -70,6 +70,8 @@ class HomeViewModel @Inject constructor(
     val sortOrder: StateFlow<String> = prefsManager.sortOrder
     val themeMode: StateFlow<String> = prefsManager.themeMode
     val dailyReminderEnabled: StateFlow<Boolean> = prefsManager.dailyReminderEnabled
+    val dailyReminderHour: StateFlow<Int> = prefsManager.dailyReminderHour
+    val dailyReminderMinute: StateFlow<Int> = prefsManager.dailyReminderMinute
     val isAdminMode: StateFlow<Boolean> = prefsManager.isAdminMode
 
     // Saved scroll position across navigation and config changes
@@ -354,18 +356,39 @@ class HomeViewModel @Inject constructor(
         prefsManager.nextDailyTip()
     }
 
+    fun getFormattedReminderTime(): String {
+        return prefsManager.getFormattedReminderTime()
+    }
+
     fun setDailyReminderEnabled(context: Context, enabled: Boolean) {
         prefsManager.setDailyReminderEnabled(enabled)
-        DailyTipNotificationWorker.scheduleOrCancel(context, enabled)
-        if (enabled) {
-            dailyTipArticle.value?.let { tip ->
-                DailyTipNotificationWorker.showTipNotification(
-                    context = context,
-                    articleId = tip.id,
-                    title = "🌿 আজকের স্বাস্থ্য টিপস: ${tip.title}",
-                    body = tip.content.take(150).replace("\n", " ") + "..."
-                )
-            }
+        DailyTipNotificationWorker.scheduleOrCancel(
+            context = context,
+            enabled = enabled,
+            targetHour = prefsManager.dailyReminderHour.value,
+            targetMinute = prefsManager.dailyReminderMinute.value
+        )
+    }
+
+    fun setDailyReminderTime(context: Context, hour: Int, minute: Int) {
+        prefsManager.setDailyReminderTime(hour, minute)
+        if (prefsManager.dailyReminderEnabled.value) {
+            DailyTipNotificationWorker.scheduleOrCancel(
+                context = context,
+                enabled = true,
+                targetHour = hour,
+                targetMinute = minute
+            )
+        }
+    }
+
+    fun sendTestDailyTipNotification(context: Context) {
+        dailyTipArticle.value?.let { tip ->
+            DailyTipNotificationWorker.showTipNotification(
+                context = context,
+                articleId = tip.id,
+                title = tip.title
+            )
         }
     }
 
