@@ -13,6 +13,8 @@ import com.health.knowledge.util.UserPreferencesManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
@@ -25,6 +27,8 @@ class ArticleRepository @Inject constructor(
     private val firestoreDataSource: FirestoreDataSource,
     private val prefsManager: UserPreferencesManager
 ) {
+    private val syncMutex = Mutex()
+
     // ── Read from LOCAL Room DB (always fast, always offline) ────────────────
     fun searchArticles(query: String): Flow<List<ArticleEntity>> {
         val myDeviceId = prefsManager.getDeviceAuthorId()
@@ -97,7 +101,6 @@ class ArticleRepository @Inject constructor(
             inputPassword = rawPassword,
             remotePasswordHash = remoteConfig?.passwordHash
         )
-        // If Firestore did not have adminAuth initialized yet and login succeeded, seed encrypted hashes to Firestore
         if (unlocked && (remoteConfig == null || remoteConfig.passwordHash.isBlank())) {
             withTimeoutOrNull(3000L) {
                 firestoreDataSource.saveAdminAuthConfig(
@@ -174,104 +177,123 @@ class ArticleRepository @Inject constructor(
         Result.success(Unit)
     }
 
-    // ── Pull-to-Refresh Live Cloud Sync ──────────────────────────────────────
+    // ── Pull-to-Refresh Live Cloud Sync (Deduplicated & Mutex-Protected) ─────
     suspend fun syncFromCloudNow(): Int = withContext(Dispatchers.IO) {
-        var addedOrUpdated = 0
-        try {
-            val remoteArticles = withTimeoutOrNull(6000L) {
-                firestoreDataSource.fetchAllArticles()
-            } ?: emptyList()
+        syncMutex.withLock {
+            var addedOrUpdated = 0
+            try {
+                articleDao.normalizeBundledTimestamps()
+                articleDao.deduplicateCloudArticles()
 
-            val myDeviceId = prefsManager.getDeviceAuthorId()
-            val myDocIds = prefsManager.getMySubmittedDocIds()
+                val remoteArticles = withTimeoutOrNull(6000L) {
+                    firestoreDataSource.fetchAllArticles()
+                } ?: emptyList()
 
-            if (remoteArticles.isNotEmpty()) {
-                val newEntities = remoteArticles.mapNotNull { fbArt ->
-                    val isMine = (fbArt.authorDeviceId.isNotBlank() && fbArt.authorDeviceId == myDeviceId) ||
-                            (fbArt.firebaseDocId.isNotBlank() && fbArt.firebaseDocId in myDocIds)
-                    val existing = articleDao.getByFirebaseDocId(fbArt.firebaseDocId)
-                    if (existing != null) {
-                        if (isMine && !existing.isMine) {
-                            articleDao.markAsMine(existing.id, myDeviceId)
+                val myDeviceId = prefsManager.getDeviceAuthorId()
+                val myDocIds = prefsManager.getMySubmittedDocIds()
+
+                if (remoteArticles.isNotEmpty()) {
+                    val newEntities = mutableListOf<ArticleEntity>()
+                    val seenDocIds = mutableSetOf<String>()
+
+                    for (fbArt in remoteArticles) {
+                        if (fbArt.firebaseDocId.isNotBlank() && !seenDocIds.add(fbArt.firebaseDocId)) {
+                            continue
                         }
-                        if (existing.isReviewed != fbArt.isReviewed && fbArt.isReviewed) {
-                            articleDao.approveArticle(existing.id)
+                        val isMine = (fbArt.authorDeviceId.isNotBlank() && fbArt.authorDeviceId == myDeviceId) ||
+                                (fbArt.firebaseDocId.isNotBlank() && fbArt.firebaseDocId in myDocIds)
+
+                        val existing = articleDao.findExistingCloudOrUserArticle(
+                            docId = fbArt.firebaseDocId,
+                            title = fbArt.title
+                        )
+                        if (existing != null) {
+                            if (existing.firebaseDocId.isBlank() && fbArt.firebaseDocId.isNotBlank()) {
+                                articleDao.updateFirebaseDocId(existing.id, fbArt.firebaseDocId)
+                            }
+                            if (isMine && !existing.isMine) {
+                                articleDao.markAsMine(existing.id, myDeviceId)
+                            }
+                            if (existing.isReviewed != fbArt.isReviewed && fbArt.isReviewed) {
+                                articleDao.approveArticle(existing.id)
+                            }
+                            if (fbArt.verifiedCount > existing.verifiedCount) {
+                                articleDao.updateVerifiedCountOnly(existing.id, fbArt.verifiedCount)
+                            }
+                        } else {
+                            newEntities.add(fbArt.toEntity(myDeviceId = myDeviceId, myDocIds = myDocIds))
                         }
-                        if (fbArt.verifiedCount > existing.verifiedCount) {
-                            articleDao.updateVerifiedCountOnly(existing.id, fbArt.verifiedCount)
-                        }
-                        null
-                    } else {
-                        fbArt.toEntity(myDeviceId = myDeviceId, myDocIds = myDocIds)
+                    }
+                    if (newEntities.isNotEmpty()) {
+                        articleDao.insertAll(newEntities)
+                        addedOrUpdated += newEntities.size
                     }
                 }
-                if (newEntities.isNotEmpty()) {
-                    articleDao.insertAll(newEntities)
-                    addedOrUpdated += newEntities.size
+
+                articleDao.deduplicateCloudArticles()
+
+                val metaList = withTimeoutOrNull(6000L) {
+                    firestoreDataSource.fetchAllPostMeta()
+                } ?: emptyList()
+
+                for (meta in metaList) {
+                    val targetEntity = when {
+                        meta.postKey.startsWith("fb_") -> {
+                            val docId = meta.postKey.removePrefix("fb_")
+                            articleDao.getByFirebaseDocId(docId)
+                        }
+                        meta.postKey.startsWith("bundled_") -> {
+                            val keyPart = meta.postKey.removePrefix("bundled_")
+                            articleDao.getByMessageId(keyPart)
+                                ?: keyPart.toIntOrNull()?.let { articleDao.getById(it) }
+                        }
+                        else -> null
+                    } ?: continue
+
+                    if (meta.isDeleted) {
+                        articleDao.markDeleted(targetEntity.id)
+                        continue
+                    }
+
+                    meta.isPinned?.let { pinned ->
+                        articleDao.updatePin(targetEntity.id, pinned)
+                    }
+
+                    if (meta.hasContentOverride && meta.title.isNotBlank() && meta.content.isNotBlank()) {
+                        val resolvedSource = meta.source.ifBlank { targetEntity.source }
+                        val keywords = "${meta.title} ${meta.content} ${meta.medicines} ${meta.categories} $resolvedSource".lowercase()
+                        val resolvedPhoto = meta.photoUrl.ifBlank { targetEntity.photoPath }
+                        articleDao.updateArticleContent(
+                            id = targetEntity.id,
+                            title = meta.title,
+                            content = meta.content,
+                            medicines = meta.medicines,
+                            categories = meta.categories,
+                            photoPath = resolvedPhoto,
+                            hasPhoto = resolvedPhoto.isNotBlank(),
+                            searchKeywords = keywords,
+                            isReviewed = meta.isReviewed,
+                            source = resolvedSource
+                        )
+                    }
+
+                    meta.reactions?.let { remoteReactions ->
+                        if (remoteReactions >= 0) {
+                            articleDao.updateReactionsCountOnly(targetEntity.id, remoteReactions)
+                        }
+                    }
+
+                    meta.verifiedCount?.let { remoteVerified ->
+                        if (remoteVerified >= 0) {
+                            articleDao.updateVerifiedCountOnly(targetEntity.id, remoteVerified)
+                        }
+                    }
                 }
+            } catch (_: Exception) {
+                // Keep existing local data intact on offline/timeout
             }
-
-            val metaList = withTimeoutOrNull(6000L) {
-                firestoreDataSource.fetchAllPostMeta()
-            } ?: emptyList()
-
-            for (meta in metaList) {
-                val targetEntity = when {
-                    meta.postKey.startsWith("fb_") -> {
-                        val docId = meta.postKey.removePrefix("fb_")
-                        articleDao.getByFirebaseDocId(docId)
-                    }
-                    meta.postKey.startsWith("bundled_") -> {
-                        val keyPart = meta.postKey.removePrefix("bundled_")
-                        articleDao.getByMessageId(keyPart)
-                            ?: keyPart.toIntOrNull()?.let { articleDao.getById(it) }
-                    }
-                    else -> null
-                } ?: continue
-
-                if (meta.isDeleted) {
-                    articleDao.markDeleted(targetEntity.id)
-                    continue
-                }
-
-                meta.isPinned?.let { pinned ->
-                    articleDao.updatePin(targetEntity.id, pinned)
-                }
-
-                if (meta.hasContentOverride && meta.title.isNotBlank() && meta.content.isNotBlank()) {
-                    val resolvedSource = meta.source.ifBlank { targetEntity.source }
-                    val keywords = "${meta.title} ${meta.content} ${meta.medicines} ${meta.categories} $resolvedSource".lowercase()
-                    val resolvedPhoto = meta.photoUrl.ifBlank { targetEntity.photoPath }
-                    articleDao.updateArticleContent(
-                        id = targetEntity.id,
-                        title = meta.title,
-                        content = meta.content,
-                        medicines = meta.medicines,
-                        categories = meta.categories,
-                        photoPath = resolvedPhoto,
-                        hasPhoto = resolvedPhoto.isNotBlank(),
-                        searchKeywords = keywords,
-                        isReviewed = meta.isReviewed,
-                        source = resolvedSource
-                    )
-                }
-
-                meta.reactions?.let { remoteReactions ->
-                    if (remoteReactions >= 0) {
-                        articleDao.updateReactionsCountOnly(targetEntity.id, remoteReactions)
-                    }
-                }
-
-                meta.verifiedCount?.let { remoteVerified ->
-                    if (remoteVerified >= 0) {
-                        articleDao.updateVerifiedCountOnly(targetEntity.id, remoteVerified)
-                    }
-                }
-            }
-        } catch (_: Exception) {
-            // Keep existing local data intact on offline/timeout
+            addedOrUpdated
         }
-        addedOrUpdated
     }
 
     // ── Per-IP Global Reaction (Optimistic Local + Atomic Firestore Sync) ────
@@ -283,14 +305,12 @@ class ArticleRepository @Inject constructor(
             (article.reactions - 1).coerceAtLeast(0)
         }
 
-        // 1. Optimistic local update for instant UI feedback
         articleDao.updateReaction(
             id = article.id,
             reactions = optimisticCount,
             isReacted = wantReact
         )
 
-        // 2. Atomic Firestore Transaction to count globally across all users/IPs
         withTimeoutOrNull(5000L) {
             val ipHash = prefsManager.getClientIpHash()
             val txResult = firestoreDataSource.toggleReactionGlobalTransaction(
@@ -310,30 +330,64 @@ class ArticleRepository @Inject constructor(
         }
     }
 
-    // ── Global User Verification ("পরীক্ষিত / কাজ হয়েছে") via Firestore ──────
-    suspend fun toggleVerification(article: Article) {
-        val wantVerify = !article.isVerified
-        val optimisticCount = if (wantVerify) {
+    // ── Global User Verification ("পরীক্ষিত / কাজ হয়েছে") with Consent & Optional Details ──
+    suspend fun submitVerificationWithDetails(
+        article: Article,
+        verifierName: String = "",
+        verifierContact: String = "",
+        verifierComment: String = ""
+    ) {
+        val optimisticCount = if (!article.isVerified) {
             article.verifiedCount + 1
         } else {
-            (article.verifiedCount - 1).coerceAtLeast(0)
+            article.verifiedCount.coerceAtLeast(1)
         }
 
         // 1. Optimistic local update for instant UI feedback
         articleDao.updateVerification(
             id = article.id,
             verifiedCount = optimisticCount,
-            isVerified = wantVerify
+            isVerified = true
         )
 
-        // 2. Atomic Firestore Transaction to count globally across all users
+        // 2. Atomic Firestore Transaction to save attestation + optional info globally
+        withTimeoutOrNull(5500L) {
+            val ipHash = prefsManager.getClientIpHash()
+            val txResult = firestoreDataSource.toggleVerificationGlobalTransaction(
+                postKey = article.postKey,
+                firebaseDocId = article.firebaseDocId,
+                ipHash = ipHash,
+                wantVerify = true,
+                fallbackBaseCount = article.verifiedCount,
+                verifierName = verifierName,
+                verifierContact = verifierContact,
+                verifierComment = verifierComment
+            )
+            txResult.getOrNull()?.let { (globalVerifiedCount, verifiedState) ->
+                articleDao.updateVerification(
+                    id = article.id,
+                    verifiedCount = globalVerifiedCount,
+                    isVerified = verifiedState
+                )
+            }
+        }
+    }
+
+    suspend fun removeVerification(article: Article) {
+        val optimisticCount = (article.verifiedCount - 1).coerceAtLeast(0)
+        articleDao.updateVerification(
+            id = article.id,
+            verifiedCount = optimisticCount,
+            isVerified = false
+        )
+
         withTimeoutOrNull(5000L) {
             val ipHash = prefsManager.getClientIpHash()
             val txResult = firestoreDataSource.toggleVerificationGlobalTransaction(
                 postKey = article.postKey,
                 firebaseDocId = article.firebaseDocId,
                 ipHash = ipHash,
-                wantVerify = wantVerify,
+                wantVerify = false,
                 fallbackBaseCount = article.verifiedCount
             )
             txResult.getOrNull()?.let { (globalVerifiedCount, verifiedState) ->
@@ -344,6 +398,12 @@ class ArticleRepository @Inject constructor(
                 )
             }
         }
+    }
+
+    suspend fun fetchVerifierEntries(postKey: String): List<FirestoreDataSource.VerifierEntry> {
+        return withTimeoutOrNull(4500L) {
+            firestoreDataSource.fetchVerifierEntries(postKey)
+        } ?: emptyList()
     }
 
     /**
@@ -378,7 +438,7 @@ class ArticleRepository @Inject constructor(
         }
     }
 
-    // ── Admin: Add new article (saves locally + syncs to Firebase) ───────────
+    // ── Admin: Add new article (saves locally + syncs to Firebase without duplicates) ──
     suspend fun addArticleToFirebase(
         title: String,
         content: String,
@@ -388,13 +448,16 @@ class ArticleRepository @Inject constructor(
         date: String,
         isPinned: Boolean = false,
         source: String = ""
-    ): Result<String> {
+    ): Result<String> = syncMutex.withLock {
         val now = System.currentTimeMillis()
         val cleanPhotoUrl = photoUrl.trim()
         val cleanSource = source.trim()
+        val preGeneratedDocId = firestoreDataSource.generateNewDocId()
+
         val firestoreArticle = FirestoreDataSource.FirestoreArticle(
-            title = title,
-            content = content,
+            firebaseDocId = preGeneratedDocId,
+            title = title.trim(),
+            content = content.trim(),
             date = date,
             medicines = medicines,
             categories = categories,
@@ -406,17 +469,21 @@ class ArticleRepository @Inject constructor(
             source = cleanSource
         )
 
-        val remoteDocId = withTimeoutOrNull(5000L) {
-            firestoreDataSource.addArticle(firestoreArticle).getOrNull()
-        } ?: ""
+        // Insert locally first with the exact pre-generated firebaseDocId so sync never duplicates it
+        val existing = articleDao.findExistingCloudOrUserArticle(preGeneratedDocId, title.trim())
+        if (existing == null) {
+            articleDao.insert(firestoreArticle.toEntity())
+        }
 
-        val entity = firestoreArticle.copy(firebaseDocId = remoteDocId).toEntity()
-        articleDao.insert(entity)
+        withTimeoutOrNull(5500L) {
+            firestoreDataSource.addArticle(firestoreArticle)
+        }
 
-        return Result.success(remoteDocId)
+        articleDao.deduplicateCloudArticles()
+        Result.success(preGeneratedDocId)
     }
 
-    // ── User: Submit Article for Admin Review ────────────────────────────────
+    // ── User: Submit Article for Admin Review (without duplicates) ───────────
     suspend fun submitUserArticle(
         title: String,
         content: String,
@@ -425,14 +492,20 @@ class ArticleRepository @Inject constructor(
         photoUrl: String,
         date: String,
         source: String = ""
-    ): Result<String> {
+    ): Result<String> = syncMutex.withLock {
         val now = System.currentTimeMillis()
         val cleanPhotoUrl = photoUrl.trim()
         val cleanSource = source.trim()
         val myDeviceId = prefsManager.getDeviceAuthorId()
+        val preGeneratedDocId = firestoreDataSource.generateNewDocId()
+
+        prefsManager.addMySubmittedDocId(preGeneratedDocId)
+        prefsManager.addMySubmittedDocId("fb_$preGeneratedDocId")
+
         val firestoreArticle = FirestoreDataSource.FirestoreArticle(
-            title = title,
-            content = content,
+            firebaseDocId = preGeneratedDocId,
+            title = title.trim(),
+            content = content.trim(),
             date = date,
             medicines = medicines,
             categories = categories,
@@ -446,21 +519,20 @@ class ArticleRepository @Inject constructor(
             source = cleanSource
         )
 
-        val remoteDocId = withTimeoutOrNull(6000L) {
-            firestoreDataSource.addArticle(firestoreArticle).getOrNull()
-        } ?: ""
-
-        if (remoteDocId.isNotBlank()) {
-            prefsManager.addMySubmittedDocId(remoteDocId)
-            prefsManager.addMySubmittedDocId("fb_$remoteDocId")
+        val existing = articleDao.findExistingCloudOrUserArticle(preGeneratedDocId, title.trim())
+        if (existing == null) {
+            val entity = firestoreArticle
+                .toEntity(myDeviceId = myDeviceId, myDocIds = prefsManager.getMySubmittedDocIds())
+                .copy(isMine = true, authorDeviceId = myDeviceId, source = cleanSource)
+            articleDao.insert(entity)
         }
 
-        val entity = firestoreArticle.copy(firebaseDocId = remoteDocId)
-            .toEntity(myDeviceId = myDeviceId, myDocIds = prefsManager.getMySubmittedDocIds())
-            .copy(isMine = true, authorDeviceId = myDeviceId, source = cleanSource)
-        articleDao.insert(entity)
+        withTimeoutOrNull(6000L) {
+            firestoreDataSource.addArticle(firestoreArticle)
+        }
 
-        return Result.success(remoteDocId)
+        articleDao.deduplicateCloudArticles()
+        Result.success(preGeneratedDocId)
     }
 
     // ── Admin: Approve Pending Article (publishes globally & notifies users) ─
@@ -484,7 +556,6 @@ class ArticleRepository @Inject constructor(
             )
         }
 
-        // Trigger local / push notification for all users
         HealthNotificationHelper.showNewPostNotification(
             context = context,
             articleId = article.id,
@@ -529,15 +600,25 @@ class ArticleRepository @Inject constructor(
     }
 
     // ── Admin: Publish Draft to Firebase & Public Feed ───────────────────────
-    suspend fun publishDraftArticle(article: Article): Result<String> {
+    suspend fun publishDraftArticle(article: Article): Result<String> = syncMutex.withLock {
         val now = System.currentTimeMillis()
         val today = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault())
             .format(java.util.Date())
         val cleanPhotoUrl = if (article.photoPath.startsWith("http")) article.photoPath.trim() else ""
         val medsCsv = article.medicines.joinToString(",")
         val catsCsv = article.categories.joinToString(",")
+        val preGeneratedDocId = article.firebaseDocId.ifBlank { firestoreDataSource.generateNewDocId() }
+
+        articleDao.markDraftPublished(
+            id = article.id,
+            syncedFromFirebase = true,
+            firebaseDocId = preGeneratedDocId,
+            date = today,
+            createdAt = now
+        )
 
         val firestoreArticle = FirestoreDataSource.FirestoreArticle(
+            firebaseDocId = preGeneratedDocId,
             title = article.title,
             content = article.content,
             date = today,
@@ -551,18 +632,12 @@ class ArticleRepository @Inject constructor(
             source = article.source
         )
 
-        val remoteDocId = withTimeoutOrNull(5000L) {
-            firestoreDataSource.addArticle(firestoreArticle).getOrNull()
-        } ?: ""
+        withTimeoutOrNull(5000L) {
+            firestoreDataSource.addArticle(firestoreArticle)
+        }
 
-        articleDao.markDraftPublished(
-            id = article.id,
-            syncedFromFirebase = true,
-            firebaseDocId = remoteDocId,
-            date = today,
-            createdAt = now
-        )
-        return Result.success(remoteDocId)
+        articleDao.deduplicateCloudArticles()
+        Result.success(preGeneratedDocId)
     }
 
     // ── Admin: Pin / Unpin globally ──────────────────────────────────────────

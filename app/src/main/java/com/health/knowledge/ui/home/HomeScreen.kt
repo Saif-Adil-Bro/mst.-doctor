@@ -3,7 +3,6 @@ package com.health.knowledge.ui.home
 import android.widget.Toast
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -44,6 +43,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.health.knowledge.domain.model.Article
+import com.health.knowledge.ui.detail.VerificationConsentDialog
+import com.health.knowledge.ui.theme.onePxBorder
 import com.health.knowledge.util.UserPreferencesManager
 
 val categories = listOf(
@@ -104,6 +105,7 @@ fun HomeScreen(
 
     val context = LocalContext.current
     var showUserPostDialog by remember { mutableStateOf(false) }
+    var articleToVerify by remember { mutableStateOf<Article?>(null) }
 
     // Hoisted LazyListStates preserved across DetailScreen / AdminScreen navigation
     val homeListState = rememberSaveable(saver = LazyListState.Saver) {
@@ -155,6 +157,31 @@ fun HomeScreen(
     var showPasswordDialog by remember { mutableStateOf(false) }
     var showThemeDialog by remember { mutableStateOf(false) }
     var articleToDelete by remember { mutableStateOf<Article?>(null) }
+
+    articleToVerify?.let { target ->
+        VerificationConsentDialog(
+            article = target,
+            onDismiss = { articleToVerify = null },
+            onSubmit = { name, contact, comment ->
+                viewModel.submitVerification(target, name, contact, comment) {
+                    articleToVerify = null
+                    Toast.makeText(
+                        context,
+                        "✅ আপনার সত্যায়ন ও ভেরিফিকেশন সফলভাবে প্রকাশিত হয়েছে!",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            },
+            onRemoveVerification = if (target.isVerified) {
+                {
+                    viewModel.removeVerification(target) {
+                        articleToVerify = null
+                        Toast.makeText(context, "ভেরিফিকেশন তুলে নেওয়া হয়েছে", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } else null
+        )
+    }
 
     if (showPasswordDialog) {
         AdminPasswordDialog(
@@ -428,6 +455,7 @@ fun HomeScreen(
                         onArticleClick = onArticleClick,
                         onBookmarkToggle = { id, state -> viewModel.toggleBookmark(id, state) },
                         onReactionClick = { viewModel.toggleReaction(it) },
+                        onVerifyClick = { articleToVerify = it },
                         onPinToggle = { viewModel.togglePin(it) },
                         onDeleteClick = { articleToDelete = it },
                         modifier = Modifier.padding(paddingValues)
@@ -449,6 +477,7 @@ fun HomeScreen(
                         onArticleClick = onArticleClick,
                         onBookmarkToggle = { id, state -> viewModel.toggleBookmark(id, state) },
                         onReactionClick = { viewModel.toggleReaction(it) },
+                        onVerifyClick = { articleToVerify = it },
                         onPinToggle = { viewModel.togglePin(it) },
                         onDeleteClick = { articleToDelete = it },
                         onClearHistory = {
@@ -516,6 +545,7 @@ fun HomeScreen(
                                         Surface(
                                             color = Color(0xFFFFF8E1),
                                             shape = RoundedCornerShape(12.dp),
+                                            border = onePxBorder(Color(0xFFFFB300).copy(alpha = 0.5f)),
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .padding(horizontal = 16.dp, vertical = 6.dp)
@@ -555,7 +585,7 @@ fun HomeScreen(
                                     }
                                 }
 
-                                // Results header + Sort chips (জনপ্রিয় / নতুন / পুরাতন)
+                                // Results header + Sort chips (নতুন / জনপ্রিয় / পুরাতন)
                                 item(key = "results_header", contentType = "header_text") {
                                     val headerText = when {
                                         selectedCategory != null -> "\"${selectedCategory!!.replace("_", " ")}\": ${articles.size}টি"
@@ -600,7 +630,7 @@ fun HomeScreen(
                                             onClick = { onArticleClick(article.id) },
                                             onBookmarkToggle = { viewModel.toggleBookmark(article.id, article.isBookmarked) },
                                             onReactionClick = { viewModel.toggleReaction(article) },
-                                            onVerifyClick = { viewModel.toggleVerification(article) },
+                                            onVerifyClick = { articleToVerify = article },
                                             onPinToggle = { viewModel.togglePin(article) },
                                             onDeleteClick = { articleToDelete = article }
                                         )
@@ -885,15 +915,30 @@ fun CategoryChips(
                 selected = selectedCategory == null,
                 onClick = { onCategorySelected(null) },
                 label = { Text("সব") },
-                leadingIcon = { Text("🌿") }
+                leadingIcon = { Text("🌿") },
+                border = FilterChipDefaults.filterChipBorder(
+                    enabled = true,
+                    selected = selectedCategory == null,
+                    borderColor = MaterialTheme.colorScheme.outlineVariant,
+                    borderWidth = com.health.knowledge.ui.theme.onePxDp(),
+                    selectedBorderWidth = com.health.knowledge.ui.theme.onePxDp()
+                )
             )
         }
         items(categories) { (category, emoji) ->
+            val isSelected = selectedCategory == category
             FilterChip(
-                selected = selectedCategory == category,
-                onClick = { onCategorySelected(if (selectedCategory == category) null else category) },
+                selected = isSelected,
+                onClick = { onCategorySelected(if (isSelected) null else category) },
                 label = { Text(category.replace("_", " ")) },
-                leadingIcon = { Text(emoji) }
+                leadingIcon = { Text(emoji) },
+                border = FilterChipDefaults.filterChipBorder(
+                    enabled = true,
+                    selected = isSelected,
+                    borderColor = MaterialTheme.colorScheme.outlineVariant,
+                    borderWidth = com.health.knowledge.ui.theme.onePxDp(),
+                    selectedBorderWidth = com.health.knowledge.ui.theme.onePxDp()
+                )
             )
         }
     }
@@ -918,15 +963,21 @@ fun ArticleCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .padding(horizontal = 16.dp, vertical = 5.dp)
             .clickable(onClick = onClick),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (article.isPinned) 4.dp else 2.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
+        border = onePxBorder(
+            when {
+                article.isPinned -> MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
+                article.isMine && !article.isReviewed -> Color(0xFFFFB300).copy(alpha = 0.55f)
+                else -> MaterialTheme.colorScheme.outlineVariant
+            }
+        ),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = when {
-                article.isMine && !article.isReviewed -> Color(0xFFFFF8E1)
-                article.isPinned -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-                article.syncedFromFirebase -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.25f)
+                article.isMine && !article.isReviewed -> Color(0xFFFFFBF0)
+                article.isPinned -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.22f)
                 else -> MaterialTheme.colorScheme.surface
             }
         )
@@ -1117,16 +1168,16 @@ fun ArticleCard(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     article.categories.take(3).forEach { cat ->
-                        TagChip(text = cat.replace("_", " "), color = MaterialTheme.colorScheme.primaryContainer)
+                        TagChip(text = cat.replace("_", " "), color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f))
                     }
                     article.medicines.take(2).forEach { med ->
-                        TagChip(text = "💊 $med", color = MaterialTheme.colorScheme.secondaryContainer)
+                        TagChip(text = "💊 $med", color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.65f))
                     }
                 }
                 Spacer(Modifier.height(10.dp))
             }
 
-            // Footer: Date + Global Verification ("পরীক্ষিত") + Interactive Per-IP Reaction Button
+            // Footer: Date + Global Verification ("পরীক্ষিত" Popup Trigger) + Interactive Per-IP Reaction Button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1142,16 +1193,17 @@ fun ArticleCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Global Verification Button ("পরীক্ষিত")
+                    // Global Verification Button ("পরীক্ষিত" — opens attestation popup)
                     Surface(
                         shape = RoundedCornerShape(16.dp),
                         color = if (article.isVerified)
                             Color(0xFFE8F5E9)
                         else
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                        border = if (article.isVerified || article.verifiedCount > 0)
-                            BorderStroke(1.dp, Color(0xFF2E7D32).copy(alpha = 0.35f))
-                        else null,
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                        border = onePxBorder(
+                            if (article.isVerified) Color(0xFF2E7D32).copy(alpha = 0.45f)
+                            else MaterialTheme.colorScheme.outlineVariant
+                        ),
                         modifier = Modifier
                             .clip(RoundedCornerShape(16.dp))
                             .clickable(onClick = onVerifyClick)
@@ -1180,7 +1232,11 @@ fun ArticleCard(
                         color = if (article.isReacted)
                             Color(0xFFFFEBEE)
                         else
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                        border = onePxBorder(
+                            if (article.isReacted) Color(0xFFD32F2F).copy(alpha = 0.35f)
+                            else MaterialTheme.colorScheme.outlineVariant
+                        ),
                         modifier = Modifier
                             .clip(RoundedCornerShape(16.dp))
                             .clickable(onClick = onReactionClick)
@@ -1212,7 +1268,8 @@ fun ArticleCard(
 fun TagChip(text: String, color: Color) {
     Surface(
         color = color,
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(10.dp),
+        border = onePxBorder()
     ) {
         Text(
             text = text,
@@ -1230,6 +1287,7 @@ fun ArticleList(
     onArticleClick: (Int) -> Unit,
     onBookmarkToggle: (Int, Boolean) -> Unit,
     onReactionClick: (Article) -> Unit,
+    onVerifyClick: (Article) -> Unit = {},
     onPinToggle: (Article) -> Unit,
     onDeleteClick: (Article) -> Unit,
     emptyMessage: String,
@@ -1263,6 +1321,7 @@ fun ArticleList(
                     onClick = { onArticleClick(article.id) },
                     onBookmarkToggle = { onBookmarkToggle(article.id, article.isBookmarked) },
                     onReactionClick = { onReactionClick(article) },
+                    onVerifyClick = { onVerifyClick(article) },
                     onPinToggle = { onPinToggle(article) },
                     onDeleteClick = { onDeleteClick(article) }
                 )
@@ -1357,6 +1416,7 @@ fun UserSubmitPostDialog(
     ) {
         Surface(
             shape = RoundedCornerShape(20.dp),
+            border = onePxBorder(),
             modifier = Modifier
                 .fillMaxWidth(0.94f)
                 .fillMaxHeight(0.9f)
@@ -1388,6 +1448,7 @@ fun UserSubmitPostDialog(
                 Surface(
                     color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
                     shape = RoundedCornerShape(10.dp),
+                    border = onePxBorder(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 8.dp)
@@ -1485,7 +1546,14 @@ fun UserSubmitPostDialog(
                                     onClick = {
                                         selectedCats = if (selected) selectedCats - cat else selectedCats + cat
                                     },
-                                    label = { Text("$emoji ${cat.replace("_", " ")}") }
+                                    label = { Text("$emoji ${cat.replace("_", " ")}") },
+                                    border = FilterChipDefaults.filterChipBorder(
+                                        enabled = true,
+                                        selected = selected,
+                                        borderColor = MaterialTheme.colorScheme.outlineVariant,
+                                        borderWidth = com.health.knowledge.ui.theme.onePxDp(),
+                                        selectedBorderWidth = com.health.knowledge.ui.theme.onePxDp()
+                                    )
                                 )
                             }
                         }

@@ -29,6 +29,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.health.knowledge.domain.model.Article
 import com.health.knowledge.ui.home.categories
+import com.health.knowledge.ui.theme.onePxBorder
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -531,7 +532,8 @@ private fun ManagePostsTab(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    border = onePxBorder(MaterialTheme.colorScheme.outlineVariant),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = if (article.isDraft)
                             MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f)
@@ -762,7 +764,9 @@ private fun AdminAnalyticsTab(analytics: AdminAnalyticsState) {
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp)
+                shape = RoundedCornerShape(16.dp),
+                border = onePxBorder(MaterialTheme.colorScheme.outlineVariant),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp)
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -812,7 +816,9 @@ private fun AdminAnalyticsTab(analytics: AdminAnalyticsState) {
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp)
+                shape = RoundedCornerShape(16.dp),
+                border = onePxBorder(MaterialTheme.colorScheme.outlineVariant),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp)
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -868,6 +874,8 @@ private fun MetricStatCard(
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(14.dp),
+        border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
         )
@@ -1015,7 +1023,9 @@ private fun AdminSettingsTab(
         // 1. Full Database Backup & Restore Card
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(14.dp)
+            shape = RoundedCornerShape(14.dp),
+            border = onePxBorder(MaterialTheme.colorScheme.outlineVariant),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp)
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
@@ -1064,7 +1074,9 @@ private fun AdminSettingsTab(
         // 2. Encrypted & Firestore-Synced Admin Password & Recovery Code Card
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(14.dp)
+            shape = RoundedCornerShape(14.dp),
+            border = onePxBorder(MaterialTheme.colorScheme.outlineVariant),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp)
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),

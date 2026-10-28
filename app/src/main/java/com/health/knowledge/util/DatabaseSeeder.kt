@@ -34,6 +34,10 @@ class DatabaseSeeder @Inject constructor(
             } finally {
                 _isSeeding.value = false
             }
+        } else {
+            // Normalize existing bundled articles' timestamps and clean up any duplicate cloud posts
+            articleDao.normalizeBundledTimestamps()
+            articleDao.deduplicateCloudArticles()
         }
     }
 
@@ -48,7 +52,7 @@ class DatabaseSeeder @Inject constructor(
             val type = object : TypeToken<List<BundledArticle>>() {}.type
             val bundled: List<BundledArticle> = Gson().fromJson(json, type)
 
-            bundled.map { it.toEntity() }
+            bundled.mapIndexed { idx, item -> item.toEntity(idx) }
         } catch (e: Exception) {
             emptyList()
         }
@@ -69,7 +73,7 @@ class DatabaseSeeder @Inject constructor(
         val syncedFromFirebase: Boolean = false,
         val firebaseDocId: String = ""
     ) {
-        fun toEntity() = ArticleEntity(
+        fun toEntity(index: Int) = ArticleEntity(
             messageId = messageId,
             title = title,
             content = content,
@@ -81,7 +85,9 @@ class DatabaseSeeder @Inject constructor(
             photoPath = photoPath,
             searchKeywords = buildKeywords(),
             syncedFromFirebase = false,
-            firebaseDocId = ""
+            firebaseDocId = "",
+            // Historical base timestamp (Nov 2023) + index so newly added posts are always newest
+            createdAt = 1700000000000L + (id.takeIf { it > 0 } ?: index).toLong()
         )
 
         private fun buildKeywords(): String {

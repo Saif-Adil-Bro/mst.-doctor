@@ -1,13 +1,16 @@
 package com.health.knowledge.ui.theme
 
 import android.app.Activity
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.Dp
 import androidx.core.view.WindowCompat
 import com.health.knowledge.util.UserPreferencesManager
 
@@ -22,7 +25,8 @@ val HealthAmber = Color(0xFFFF8F00)
 val HealthAmberLight = Color(0xFFFFBF47)
 val HealthAmberContainer = Color(0xFFFFECB3)
 
-val SurfaceLight = Color(0xFFF9FBF7)
+val SurfaceLight = Color(0xFFFFFFFF)
+val BackgroundLight = Color(0xFFF6F9F5)
 val SurfaceDark = Color(0xFF121212)
 
 // Soft Sepia reading palette (warm parchment)
@@ -47,10 +51,12 @@ private val LightColorScheme = lightColorScheme(
     secondaryContainer = HealthAmberContainer,
     surface = SurfaceLight,
     onSurface = Color(0xFF1A1A1A),
-    background = SurfaceLight,
+    background = BackgroundLight,
     onBackground = Color(0xFF1A1A1A),
-    surfaceVariant = Color(0xFFE8F5E9),
-    outline = Color(0xFF81C784)
+    surfaceVariant = Color(0xFFEBF3EC),
+    onSurfaceVariant = Color(0xFF425244),
+    outline = Color(0xFFB4C6B6),
+    outlineVariant = Color(0xFFD8E4D9)
 )
 
 private val SepiaColorScheme = lightColorScheme(
@@ -67,7 +73,8 @@ private val SepiaColorScheme = lightColorScheme(
     background = SepiaBackground,
     onBackground = SepiaOnSurface,
     surfaceVariant = SepiaSurfaceVariant,
-    outline = Color(0xFF9E8D76)
+    outline = Color(0xFFB8A890),
+    outlineVariant = Color(0xFFD8CBB5)
 )
 
 private val DarkColorScheme = darkColorScheme(
@@ -79,8 +86,24 @@ private val DarkColorScheme = darkColorScheme(
     surface = SurfaceDark,
     onSurface = Color(0xFFE8F5E9),
     background = SurfaceDark,
-    surfaceVariant = Color(0xFF1E2D1F)
+    surfaceVariant = Color(0xFF1E2D1F),
+    outline = Color(0xFF3E5240),
+    outlineVariant = Color(0xFF2B3B2D)
 )
+
+/**
+ * Returns an exact 1px Dp value for crisp, lightweight 1px borders across all screen densities.
+ */
+@Composable
+fun onePxDp(): Dp = with(LocalDensity.current) { 1f.toDp() }
+
+/**
+ * Standard 1px subtle border for cards and surfaces.
+ */
+@Composable
+fun onePxBorder(color: Color = MaterialTheme.colorScheme.outlineVariant): BorderStroke {
+    return BorderStroke(width = onePxDp(), color = color)
+}
 
 @Composable
 fun HealthKnowledgeTheme(

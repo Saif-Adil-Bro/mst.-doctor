@@ -1,6 +1,7 @@
 package com.health.knowledge.data.remote
 
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
@@ -16,6 +17,15 @@ class FirestoreDataSource @Inject constructor() {
     private val collection = db.collection("healthArticles")
     private val metaCollection = db.collection("postMeta")
     private val configCollection = db.collection("appConfig")
+
+    /**
+     * Synchronously generates a unique Firestore document ID on client (0ms, works offline).
+     * Guarantees local Room entity and remote Firestore document always share the exact same ID,
+     * eliminating duplicate posts during sync.
+     */
+    fun generateNewDocId(): String {
+        return collection.document().id
+    }
 
     /**
      * Fetches encrypted admin auth configuration (passwordHash & recoveryKeyHash) from Firestore.
@@ -144,11 +154,36 @@ class FirestoreDataSource @Inject constructor() {
     }
 
     /**
-     * Admin / User: Upload a new article to Firestore.
+     * Fetches recent user verification entries (name, comment, verifiedAt) for a post.
+     */
+    suspend fun fetchVerifierEntries(postKey: String): List<VerifierEntry> {
+        return try {
+            val snap = metaCollection.document(postKey)
+                .collection("verifiers")
+                .orderBy("verifiedAt", Query.Direction.DESCENDING)
+                .limit(25)
+                .get()
+                .await()
+            snap.documents.mapNotNull { doc ->
+                doc.toObject(VerifierEntry::class.java)?.copy(ipHash = doc.id)
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
+     * Admin / User: Upload a new article to Firestore using a deterministic docId so it never duplicates.
      */
     suspend fun addArticle(article: FirestoreArticle): Result<String> {
         return try {
-            val docRef = collection.add(article).await()
+            val docRef = if (article.firebaseDocId.isNotBlank()) {
+                collection.document(article.firebaseDocId)
+            } else {
+                collection.document()
+            }
+            val finalArticle = article.copy(firebaseDocId = docRef.id)
+            docRef.set(finalArticle).await()
             Result.success(docRef.id)
         } catch (e: Exception) {
             Result.failure(e)
@@ -318,7 +353,7 @@ class FirestoreDataSource @Inject constructor() {
 
     /**
      * Atomic Global Per-IP / Device Verification ("পরীক্ষিত / কাজ হয়েছে") using Firestore Transaction:
-     * - Checks if `postMeta/{postKey}/verifiers/{ipHash}` exists in Firestore
+     * - Stores truthfulness attestation + optional name, email/phone, and comment in `postMeta/{postKey}/verifiers/{ipHash}`
      * - Atomically increments or decrements the global `verifiedCount` counter
      * - Returns Pair(globalVerifiedCount, isVerifiedByThisUser)
      */
@@ -327,7 +362,10 @@ class FirestoreDataSource @Inject constructor() {
         firebaseDocId: String,
         ipHash: String,
         wantVerify: Boolean,
-        fallbackBaseCount: Int
+        fallbackBaseCount: Int,
+        verifierName: String = "",
+        verifierContact: String = "",
+        verifierComment: String = ""
     ): Result<Pair<Int, Boolean>> {
         return try {
             val metaRef = metaCollection.document(postKey)
@@ -341,15 +379,19 @@ class FirestoreDataSource @Inject constructor() {
                 val alreadyVerifiedInCloud = verifierSnap.exists()
 
                 val updatedCount = when {
-                    wantVerify && !alreadyVerifiedInCloud -> {
+                    wantVerify -> {
                         transaction.set(
                             verifierRef,
                             mapOf(
                                 "ipHash" to ipHash,
+                                "name" to verifierName.trim(),
+                                "contact" to verifierContact.trim(),
+                                "comment" to verifierComment.trim(),
+                                "attestedTruth" to true,
                                 "verifiedAt" to System.currentTimeMillis()
                             )
                         )
-                        currentGlobalCount + 1
+                        if (!alreadyVerifiedInCloud) currentGlobalCount + 1 else currentGlobalCount
                     }
                     !wantVerify && alreadyVerifiedInCloud -> {
                         transaction.delete(verifierRef)
@@ -383,6 +425,15 @@ class FirestoreDataSource @Inject constructor() {
             Result.failure(e)
         }
     }
+
+    data class VerifierEntry(
+        val ipHash: String = "",
+        val name: String = "",
+        val contact: String = "",
+        val comment: String = "",
+        val attestedTruth: Boolean = true,
+        val verifiedAt: Long = 0L
+    )
 
     data class AdminAuthConfig(
         val passwordHash: String = "",

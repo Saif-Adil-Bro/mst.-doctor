@@ -2,6 +2,7 @@ package com.health.knowledge.ui.detail
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.health.knowledge.data.remote.FirestoreDataSource
 import com.health.knowledge.data.repository.ArticleRepository
 import com.health.knowledge.domain.model.Article
 import com.health.knowledge.domain.model.toDomain
@@ -20,6 +21,9 @@ class DetailViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val _articleId = MutableStateFlow<Int?>(null)
+
+    private val _verifierEntries = MutableStateFlow<List<FirestoreDataSource.VerifierEntry>>(emptyList())
+    val verifierEntries: StateFlow<List<FirestoreDataSource.VerifierEntry>> = _verifierEntries.asStateFlow()
 
     val article: StateFlow<Article?> = _articleId
         .filterNotNull()
@@ -66,6 +70,7 @@ class DetailViewModel @Inject constructor(
             repository.markArticleRead(id)
             repository.getById(id)?.toDomain()?.let { loaded ->
                 repository.refreshLiveReactions(loaded)
+                _verifierEntries.value = repository.fetchVerifierEntries(loaded.postKey)
             }
         }
     }
@@ -109,9 +114,30 @@ class DetailViewModel @Inject constructor(
         }
     }
 
-    fun toggleVerification(article: Article) {
+    fun submitVerification(
+        article: Article,
+        name: String,
+        contact: String,
+        comment: String,
+        onDone: () -> Unit = {}
+    ) {
         viewModelScope.launch {
-            repository.toggleVerification(article)
+            repository.submitVerificationWithDetails(
+                article = article,
+                verifierName = name,
+                verifierContact = contact,
+                verifierComment = comment
+            )
+            _verifierEntries.value = repository.fetchVerifierEntries(article.postKey)
+            onDone()
+        }
+    }
+
+    fun removeVerification(article: Article, onDone: () -> Unit = {}) {
+        viewModelScope.launch {
+            repository.removeVerification(article)
+            _verifierEntries.value = repository.fetchVerifierEntries(article.postKey)
+            onDone()
         }
     }
 

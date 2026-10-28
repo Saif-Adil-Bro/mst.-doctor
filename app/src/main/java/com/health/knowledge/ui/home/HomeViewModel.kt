@@ -66,6 +66,9 @@ class HomeViewModel @Inject constructor(
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
+    // Guard to prevent duplicate user post submission on rapid taps
+    private var isSubmittingPost = false
+
     // Preferences states
     val sortOrder: StateFlow<String> = prefsManager.sortOrder
     val themeMode: StateFlow<String> = prefsManager.themeMode
@@ -100,7 +103,7 @@ class HomeViewModel @Inject constructor(
         .map { entities -> entities.map { it.toDomain() } }
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
-    // Keep articles warm with SharingStarted.Lazily + apply Sort Order (Popular / Newest / Oldest)
+    // Keep articles warm with SharingStarted.Lazily + apply Sort Order (Default: Newest First)
     val articles: StateFlow<List<Article>> = combine(
         _searchQuery.debounce(200),
         _selectedCategory,
@@ -245,20 +248,25 @@ class HomeViewModel @Inject constructor(
 
     private fun sortArticles(list: List<Article>, sort: String): List<Article> {
         return when (sort) {
-            UserPreferencesManager.SORT_NEWEST -> list.sortedWith(
-                compareByDescending<Article> { it.isPinned }
+            UserPreferencesManager.SORT_POPULAR -> list.sortedWith(
+                compareByDescending<Article> { it.isMine && !it.isReviewed }
+                    .thenByDescending { it.isPinned }
+                    .thenByDescending { it.reactions }
                     .thenByDescending { it.createdAt }
-                    .thenByDescending { it.id }
             )
             UserPreferencesManager.SORT_OLDEST -> list.sortedWith(
-                compareByDescending<Article> { it.isPinned }
+                compareByDescending<Article> { it.isMine && !it.isReviewed }
+                    .thenByDescending { it.isPinned }
                     .thenBy { it.createdAt }
                     .thenBy { it.id }
             )
             else -> list.sortedWith(
-                compareByDescending<Article> { it.isPinned }
-                    .thenByDescending { it.reactions }
+                // Default: Newest First (newly added / cloud / user posts & pinned posts at the very top)
+                compareByDescending<Article> { it.isMine && !it.isReviewed }
+                    .thenByDescending { it.isPinned }
+                    .thenByDescending { it.syncedFromFirebase || it.isMine }
                     .thenByDescending { it.createdAt }
+                    .thenByDescending { it.id }
             )
         }
     }
@@ -297,11 +305,13 @@ class HomeViewModel @Inject constructor(
         source: String = "",
         onComplete: (Boolean, String) -> Unit
     ) {
+        if (isSubmittingPost) return
         if (title.isBlank() || content.isBlank()) {
             onComplete(false, "শিরোনাম এবং বিস্তারিত বিবরণ পূরণ করা আবশ্যক")
             return
         }
 
+        isSubmittingPost = true
         viewModelScope.launch {
             try {
                 val today = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date())
@@ -319,6 +329,10 @@ class HomeViewModel @Inject constructor(
                     source = source.trim()
                 )
 
+                // Ensure newest posts are visible at the top
+                savedScrollIndex = 0
+                savedScrollOffset = 0
+
                 if (res.isSuccess) {
                     onComplete(true, "🎉 আপনার পোস্টটি পর্যালোচনার জন্য জমা হয়েছে! অ্যাডমিন অনুমোদন করার পর এটি সবার কাছে দৃশ্যমান হবে।")
                 } else {
@@ -326,6 +340,8 @@ class HomeViewModel @Inject constructor(
                 }
             } catch (e: Exception) {
                 onComplete(false, e.localizedMessage ?: "অপ্রত্যাশিত সমস্যা দেখা দিয়েছে")
+            } finally {
+                isSubmittingPost = false
             }
         }
     }
@@ -434,9 +450,28 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    fun toggleVerification(article: Article) {
+    fun submitVerification(
+        article: Article,
+        name: String,
+        contact: String,
+        comment: String,
+        onDone: () -> Unit = {}
+    ) {
         viewModelScope.launch {
-            repository.toggleVerification(article)
+            repository.submitVerificationWithDetails(
+                article = article,
+                verifierName = name,
+                verifierContact = contact,
+                verifierComment = comment
+            )
+            onDone()
+        }
+    }
+
+    fun removeVerification(article: Article, onDone: () -> Unit = {}) {
+        viewModelScope.launch {
+            repository.removeVerification(article)
+            onDone()
         }
     }
 

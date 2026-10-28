@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface ArticleDao {
 
-    // ── SEARCH (Pinned first, excludes deleted & unreviewed unless submitted by this device) ──
+    // ── SEARCH (Newest & Pinned first, excludes deleted & unreviewed unless submitted by this device) ──
     @Query("""
         SELECT * FROM articles 
         WHERE isDeleted = 0 AND isDraft = 0 
@@ -16,7 +16,7 @@ interface ArticleDao {
            OR content LIKE '%' || :query || '%'
            OR medicines LIKE '%' || :query || '%'
            OR categories LIKE '%' || :query || '%')
-        ORDER BY (isMine = 1 AND isReviewed = 0) DESC, isPinned DESC, reactions DESC, createdAt DESC
+        ORDER BY (isMine = 1 AND isReviewed = 0) DESC, isPinned DESC, syncedFromFirebase DESC, createdAt DESC, id DESC
     """)
     fun searchArticles(query: String, deviceId: String = ""): Flow<List<ArticleEntity>>
 
@@ -28,20 +28,20 @@ interface ArticleDao {
            OR content LIKE '%' || :query || '%'
            OR medicines LIKE '%' || :query || '%'
            OR categories LIKE '%' || :query || '%')
-        ORDER BY isReviewed ASC, isDraft DESC, isPinned DESC, reactions DESC, createdAt DESC
+        ORDER BY isReviewed ASC, isDraft DESC, isPinned DESC, syncedFromFirebase DESC, createdAt DESC, id DESC
     """)
     fun searchArticlesAdmin(query: String): Flow<List<ArticleEntity>>
 
-    // ── GET ALL (Excludes deleted & unreviewed unless submitted by this device) ──
+    // ── GET ALL (Newest first, excludes deleted & unreviewed unless submitted by this device) ──
     @Query("""
         SELECT * FROM articles 
         WHERE isDeleted = 0 AND isDraft = 0 
           AND (isReviewed = 1 OR isMine = 1 OR (:deviceId != '' AND authorDeviceId = :deviceId))
-        ORDER BY (isMine = 1 AND isReviewed = 0) DESC, isPinned DESC, reactions DESC, createdAt DESC
+        ORDER BY (isMine = 1 AND isReviewed = 0) DESC, isPinned DESC, syncedFromFirebase DESC, createdAt DESC, id DESC
     """)
     fun getAllArticles(deviceId: String = ""): Flow<List<ArticleEntity>>
 
-    @Query("SELECT * FROM articles WHERE isDeleted = 0 ORDER BY isReviewed ASC, isDraft DESC, isPinned DESC, reactions DESC, createdAt DESC")
+    @Query("SELECT * FROM articles WHERE isDeleted = 0 ORDER BY isReviewed ASC, isDraft DESC, isPinned DESC, syncedFromFirebase DESC, createdAt DESC, id DESC")
     fun getAllArticlesAdmin(): Flow<List<ArticleEntity>>
 
     @Query("SELECT * FROM articles WHERE isDeleted = 0 AND isDraft = 0 AND isReviewed = 1")
@@ -52,7 +52,7 @@ interface ArticleDao {
         SELECT * FROM articles 
         WHERE isDeleted = 0 
           AND (isMine = 1 OR (:deviceId != '' AND authorDeviceId = :deviceId))
-        ORDER BY isReviewed ASC, createdAt DESC
+        ORDER BY isReviewed ASC, createdAt DESC, id DESC
     """)
     fun getMyArticles(deviceId: String = ""): Flow<List<ArticleEntity>>
 
@@ -72,7 +72,7 @@ interface ArticleDao {
         WHERE isDeleted = 0 AND isDraft = 0 
           AND (isReviewed = 1 OR isMine = 1 OR (:deviceId != '' AND authorDeviceId = :deviceId))
           AND categories LIKE '%' || :category || '%'
-        ORDER BY (isMine = 1 AND isReviewed = 0) DESC, isPinned DESC, reactions DESC, createdAt DESC
+        ORDER BY (isMine = 1 AND isReviewed = 0) DESC, isPinned DESC, syncedFromFirebase DESC, createdAt DESC, id DESC
     """)
     fun getByCategory(category: String, deviceId: String = ""): Flow<List<ArticleEntity>>
 
@@ -86,8 +86,45 @@ interface ArticleDao {
     @Query("SELECT * FROM articles WHERE messageId = :messageId LIMIT 1")
     suspend fun getByMessageId(messageId: String): ArticleEntity?
 
-    @Query("SELECT * FROM articles WHERE firebaseDocId = :docId LIMIT 1")
+    @Query("SELECT * FROM articles WHERE firebaseDocId = :docId AND :docId != '' LIMIT 1")
     suspend fun getByFirebaseDocId(docId: String): ArticleEntity?
+
+    @Query("""
+        SELECT * FROM articles 
+        WHERE isDeleted = 0 
+          AND ((:docId != '' AND firebaseDocId = :docId) 
+               OR (TRIM(title) = TRIM(:title) AND (syncedFromFirebase = 1 OR isMine = 1)))
+        ORDER BY CASE WHEN firebaseDocId != '' THEN 0 ELSE 1 END, id ASC
+        LIMIT 1
+    """)
+    suspend fun findExistingCloudOrUserArticle(docId: String, title: String): ArticleEntity?
+
+    @Query("UPDATE articles SET firebaseDocId = :firebaseDocId, syncedFromFirebase = 1 WHERE id = :id")
+    suspend fun updateFirebaseDocId(id: Int, firebaseDocId: String)
+
+    /**
+     * Cleans up any duplicate Firebase/user articles that share the same firebaseDocId or exact title.
+     */
+    @Query("""
+        DELETE FROM articles
+        WHERE (syncedFromFirebase = 1 OR isMine = 1)
+          AND id NOT IN (
+              SELECT MIN(id) FROM articles
+              WHERE isDeleted = 0 AND (syncedFromFirebase = 1 OR isMine = 1)
+              GROUP BY CASE WHEN firebaseDocId != '' THEN firebaseDocId ELSE TRIM(title) END
+          )
+    """)
+    suspend fun deduplicateCloudArticles()
+
+    /**
+     * Normalizes legacy bundled articles' createdAt timestamps so newly added posts always appear first.
+     */
+    @Query("""
+        UPDATE articles 
+        SET createdAt = 1700000000000 + id 
+        WHERE syncedFromFirebase = 0 AND isMine = 0 AND isDraft = 0 AND createdAt > 1710000000000
+    """)
+    suspend fun normalizeBundledTimestamps()
 
     // ── BOOKMARKS ────────────────────────────────────────────────────────────
     @Query("SELECT * FROM articles WHERE isDeleted = 0 AND isDraft = 0 AND isReviewed = 1 AND isBookmarked = 1 ORDER BY isPinned DESC, createdAt DESC")
@@ -186,7 +223,7 @@ interface ArticleDao {
     suspend fun insert(article: ArticleEntity): Long
 
     // ── CHECK IF FIREBASE DOC ALREADY SYNCED ─────────────────────────────────
-    @Query("SELECT COUNT(*) FROM articles WHERE firebaseDocId = :docId")
+    @Query("SELECT COUNT(*) FROM articles WHERE firebaseDocId = :docId AND :docId != ''")
     suspend fun countByFirebaseDocId(docId: String): Int
 
     // ── STATS ────────────────────────────────────────────────────────────────

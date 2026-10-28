@@ -118,6 +118,7 @@ class AdminViewModel @Inject constructor(
         isPinned: Boolean,
         source: String = ""
     ) {
+        if (_uiState.value.isLoading) return
         if (title.isBlank() || content.isBlank()) {
             _uiState.value = _uiState.value.copy(error = "শিরোনাম এবং বিষয়বস্তু পূরণ করুন")
             return
@@ -153,6 +154,7 @@ class AdminViewModel @Inject constructor(
         isPinned: Boolean,
         source: String = ""
     ) {
+        if (_uiState.value.isLoading) return
         if (title.isBlank() || content.isBlank()) {
             _uiState.value = _uiState.value.copy(error = "ড্রাফট সেভ করতে অন্তত শিরোনাম এবং বিষয়বস্তু লিখুন")
             return

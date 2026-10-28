@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.health.knowledge.domain.model.Article
+import com.health.knowledge.ui.theme.onePxBorder
 import com.health.knowledge.util.UserPreferencesManager
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -47,7 +48,8 @@ fun DailyHealthTipCard(
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .clickable(onClick = onReadClick),
         shape = RoundedCornerShape(18.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+        border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
         )
@@ -205,14 +207,14 @@ fun SortAndResultsHeader(
 
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 SortChipItem(
-                    label = "🔥 জনপ্রিয়",
-                    selected = sortOrder == UserPreferencesManager.SORT_POPULAR,
-                    onClick = { onSortChange(UserPreferencesManager.SORT_POPULAR) }
-                )
-                SortChipItem(
                     label = "✨ নতুন",
                     selected = sortOrder == UserPreferencesManager.SORT_NEWEST,
                     onClick = { onSortChange(UserPreferencesManager.SORT_NEWEST) }
+                )
+                SortChipItem(
+                    label = "🔥 জনপ্রিয়",
+                    selected = sortOrder == UserPreferencesManager.SORT_POPULAR,
+                    onClick = { onSortChange(UserPreferencesManager.SORT_POPULAR) }
                 )
                 SortChipItem(
                     label = "📜 পুরাতন",
@@ -232,6 +234,7 @@ private fun SortChipItem(
 ) {
     Surface(
         shape = RoundedCornerShape(14.dp),
+        border = if (selected) null else onePxBorder(MaterialTheme.colorScheme.outlineVariant),
         color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
         modifier = Modifier
             .clip(RoundedCornerShape(14.dp))
@@ -437,6 +440,7 @@ fun HerbalIndexTabContent(
     onArticleClick: (Int) -> Unit,
     onBookmarkToggle: (Int, Boolean) -> Unit,
     onReactionClick: (Article) -> Unit,
+    onVerifyClick: (Article) -> Unit = {},
     onPinToggle: (Article) -> Unit,
     onDeleteClick: (Article) -> Unit,
     modifier: Modifier = Modifier
@@ -454,6 +458,8 @@ fun HerbalIndexTabContent(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 10.dp),
                 shape = RoundedCornerShape(16.dp),
+                border = onePxBorder(MaterialTheme.colorScheme.outlineVariant),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
                 )
@@ -546,6 +552,7 @@ fun HerbalIndexTabContent(
                                     val selected = selectedHerb == stat.name
                                     Surface(
                                         shape = RoundedCornerShape(12.dp),
+                                        border = if (selected) null else onePxBorder(MaterialTheme.colorScheme.outlineVariant),
                                         color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
                                         modifier = Modifier
                                             .weight(1f)
@@ -618,6 +625,7 @@ fun HerbalIndexTabContent(
                 onClick = { onArticleClick(article.id) },
                 onBookmarkToggle = { onBookmarkToggle(article.id, article.isBookmarked) },
                 onReactionClick = { onReactionClick(article) },
+                onVerifyClick = { onVerifyClick(article) },
                 onPinToggle = { onPinToggle(article) },
                 onDeleteClick = { onDeleteClick(article) }
             )
@@ -641,6 +649,7 @@ fun SavedAndHistoryTabContent(
     onArticleClick: (Int) -> Unit,
     onBookmarkToggle: (Int, Boolean) -> Unit,
     onReactionClick: (Article) -> Unit,
+    onVerifyClick: (Article) -> Unit = {},
     onPinToggle: (Article) -> Unit,
     onDeleteClick: (Article) -> Unit,
     onClearHistory: () -> Unit,
@@ -692,6 +701,8 @@ fun SavedAndHistoryTabContent(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             shape = RoundedCornerShape(16.dp),
+            border = onePxBorder(MaterialTheme.colorScheme.outlineVariant),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
             )
@@ -805,6 +816,8 @@ fun SavedAndHistoryTabContent(
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 6.dp),
                         shape = RoundedCornerShape(16.dp),
+                        border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
                         )
@@ -908,6 +921,7 @@ fun SavedAndHistoryTabContent(
                             onClick = { onArticleClick(article.id) },
                             onBookmarkToggle = { onBookmarkToggle(article.id, article.isBookmarked) },
                             onReactionClick = { onReactionClick(article) },
+                            onVerifyClick = { onVerifyClick(article) },
                             onPinToggle = { onPinToggle(article) },
                             onDeleteClick = { onDeleteClick(article) }
                         )

@@ -6,6 +6,7 @@ import androidx.work.*
 import com.health.knowledge.data.local.dao.ArticleDao
 import com.health.knowledge.data.remote.FirestoreDataSource
 import com.health.knowledge.util.HealthNotificationHelper
+import com.health.knowledge.util.UserPreferencesManager
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import java.util.concurrent.TimeUnit
@@ -15,7 +16,8 @@ class SyncWorker @AssistedInject constructor(
     @Assisted context: Context,
     @Assisted workerParams: WorkerParameters,
     private val firestoreDataSource: FirestoreDataSource,
-    private val articleDao: ArticleDao
+    private val articleDao: ArticleDao,
+    private val prefsManager: UserPreferencesManager
 ) : CoroutineWorker(context, workerParams) {
 
     override suspend fun doWork(): Result {
@@ -23,7 +25,13 @@ class SyncWorker @AssistedInject constructor(
             val prefs = applicationContext.getSharedPreferences("sync_prefs", Context.MODE_PRIVATE)
             val lastSync = prefs.getLong("last_sync_timestamp", 0L)
 
-            // 1. Fetch new articles from Firestore
+            articleDao.normalizeBundledTimestamps()
+            articleDao.deduplicateCloudArticles()
+
+            val myDeviceId = prefsManager.getDeviceAuthorId()
+            val myDocIds = prefsManager.getMySubmittedDocIds()
+
+            // 1. Fetch new articles from Firestore without creating duplicates
             val newArticles = if (lastSync == 0L) {
                 firestoreDataSource.fetchAllArticles()
             } else {
@@ -31,9 +39,23 @@ class SyncWorker @AssistedInject constructor(
             }
 
             if (newArticles.isNotEmpty()) {
+                val seenDocIds = mutableSetOf<String>()
                 val entities = newArticles.mapNotNull { firebaseArticle ->
-                    val exists = articleDao.countByFirebaseDocId(firebaseArticle.firebaseDocId) > 0
-                    if (exists) null else firebaseArticle.toEntity()
+                    if (firebaseArticle.firebaseDocId.isNotBlank() && !seenDocIds.add(firebaseArticle.firebaseDocId)) {
+                        return@mapNotNull null
+                    }
+                    val existing = articleDao.findExistingCloudOrUserArticle(
+                        docId = firebaseArticle.firebaseDocId,
+                        title = firebaseArticle.title
+                    )
+                    if (existing != null) {
+                        if (existing.firebaseDocId.isBlank() && firebaseArticle.firebaseDocId.isNotBlank()) {
+                            articleDao.updateFirebaseDocId(existing.id, firebaseArticle.firebaseDocId)
+                        }
+                        null
+                    } else {
+                        firebaseArticle.toEntity(myDeviceId = myDeviceId, myDocIds = myDocIds)
+                    }
                 }
                 if (entities.isNotEmpty()) {
                     articleDao.insertAll(entities)
@@ -52,6 +74,8 @@ class SyncWorker @AssistedInject constructor(
                     }
                 }
             }
+
+            articleDao.deduplicateCloudArticles()
 
             // 2. Fetch global postMeta overrides (pins, edits, global deletes, reactions, verifiedCount, source, cover photos)
             val metaList = firestoreDataSource.fetchAllPostMeta()

@@ -64,8 +64,8 @@ class UserPreferencesManager @Inject constructor(
         return next
     }
 
-    // ── SORT ORDER ("popular" | "newest" | "oldest") ─────────────────────────
-    private val _sortOrder = MutableStateFlow(prefs.getString(KEY_SORT_ORDER, SORT_POPULAR) ?: SORT_POPULAR)
+    // ── SORT ORDER ("newest" | "popular" | "oldest") — Default: NEWEST FIRST ─
+    private val _sortOrder = MutableStateFlow(prefs.getString(KEY_SORT_ORDER, SORT_NEWEST) ?: SORT_NEWEST)
     val sortOrder: StateFlow<String> = _sortOrder.asStateFlow()
 
     fun setSortOrder(order: String) {
@@ -338,7 +338,7 @@ class UserPreferencesManager @Inject constructor(
         const val THEME_SEPIA = "sepia"
         const val THEME_DARK = "dark"
 
-        private const val KEY_SORT_ORDER = "article_sort_order"
+        private const val KEY_SORT_ORDER = "article_sort_order_v2"
         const val SORT_POPULAR = "popular"
         const val SORT_NEWEST = "newest"
         const val SORT_OLDEST = "oldest"
