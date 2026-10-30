@@ -1,6 +1,10 @@
 package com.health.knowledge.ui.home
 
+import android.Manifest
+import android.os.Build
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -46,6 +50,7 @@ import com.health.knowledge.domain.model.Article
 import com.health.knowledge.ui.detail.VerificationConsentDialog
 import com.health.knowledge.ui.theme.onePxBorder
 import com.health.knowledge.ui.theme.solidOverSurface
+import com.health.knowledge.util.HealthNotificationHelper
 import com.health.knowledge.util.UserPreferencesManager
 
 val categories = listOf(
@@ -107,6 +112,24 @@ fun HomeScreen(
     val context = LocalContext.current
     var showUserPostDialog by remember { mutableStateOf(false) }
     var articleToVerify by remember { mutableStateOf<Article?>(null) }
+
+    // Automatically request POST_NOTIFICATIONS on Android 13+ if reminder is enabled and not yet granted
+    val initialNotifPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            viewModel.setDailyReminderEnabled(context, true)
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            dailyReminderEnabled &&
+            !HealthNotificationHelper.hasNotificationPermission(context)
+        ) {
+            initialNotifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
 
     // Hoisted LazyListStates preserved across DetailScreen / AdminScreen navigation
     val homeListState = rememberSaveable(saver = LazyListState.Saver) {
@@ -219,8 +242,17 @@ fun HomeScreen(
             onToggleReminder = { enabled -> viewModel.setDailyReminderEnabled(context, enabled) },
             onTimeSelected = { hour, minute -> viewModel.setDailyReminderTime(context, hour, minute) },
             onSendTestNotification = {
-                viewModel.sendTestDailyTipNotification(context)
-                Toast.makeText(context, "🔔 টেস্ট নোটিফিকেশন পাঠানো হয়েছে!", Toast.LENGTH_SHORT).show()
+                viewModel.sendTestDailyTipNotification(context) { sent ->
+                    if (sent) {
+                        Toast.makeText(context, "🔔 টেস্ট নোটিফিকেশন পাঠানো হয়েছে!", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(
+                            context,
+                            "⚠️ নোটিফিকেশন পেতে ফোনের সেটিংস থেকে Notification পারমিশন Allow করুন",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
             },
             onDismiss = { showThemeDialog = false }
         )

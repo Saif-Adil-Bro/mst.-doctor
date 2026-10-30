@@ -1,6 +1,6 @@
 {
-  "summary":  "স্বাস্থ্য জ্ঞান (Body & Health Knowledge) অ্যাপের বর্তমান কোডবেস অক্ষুণ্ণ রেখে নতুন ফিচারসমূহ—ভেষজ ও উপাদান ইনডেক্স, দৈনিক স্বাস্থ্য টিপস ও রিমাইন্ডার, পঠিত আর্টিকেলের হিস্ট্রি ও ব্যক্তিগত নোট, লাইট/ডার্ক/সেপিয়া থিম সুইচার, পুল-টু-রিফ্রেশ ও সর্টিং ফিল্টার, ফুলস্ক্রিন জুম ও ইমেজ কার্ড শেয়ার এবং অ্যাডমিন অ্যানালিটিক্স, ড্রাফট ও ব্যাকআপ টুলস—যুক্ত করার পূর্ণাঙ্গ ইমপ্লিমেন্টেশন প্ল্যান।",
-  "updatedAt":  "2026-10-27T12:20:49.894747959Z",
+  "summary":  "Implementation plan to fix the notification system: automatic POST_NOTIFICATIONS runtime permission prompt on app launch and test button click, exact/window daily reminder scheduling via AlarmManager + BroadcastReceiver + BootReceiver, and immediate notifications for newly published or admin-approved posts with title and short preview that opens the post detail screen on tap.",
+  "updatedAt":  "2026-10-29T00:16:17.965985999Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

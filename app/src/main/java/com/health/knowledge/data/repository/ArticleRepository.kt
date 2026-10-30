@@ -192,6 +192,9 @@ class ArticleRepository @Inject constructor(
                 val myDeviceId = prefsManager.getDeviceAuthorId()
                 val myDocIds = prefsManager.getMySubmittedDocIds()
 
+                val syncPrefs = context.getSharedPreferences("sync_prefs", Context.MODE_PRIVATE)
+                val hadInitialCloudSync = syncPrefs.getBoolean("has_completed_initial_cloud_sync", false)
+
                 if (remoteArticles.isNotEmpty()) {
                     val newEntities = mutableListOf<ArticleEntity>()
                     val seenDocIds = mutableSetOf<String>()
@@ -216,6 +219,13 @@ class ArticleRepository @Inject constructor(
                             }
                             if (existing.isReviewed != fbArt.isReviewed && fbArt.isReviewed) {
                                 articleDao.approveArticle(existing.id)
+                                HealthNotificationHelper.showNewPostNotification(
+                                    context = context,
+                                    articleId = existing.id,
+                                    title = existing.title,
+                                    content = existing.content,
+                                    isApprovedMine = isMine || existing.isMine
+                                )
                             }
                             if (fbArt.verifiedCount > existing.verifiedCount) {
                                 articleDao.updateVerifiedCountOnly(existing.id, fbArt.verifiedCount)
@@ -227,7 +237,21 @@ class ArticleRepository @Inject constructor(
                     if (newEntities.isNotEmpty()) {
                         articleDao.insertAll(newEntities)
                         addedOrUpdated += newEntities.size
+                        if (hadInitialCloudSync) {
+                            val firstApproved = newEntities.firstOrNull { it.isReviewed && !it.isDraft }
+                            if (firstApproved != null) {
+                                val inserted = articleDao.getByFirebaseDocId(firstApproved.firebaseDocId)
+                                val targetId = inserted?.id ?: 0
+                                HealthNotificationHelper.showNewPostNotification(
+                                    context = context,
+                                    articleId = targetId,
+                                    title = firstApproved.title,
+                                    content = firstApproved.content
+                                )
+                            }
+                        }
                     }
+                    syncPrefs.edit().putBoolean("has_completed_initial_cloud_sync", true).apply()
                 }
 
                 articleDao.deduplicateCloudArticles()
@@ -471,8 +495,10 @@ class ArticleRepository @Inject constructor(
 
         // Insert locally first with the exact pre-generated firebaseDocId so sync never duplicates it
         val existing = articleDao.findExistingCloudOrUserArticle(preGeneratedDocId, title.trim())
-        if (existing == null) {
-            articleDao.insert(firestoreArticle.toEntity())
+        val localId = if (existing == null) {
+            articleDao.insert(firestoreArticle.toEntity()).toInt()
+        } else {
+            existing.id
         }
 
         withTimeoutOrNull(5500L) {
@@ -480,6 +506,13 @@ class ArticleRepository @Inject constructor(
         }
 
         articleDao.deduplicateCloudArticles()
+
+        HealthNotificationHelper.showNewPostNotification(
+            context = context,
+            articleId = localId,
+            title = title.trim(),
+            content = content.trim()
+        )
         Result.success(preGeneratedDocId)
     }
 
@@ -637,6 +670,13 @@ class ArticleRepository @Inject constructor(
         }
 
         articleDao.deduplicateCloudArticles()
+
+        HealthNotificationHelper.showNewPostNotification(
+            context = context,
+            articleId = article.id,
+            title = article.title,
+            content = article.content
+        )
         Result.success(preGeneratedDocId)
     }
 

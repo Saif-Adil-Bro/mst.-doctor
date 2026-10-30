@@ -401,7 +401,8 @@ class HomeViewModel @Inject constructor(
             context = context,
             enabled = enabled,
             targetHour = prefsManager.dailyReminderHour.value,
-            targetMinute = prefsManager.dailyReminderMinute.value
+            targetMinute = prefsManager.dailyReminderMinute.value,
+            forceReschedule = true
         )
     }
 
@@ -412,18 +413,33 @@ class HomeViewModel @Inject constructor(
                 context = context,
                 enabled = true,
                 targetHour = hour,
-                targetMinute = minute
+                targetMinute = minute,
+                forceReschedule = true
             )
         }
     }
 
-    fun sendTestDailyTipNotification(context: Context) {
-        dailyTipArticle.value?.let { tip ->
-            DailyTipNotificationWorker.showTipNotification(
+    fun sendTestDailyTipNotification(context: Context, onResult: (Boolean) -> Unit = {}) {
+        val currentTip = dailyTipArticle.value
+            ?: allActiveDomainArticles.value.firstOrNull()
+            ?: articles.value.firstOrNull()
+
+        if (currentTip != null) {
+            val sent = DailyTipNotificationWorker.showTipNotification(
                 context = context,
-                articleId = tip.id,
-                title = tip.title
+                articleId = currentTip.id,
+                title = currentTip.title,
+                content = currentTip.content
             )
+            onResult(sent)
+        } else {
+            val sent = DailyTipNotificationWorker.showTipNotification(
+                context = context,
+                articleId = 1,
+                title = "প্রতিদিন পর্যাপ্ত পানি ও সুষম খাবার গ্রহণ করুন",
+                content = "সুস্থ ও প্রাণবন্ত থাকতে প্রতিদিন অন্তত ৮ গ্লাস বিশুদ্ধ পানি পান করুন।"
+            )
+            onResult(sent)
         }
     }
 

@@ -32,6 +32,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.health.knowledge.domain.model.Article
 import com.health.knowledge.ui.theme.onePxBorder
 import com.health.knowledge.ui.theme.solidOverSurface
+import com.health.knowledge.util.HealthNotificationHelper
 import com.health.knowledge.util.UserPreferencesManager
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -268,12 +269,26 @@ fun ThemeAndReminderDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    var pendingTestAfterPermission by remember { mutableStateOf(false) }
+
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
-        onToggleReminder(isGranted)
         if (isGranted) {
-            Toast.makeText(context, "🔔 দৈনিক স্বাস্থ্য টিপস রিমাইন্ডার চালু হয়েছে!", Toast.LENGTH_SHORT).show()
+            onToggleReminder(true)
+            if (pendingTestAfterPermission) {
+                pendingTestAfterPermission = false
+                onSendTestNotification()
+            } else {
+                Toast.makeText(context, "🔔 দৈনিক স্বাস্থ্য টিপস রিমাইন্ডার চালু হয়েছে!", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            pendingTestAfterPermission = false
+            Toast.makeText(
+                context,
+                "⚠️ নোটিফিকেশন পেতে ফোনের সেটিংস থেকে Notification পারমিশন Allow করুন",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 
@@ -348,7 +363,8 @@ fun ThemeAndReminderDialog(
                     Switch(
                         checked = reminderEnabled,
                         onCheckedChange = { wantEnable ->
-                            if (wantEnable && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            if (wantEnable && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !HealthNotificationHelper.hasNotificationPermission(context)) {
+                                pendingTestAfterPermission = false
                                 notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                             } else {
                                 onToggleReminder(wantEnable)
@@ -371,11 +387,16 @@ fun ThemeAndReminderDialog(
                                     context,
                                     { _, selectedHour, selectedMinute ->
                                         onTimeSelected(selectedHour, selectedMinute)
-                                        Toast.makeText(
-                                            context,
-                                            "🔔 রিমাইন্ডারের সময় সেট করা হয়েছে!",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !HealthNotificationHelper.hasNotificationPermission(context)) {
+                                            pendingTestAfterPermission = false
+                                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                        } else {
+                                            Toast.makeText(
+                                                context,
+                                                "🔔 রিমাইন্ডারের সময় সেট করা হয়েছে!",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
                                     },
                                     reminderHour,
                                     reminderMinute,
@@ -432,7 +453,14 @@ fun ThemeAndReminderDialog(
                     }
 
                     OutlinedButton(
-                        onClick = onSendTestNotification,
+                        onClick = {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !HealthNotificationHelper.hasNotificationPermission(context)) {
+                                pendingTestAfterPermission = true
+                                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            } else {
+                                onSendTestNotification()
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(10.dp),
                         border = onePxBorder(),
