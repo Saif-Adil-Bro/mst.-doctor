@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Herbal leaf + medical cross inside safe zone (30..78) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,28C41,28 32,38 32,52C32,65 42,76 54,80C66,76 76,65 76,52C76,38 67,28 54,28ZM58,56H50V64H46V56H38V52H46V44H50V52H58V56Z" />
+</vector>
