@@ -1,6 +1,6 @@
 {
-  "summary": "Comprehensive UI/UX Redesign Plan for the Smart Habit Planner module featuring a Today's Progress Ring & Next Alarm Hero Dashboard, Clean Collapsible Routine Cards (Progressive Disclosure), and a 3-Step Guided Wizard Dialog with a Live Timeline Preview Card.",
-  "updatedAt": "2026-11-03T14:51:01.083183946Z",
+  "summary": "তারিখভিত্তিক হরাইজন্টাল স্ক্রলেবল ডেট বার (±৩০ দিন ও 'আজ' বাটন), যেকোনো তারিখে রুটিন সম্পন্ন/বাতিল টগল এবং ড্যাশবোর্ড ও হিস্ট্রিতে দৈনিক, সাপ্তাহিক, মাসিক ও বাৎসরিক রিপোর্ট ফিল্টার ও বার চার্টের পূর্ণাঙ্গ পরিকল্পনা।",
+  "updatedAt": "2026-11-03T15:44:16.738068665Z",
   "requestFeedback": true,
   "userFacing": true
 }

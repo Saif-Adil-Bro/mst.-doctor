@@ -100,4 +100,125 @@ class HabitScheduleCalculatorTest {
         assertTrue(HabitScheduleCalculator.areTriggersOverlapping(t1, t2Within90Sec))
         assertFalse(HabitScheduleCalculator.areTriggersOverlapping(t1, t3After5Min))
     }
+
+    @Test
+    fun `date strip and daily weekly monthly yearly report filtering calculate accurately`() {
+        val nowCal = Calendar.getInstance().apply {
+            set(2026, Calendar.NOVEMBER, 3, 15, 0, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val nowMillis = nowCal.timeInMillis
+        val todayStart = HabitDateAndReportEngine.startOfDayMillis(nowMillis)
+        val yesterdayStart = HabitDateAndReportEngine.addDays(todayStart, -1)
+
+        val habits = listOf(
+            com.health.knowledge.data.local.entity.HabitEntity(
+                id = "h1",
+                title = "দুপুরের খাবার",
+                category = HabitScheduleCalculator.CATEGORY_MEAL_LINKED,
+                anchorTime = "14:00",
+                hasPreReminder = 1,
+                preOffsetMins = 30,
+                hasPostReminder = 1,
+                postOffsetMins = 45,
+                repeatDays = "[1,2,3,4,5,6,7]",
+                isActive = 1,
+                createdAt = yesterdayStart
+            ),
+            com.health.knowledge.data.local.entity.HabitEntity(
+                id = "h2",
+                title = "রাতের খাবার",
+                category = HabitScheduleCalculator.CATEGORY_MEAL_LINKED,
+                anchorTime = "20:30",
+                hasPreReminder = 1,
+                preOffsetMins = 30,
+                hasPostReminder = 1,
+                postOffsetMins = 45,
+                repeatDays = "[1,2,3,4,5,6,7]",
+                isActive = 1,
+                createdAt = yesterdayStart
+            )
+        )
+
+        val logs = listOf(
+            com.health.knowledge.data.local.entity.HabitExecutionLogEntity(
+                id = "log_today_h1",
+                habitId = "h1",
+                phase = HabitScheduleCalculator.PHASE_EXACT_EVENT,
+                scheduledTime = todayStart + 14 * 3600_000L,
+                executedTime = todayStart + 14 * 3600_000L,
+                status = HabitScheduleCalculator.STATUS_COMPLETED
+            ),
+            com.health.knowledge.data.local.entity.HabitExecutionLogEntity(
+                id = "log_yesterday_h1",
+                habitId = "h1",
+                phase = HabitScheduleCalculator.PHASE_EXACT_EVENT,
+                scheduledTime = yesterdayStart + 14 * 3600_000L,
+                executedTime = yesterdayStart + 14 * 3600_000L,
+                status = HabitScheduleCalculator.STATUS_COMPLETED
+            )
+        )
+
+        // 1. Date strip has 61 items (-30 to +30) with today at index 30
+        val strip = HabitDateAndReportEngine.buildDateStripItems(
+            habits = habits,
+            logs = logs,
+            selectedDateMillis = todayStart,
+            nowMillis = nowMillis
+        )
+        assertEquals(61, strip.size)
+        assertTrue(strip[30].isToday)
+        assertTrue(strip[30].isSelected)
+        assertEquals(1, strip[30].completedCount)
+        assertEquals(2, strip[30].scheduledCount)
+
+        // 2. Daily report for today: 1 completed, 1 pending, 50%
+        val dailyReport = HabitDateAndReportEngine.computePeriodReport(
+            habits = habits,
+            logs = logs,
+            selectedDateMillis = todayStart,
+            nowMillis = nowMillis,
+            period = ReportPeriod.DAILY
+        )
+        assertEquals(2, dailyReport.totalScheduled)
+        assertEquals(1, dailyReport.completedCount)
+        assertEquals(1, dailyReport.pendingCount)
+        assertEquals(50, dailyReport.completionPercent)
+        assertEquals(4, dailyReport.bars.size)
+
+        // 3. Weekly report: 7 weekday bars
+        val weeklyReport = HabitDateAndReportEngine.computePeriodReport(
+            habits = habits,
+            logs = logs,
+            selectedDateMillis = todayStart,
+            nowMillis = nowMillis,
+            period = ReportPeriod.WEEKLY
+        )
+        assertEquals(14, weeklyReport.totalScheduled)
+        assertEquals(2, weeklyReport.completedCount)
+        assertEquals(7, weeklyReport.bars.size)
+
+        // 4. Monthly report: 5 weekly bars for November (30 days)
+        val monthlyReport = HabitDateAndReportEngine.computePeriodReport(
+            habits = habits,
+            logs = logs,
+            selectedDateMillis = todayStart,
+            nowMillis = nowMillis,
+            period = ReportPeriod.MONTHLY
+        )
+        assertEquals(60, monthlyReport.totalScheduled)
+        assertEquals(2, monthlyReport.completedCount)
+        assertEquals(5, monthlyReport.bars.size)
+
+        // 5. Yearly report: 12 monthly bars
+        val yearlyReport = HabitDateAndReportEngine.computePeriodReport(
+            habits = habits,
+            logs = logs,
+            selectedDateMillis = todayStart,
+            nowMillis = nowMillis,
+            period = ReportPeriod.YEARLY
+        )
+        assertEquals(12, yearlyReport.bars.size)
+        assertEquals(2, yearlyReport.completedCount)
+    }
 }

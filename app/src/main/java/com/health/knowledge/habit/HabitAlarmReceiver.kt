@@ -298,10 +298,10 @@ class HabitAlarmReceiver : BroadcastReceiver() {
 
                 val urgentChannel = NotificationChannel(
                     CHANNEL_HEALTH_URGENT,
-                    "জরুরি ওষুধ ও প্রধান রুটিন (Urgent)",
+                    "জরুরি ওষুধ অ্যালার্ম",
                     NotificationManager.IMPORTANCE_HIGH
                 ).apply {
-                    description = "ওষুধ সেবন ও প্রধান স্বাস্থ্য রুটিনের জরুরি অ্যালার্ম চ্যানেল"
+                    description = "ওষুধ ও প্রধান স্বাস্থ্য অ্যালার্ম"
                     enableVibration(true)
                     setBypassDnd(true)
                 }
@@ -309,10 +309,10 @@ class HabitAlarmReceiver : BroadcastReceiver() {
 
                 val routineChannel = NotificationChannel(
                     CHANNEL_HEALTH_ROUTINE,
-                    "নিয়মিত পানি ও খাবার রুটিন (Routine)",
+                    "খাবার ও পানি অ্যালার্ম",
                     NotificationManager.IMPORTANCE_HIGH
                 ).apply {
-                    description = "খাবারের আগে ও পরে পানি পানের নিয়মিত রিমাইন্ডার চ্যানেল"
+                    description = "খাবার ও পানি পানের নিয়মিত অ্যালার্ম"
                     enableVibration(true)
                 }
                 manager.createNotificationChannel(routineChannel)
@@ -338,10 +338,10 @@ class HabitAlarmReceiver : BroadcastReceiver() {
             val channelId = if (isUrgent) CHANNEL_HEALTH_URGENT else CHANNEL_HEALTH_ROUTINE
 
             val phaseBadge = when (phase) {
-                HabitScheduleCalculator.PHASE_PRE_EVENT -> "💧 প্রি-রিমাইন্ডার (${habit.preOffsetMins}মি আগে)"
-                HabitScheduleCalculator.PHASE_EXACT_EVENT -> "⏰ মূল রুটিন (${HabitScheduleCalculator.format24hToBengali(habit.anchorTime)})"
-                HabitScheduleCalculator.PHASE_POST_EVENT -> "✅ পোস্ট-রিমাইন্ডার (${habit.postOffsetMins}মি পরে)"
-                else -> "⏰ হ্যাবিট রিমাইন্ডার"
+                HabitScheduleCalculator.PHASE_PRE_EVENT -> "${HabitScheduleCalculator.toBengaliDigits(habit.preOffsetMins.toString())}মি আগে"
+                HabitScheduleCalculator.PHASE_EXACT_EVENT -> HabitScheduleCalculator.format24hToBengali(habit.anchorTime)
+                HabitScheduleCalculator.PHASE_POST_EVENT -> "${HabitScheduleCalculator.toBengaliDigits(habit.postOffsetMins.toString())}মি পরে"
+                else -> "অ্যালার্ম"
             }
 
             val openAppIntent = Intent(context, MainActivity::class.java).apply {
@@ -355,7 +355,7 @@ class HabitAlarmReceiver : BroadcastReceiver() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
-            // Action 1: Mark Done (for EXACT_EVENT -> triggers dynamic T_post; for PRE/POST -> marks completed)
+            // Action 1: Mark Done
             val doneIntent = Intent(context, HabitAlarmReceiver::class.java).apply {
                 action = if (phase == HabitScheduleCalculator.PHASE_EXACT_EVENT) ACTION_MEAL_DONE else ACTION_PHASE_DONE
                 putExtra(EXTRA_HABIT_ID, habit.id)
@@ -400,12 +400,6 @@ class HabitAlarmReceiver : BroadcastReceiver() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
-            val doneActionLabel = if (phase == HabitScheduleCalculator.PHASE_EXACT_EVENT) {
-                "✅ সম্পন্ন করেছি (Mark Done)"
-            } else {
-                "✅ সম্পন্ন"
-            }
-
             val builder = NotificationCompat.Builder(context, channelId)
                 .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
                 .setContentTitle("${habit.title} • $phaseBadge")
@@ -416,9 +410,9 @@ class HabitAlarmReceiver : BroadcastReceiver() {
                 .setContentIntent(contentPendingIntent)
                 .setAutoCancel(true)
                 .setGroup(GROUP_KEY_HABIT_ALERTS)
-                .addAction(android.R.drawable.checkbox_on_background, doneActionLabel, donePendingIntent)
-                .addAction(android.R.drawable.ic_popup_reminder, "💤 ১০মি স্নুজ", snoozePendingIntent)
-                .addAction(android.R.drawable.ic_menu_close_clear_cancel, "✖ বন্ধ", dismissPendingIntent)
+                .addAction(android.R.drawable.checkbox_on_background, "সম্পন্ন", donePendingIntent)
+                .addAction(android.R.drawable.ic_popup_reminder, "স্নুজ", snoozePendingIntent)
+                .addAction(android.R.drawable.ic_menu_close_clear_cancel, "বন্ধ", dismissPendingIntent)
 
             if (silenceAudioForSleepWindow) {
                 builder.setSilent(true)

@@ -342,15 +342,30 @@ class HabitScheduler @Inject constructor(
 
     /**
      * Seeds 3 ready-made starter habits on first launch so the user has an immediate working dashboard.
+     * Also normalizes any legacy verbose default titles to crisp 2-word Bengali names.
      */
     suspend fun seedDefaultHabitsIfNeeded() {
-        if (habitDao.getHabitCount() > 0) return
+        if (habitDao.getHabitCount() > 0) {
+            // Normalize legacy verbose default titles if present
+            val legacyTitleMap = mapOf(
+                "habit_default_lunch" to ("দুপুরের খাবার ও পানি পান রুটিন" to "দুপুরের খাবার"),
+                "habit_default_dinner" to ("রাতের খাবার ও হজম সুরক্ষা রুটিন" to "রাতের খাবার"),
+                "habit_default_morning_med" to ("সকালের খালি পেটে পানি ও ভেষজ/ওষুধ" to "সকালের ওষুধ")
+            )
+            for ((id, pair) in legacyTitleMap) {
+                val existing = habitDao.getHabitById(id)
+                if (existing != null && existing.title == pair.first) {
+                    habitDao.upsertHabit(existing.copy(title = pair.second))
+                }
+            }
+            return
+        }
 
         val now = System.currentTimeMillis()
 
         val lunchHabit = HabitEntity(
             id = "habit_default_lunch",
-            title = "দুপুরের খাবার ও পানি পান রুটিন",
+            title = "দুপুরের খাবার",
             category = HabitScheduleCalculator.CATEGORY_MEAL_LINKED,
             anchorTime = "14:00",
             hasPreReminder = 1,
@@ -366,7 +381,7 @@ class HabitScheduler @Inject constructor(
                 id = "cfg_lunch_pre",
                 habitId = lunchHabit.id,
                 phase = HabitScheduleCalculator.PHASE_PRE_EVENT,
-                messageTemplate = "দুপুরের খাবারের ৩০ মিনিট বাকি। হজমশক্তি ভালো রাখতে এখন ১ গ্লাস পানি পান করুন।",
+                messageTemplate = "দুপুরের খাবারের ৩০ মিনিট বাকি। এখন ১ গ্লাস পানি পান করুন।",
                 audioMode = HabitScheduleCalculator.AUDIO_TTS_VOICE,
                 presetSoundKey = HabitAudioManager.SOUND_WATER_DROP,
                 ttsText = "দুপুরের খাবারের ত্রিশ মিনিট বাকি। এখন এক গ্লাস পানি পান করুন।"
@@ -375,25 +390,25 @@ class HabitScheduler @Inject constructor(
                 id = "cfg_lunch_exact",
                 habitId = lunchHabit.id,
                 phase = HabitScheduleCalculator.PHASE_EXACT_EVENT,
-                messageTemplate = "দুপুরের খাবারের সময় হয়েছে। খাবার শেষে 'সম্পন্ন করেছি' বাটনে ট্যাপ করুন।",
+                messageTemplate = "দুপুরের খাবারের সময় হয়েছে।",
                 audioMode = HabitScheduleCalculator.AUDIO_TTS_VOICE,
                 presetSoundKey = HabitAudioManager.SOUND_SOFT_BELL,
-                ttsText = "দুপুরের খাবারের সময় হয়েছে। খাবার শেষে সম্পন্ন বাটনে ট্যাপ করুন।"
+                ttsText = "দুপুরের খাবারের সময় হয়েছে।"
             ),
             ReminderConfigEntity(
                 id = "cfg_lunch_post",
                 habitId = lunchHabit.id,
                 phase = HabitScheduleCalculator.PHASE_POST_EVENT,
-                messageTemplate = "খাবার খাওয়ার ৪৫ মিনিট পূর্ণ হয়েছে। এখন কুসুম গরম পানি বা প্রয়োজনীয় ভেষজ পান করার উপযুক্ত সময়।",
+                messageTemplate = "খাবারের ৪৫ মিনিট পূর্ণ হয়েছে। এখন পানি পান করুন।",
                 audioMode = HabitScheduleCalculator.AUDIO_TTS_VOICE,
                 presetSoundKey = HabitAudioManager.SOUND_WATER_DROP,
-                ttsText = "খাবার খাওয়ার পঁয়তাল্লিশ মিনিট পূর্ণ হয়েছে। এখন পানি পান করার উপযুক্ত সময়।"
+                ttsText = "খাবারের পঁয়তাল্লিশ মিনিট পূর্ণ হয়েছে। এখন পানি পান করুন।"
             )
         )
 
         val dinnerHabit = HabitEntity(
             id = "habit_default_dinner",
-            title = "রাতের খাবার ও হজম সুরক্ষা রুটিন",
+            title = "রাতের খাবার",
             category = HabitScheduleCalculator.CATEGORY_MEAL_LINKED,
             anchorTime = "20:30",
             hasPreReminder = 1,
@@ -409,7 +424,7 @@ class HabitScheduler @Inject constructor(
                 id = "cfg_dinner_pre",
                 habitId = dinnerHabit.id,
                 phase = HabitScheduleCalculator.PHASE_PRE_EVENT,
-                messageTemplate = "রাতের খাবারের ৩০ মিনিট আগে ১ গ্লাস পানি পান করুন, এতে গ্যাস্ট্রিক ও বদহজম দূর হয়।",
+                messageTemplate = "রাতের খাবারের ৩০ মিনিট আগে ১ গ্লাস পানি পান করুন।",
                 audioMode = HabitScheduleCalculator.AUDIO_TTS_VOICE,
                 presetSoundKey = HabitAudioManager.SOUND_WATER_DROP,
                 ttsText = "রাতের খাবারের ত্রিশ মিনিট আগে এক গ্লাস পানি পান করুন।"
@@ -418,7 +433,7 @@ class HabitScheduler @Inject constructor(
                 id = "cfg_dinner_exact",
                 habitId = dinnerHabit.id,
                 phase = HabitScheduleCalculator.PHASE_EXACT_EVENT,
-                messageTemplate = "রাতের খাবারের সময় হয়েছে। খাবার শেষ করে 'সম্পন্ন করেছি' চাপুন।",
+                messageTemplate = "রাতের খাবারের সময় হয়েছে।",
                 audioMode = HabitScheduleCalculator.AUDIO_TTS_VOICE,
                 presetSoundKey = HabitAudioManager.SOUND_SOFT_BELL,
                 ttsText = "রাতের খাবারের সময় হয়েছে।"
@@ -427,7 +442,7 @@ class HabitScheduler @Inject constructor(
                 id = "cfg_dinner_post",
                 habitId = dinnerHabit.id,
                 phase = HabitScheduleCalculator.PHASE_POST_EVENT,
-                messageTemplate = "রাতের খাবারের ৪৫ মিনিট পার হয়েছে। এখন পরিমিত পানি পান ও হালকা হাঁটাহাঁটি করুন।",
+                messageTemplate = "রাতের খাবারের ৪৫ মিনিট পার হয়েছে। এখন পানি পান করুন।",
                 audioMode = HabitScheduleCalculator.AUDIO_TTS_VOICE,
                 presetSoundKey = HabitAudioManager.SOUND_WATER_DROP,
                 ttsText = "রাতের খাবারের পঁয়তাল্লিশ মিনিট পার হয়েছে। এখন পানি পান করুন।"
@@ -436,7 +451,7 @@ class HabitScheduler @Inject constructor(
 
         val morningMedHabit = HabitEntity(
             id = "habit_default_morning_med",
-            title = "সকালের খালি পেটে পানি ও ভেষজ/ওষুধ",
+            title = "সকালের ওষুধ",
             category = HabitScheduleCalculator.CATEGORY_MEDICATION,
             anchorTime = "07:30",
             hasPreReminder = 1,
@@ -452,25 +467,25 @@ class HabitScheduler @Inject constructor(
                 id = "cfg_morning_pre",
                 habitId = morningMedHabit.id,
                 phase = HabitScheduleCalculator.PHASE_PRE_EVENT,
-                messageTemplate = "সকালের ভেষজ বা ওষুধের ২০ মিনিট আগে বাসি মুখে কুসুম গরম পানি পান করুন।",
+                messageTemplate = "সকালের ওষুধের ২০ মিনিট আগে কুসুম গরম পানি পান করুন।",
                 audioMode = HabitScheduleCalculator.AUDIO_TTS_VOICE,
                 presetSoundKey = HabitAudioManager.SOUND_WATER_DROP,
-                ttsText = "সকালের ভেষজ বা ওষুধের বিশ মিনিট আগে কুসুম গরম পানি পান করুন।"
+                ttsText = "সকালের ওষুধের বিশ মিনিট আগে কুসুম গরম পানি পান করুন।"
             ),
             ReminderConfigEntity(
                 id = "cfg_morning_exact",
                 habitId = morningMedHabit.id,
                 phase = HabitScheduleCalculator.PHASE_EXACT_EVENT,
-                messageTemplate = "সকালের নির্ধারিত ভেষজ বা ওষুধ সেবনের সময় হয়েছে। সেবন শেষে 'সম্পন্ন করেছি' চাপুন।",
+                messageTemplate = "সকালের ভেষজ বা ওষুধ সেবনের সময় হয়েছে।",
                 audioMode = HabitScheduleCalculator.AUDIO_TTS_VOICE,
                 presetSoundKey = HabitAudioManager.SOUND_MEDICATION_CHIME,
-                ttsText = "সকালের নির্ধারিত ভেষজ বা ওষুধ সেবনের সময় হয়েছে।"
+                ttsText = "সকালের ভেষজ বা ওষুধ সেবনের সময় হয়েছে।"
             ),
             ReminderConfigEntity(
                 id = "cfg_morning_post",
                 habitId = morningMedHabit.id,
                 phase = HabitScheduleCalculator.PHASE_POST_EVENT,
-                messageTemplate = "ওষুধ বা ভেষজ সেবনের ৩০ মিনিট পূর্ণ হয়েছে। এখন সকালের নাস্তা করতে পারেন।",
+                messageTemplate = "ওষুধ সেবনের ৩০ মিনিট পূর্ণ হয়েছে। এখন নাস্তা করতে পারেন।",
                 audioMode = HabitScheduleCalculator.AUDIO_TTS_VOICE,
                 presetSoundKey = HabitAudioManager.SOUND_SOFT_BELL,
                 ttsText = "ওষুধ সেবনের ত্রিশ মিনিট পূর্ণ হয়েছে। এখন সকালের নাস্তা করতে পারেন।"

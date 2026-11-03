@@ -71,8 +71,25 @@ interface HabitDao {
 
     // ── EXECUTION LOGS ───────────────────────────────────────────────────────
 
-    @Query("SELECT * FROM habit_execution_logs ORDER BY COALESCE(executed_time, scheduled_time) DESC LIMIT 120")
+    @Query("SELECT * FROM habit_execution_logs ORDER BY COALESCE(executed_time, scheduled_time) DESC")
     fun getRecentExecutionLogsFlow(): Flow<List<HabitExecutionLogEntity>>
+
+    @Query(
+        """
+        SELECT * FROM habit_execution_logs 
+        WHERE habit_id = :habitId 
+          AND status = 'COMPLETED' 
+          AND COALESCE(executed_time, scheduled_time) BETWEEN :startMillis AND :endMillis
+        """
+    )
+    suspend fun getCompletedLogsForHabitInRange(
+        habitId: String,
+        startMillis: Long,
+        endMillis: Long
+    ): List<HabitExecutionLogEntity>
+
+    @Query("DELETE FROM habit_execution_logs WHERE id IN (:logIds)")
+    suspend fun deleteLogsByIds(logIds: List<String>)
 
     @Query("SELECT * FROM habit_execution_logs WHERE status = 'PENDING' AND phase = 'POST_EVENT' AND scheduled_time > :nowMillis ORDER BY scheduled_time ASC")
     fun getPendingPostEventLogsFlow(nowMillis: Long): Flow<List<HabitExecutionLogEntity>>

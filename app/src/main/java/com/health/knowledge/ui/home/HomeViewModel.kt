@@ -62,7 +62,7 @@ class HomeViewModel @Inject constructor(
             if (nextPendingPost != null) {
                 val minsLeft = max(1L, (nextPendingPost.scheduledTime - now + 59_000L) / 60_000L)
                 val formatted = HabitScheduleCalculator.formatMillisToBengaliTime(nextPendingPost.scheduledTime)
-                "পরবর্তী পোস্ট-রিমাইন্ডার: $formatted (${HabitScheduleCalculator.toBengaliDigits(minsLeft.toString())} মিনিট বাকি)"
+                "পরের অ্যালার্ম: $formatted (${HabitScheduleCalculator.toBengaliDigits(minsLeft.toString())}মি বাকি)"
             } else {
                 null
             }

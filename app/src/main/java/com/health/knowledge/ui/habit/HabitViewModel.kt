@@ -9,8 +9,10 @@ import com.health.knowledge.data.local.entity.HabitExecutionLogEntity
 import com.health.knowledge.data.local.entity.ReminderConfigEntity
 import com.health.knowledge.habit.HabitAlarmReceiver
 import com.health.knowledge.habit.HabitAudioManager
+import com.health.knowledge.habit.HabitDateAndReportEngine
 import com.health.knowledge.habit.HabitScheduleCalculator
 import com.health.knowledge.habit.HabitScheduler
+import com.health.knowledge.habit.ReportPeriod
 import com.health.knowledge.util.UserPreferencesManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
@@ -58,6 +60,16 @@ class HabitViewModel @Inject constructor(
     private val _nowMillis = MutableStateFlow(System.currentTimeMillis())
     val nowMillis: StateFlow<Long> = _nowMillis.asStateFlow()
 
+    // Selected date for date-based tracker & reports (defaults to today's start-of-day)
+    private val _selectedDateMillis = MutableStateFlow(
+        HabitDateAndReportEngine.startOfDayMillis(System.currentTimeMillis())
+    )
+    val selectedDateMillis: StateFlow<Long> = _selectedDateMillis.asStateFlow()
+
+    // Selected report period filter (DAILY, WEEKLY, MONTHLY, YEARLY)
+    private val _reportPeriod = MutableStateFlow(ReportPeriod.DAILY)
+    val reportPeriod: StateFlow<ReportPeriod> = _reportPeriod.asStateFlow()
+
     init {
         viewModelScope.launch {
             habitScheduler.seedDefaultHabitsIfNeeded()
@@ -77,10 +89,84 @@ class HabitViewModel @Inject constructor(
         }
     }
 
+    fun selectDate(dateMillis: Long) {
+        _selectedDateMillis.value = HabitDateAndReportEngine.startOfDayMillis(dateMillis)
+    }
+
+    fun jumpToToday() {
+        val now = System.currentTimeMillis()
+        _nowMillis.value = now
+        _selectedDateMillis.value = HabitDateAndReportEngine.startOfDayMillis(now)
+    }
+
+    fun selectReportPeriod(period: ReportPeriod) {
+        _reportPeriod.value = period
+    }
+
+    /**
+     * Toggles completion of [habit] on [dateMillis].
+     * - If already COMPLETED on [dateMillis], removes the completion log (marks as remaining/undone).
+     * - If not yet completed on [dateMillis]:
+     *   - If [dateMillis] is Today, marks completed now and schedules dynamic post-event alarm.
+     *   - If [dateMillis] is a past/other date, records a COMPLETED log at that date's anchor time.
+     */
+    fun toggleHabitForDate(
+        habit: HabitEntity,
+        dateMillis: Long,
+        onResult: (isNowCompleted: Boolean, postTimeMillis: Long?) -> Unit
+    ) {
+        viewModelScope.launch {
+            val dayStart = HabitDateAndReportEngine.startOfDayMillis(dateMillis)
+            val dayEnd = HabitDateAndReportEngine.endOfDayMillis(dateMillis)
+            val existingCompleted = habitDao.getCompletedLogsForHabitInRange(
+                habitId = habit.id,
+                startMillis = dayStart,
+                endMillis = dayEnd
+            )
+
+            if (existingCompleted.isNotEmpty()) {
+                habitDao.deleteLogsByIds(existingCompleted.map { it.id })
+                if (HabitDateAndReportEngine.isSameDay(dayStart, System.currentTimeMillis())) {
+                    habitDao.deletePendingLogsForPhase(
+                        habitId = habit.id,
+                        phase = HabitScheduleCalculator.PHASE_POST_EVENT
+                    )
+                }
+                _nowMillis.value = System.currentTimeMillis()
+                onResult(false, null)
+            } else {
+                val now = System.currentTimeMillis()
+                _nowMillis.value = now
+                if (HabitDateAndReportEngine.isSameDay(dayStart, now)) {
+                    val postTime = habitScheduler.scheduleDynamicPostEvent(
+                        habitId = habit.id,
+                        completedTimestamp = now
+                    )
+                    _nowMillis.value = System.currentTimeMillis()
+                    onResult(true, postTime)
+                } else {
+                    val anchorTs = HabitDateAndReportEngine.anchorTimestampForDate(
+                        dateMillis = dayStart,
+                        anchorTime = habit.anchorTime
+                    )
+                    val dateLog = HabitExecutionLogEntity(
+                        id = "log_date_${habit.id}_${dayStart}",
+                        habitId = habit.id,
+                        phase = HabitScheduleCalculator.PHASE_EXACT_EVENT,
+                        scheduledTime = anchorTs,
+                        executedTime = anchorTs,
+                        status = HabitScheduleCalculator.STATUS_COMPLETED
+                    )
+                    habitDao.upsertExecutionLog(dateLog)
+                    onResult(true, null)
+                }
+            }
+        }
+    }
+
     /**
      * Marks an anchor event (e.g. meal or medicine) as completed right now (T_done)
      * and dynamically schedules the post-event reminder at T_post = T_done + Δt_post.
-     * Overwrites any previous pending POST_EVENT alarm for this habit (idempotent).
      */
     fun markAnchorCompletedNow(
         habit: HabitEntity,
@@ -212,9 +298,6 @@ class HabitViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Immediately plays the selected TTS voice or bundled preset sound for live user testing.
-     */
     fun previewAudioAlert(
         audioMode: String,
         presetSoundKey: String,
@@ -227,10 +310,6 @@ class HabitViewModel @Inject constructor(
         )
     }
 
-    /**
-     * Fires an immediate interactive notification + voice/tone alert for a habit so the user can test
-     * the notification bar `[Mark Done]` / `[Snooze 10m]` buttons and audio output right away.
-     */
     fun triggerTestHabitAlert(
         context: Context,
         habit: HabitEntity,

@@ -7,7 +7,6 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -23,8 +22,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -44,10 +41,10 @@ import java.util.Calendar
 import kotlin.math.max
 
 val habitCategoryOptions = listOf(
-    HabitScheduleCalculator.CATEGORY_MEAL_LINKED to ("🍽️ খাবার ও পানি" to "খাবারের আগে ও পরে পানি পান"),
-    HabitScheduleCalculator.CATEGORY_MEDICATION to ("💊 ওষুধ ও ভেষজ" to "নির্দিষ্ট সময়ে ওষুধ বা ভেষজ"),
-    HabitScheduleCalculator.CATEGORY_HYDRATION to ("💧 হাইড্রেশন" to "নিয়মিত পানি পানের রিমাইন্ডার"),
-    HabitScheduleCalculator.CATEGORY_CUSTOM to ("⏰ কাস্টম রুটিন" to "যেকোনো ব্যক্তিগত স্বাস্থ্য অভ্যাস")
+    HabitScheduleCalculator.CATEGORY_MEAL_LINKED to "🍽️ খাবার",
+    HabitScheduleCalculator.CATEGORY_MEDICATION to "💊 ওষুধ",
+    HabitScheduleCalculator.CATEGORY_HYDRATION to "💧 পানি",
+    HabitScheduleCalculator.CATEGORY_CUSTOM to "⏰ অন্যান্য"
 )
 
 val bengaliWeekDays = listOf(
@@ -73,7 +70,7 @@ private data class QuickHabitTemplate(
 private val quickHabitTemplates = listOf(
     QuickHabitTemplate(
         label = "🍽️ দুপুরের খাবার",
-        title = "দুপুরের খাবার ও পানি পান রুটিন",
+        title = "দুপুরের খাবার",
         category = HabitScheduleCalculator.CATEGORY_MEAL_LINKED,
         anchorTime = "14:00",
         preOffset = 30,
@@ -82,7 +79,7 @@ private val quickHabitTemplates = listOf(
     ),
     QuickHabitTemplate(
         label = "🌙 রাতের খাবার",
-        title = "রাতের খাবার ও হজম সুরক্ষা রুটিন",
+        title = "রাতের খাবার",
         category = HabitScheduleCalculator.CATEGORY_MEAL_LINKED,
         anchorTime = "20:30",
         preOffset = 30,
@@ -90,8 +87,8 @@ private val quickHabitTemplates = listOf(
         soundKey = HabitAudioManager.SOUND_WATER_DROP
     ),
     QuickHabitTemplate(
-        label = "💊 সকালের ওষুধ/ভেষজ",
-        title = "সকালের খালি পেটে পানি ও ভেষজ/ওষুধ",
+        label = "💊 সকালের ওষুধ",
+        title = "সকালের ওষুধ",
         category = HabitScheduleCalculator.CATEGORY_MEDICATION,
         anchorTime = "07:30",
         preOffset = 20,
@@ -99,8 +96,8 @@ private val quickHabitTemplates = listOf(
         soundKey = HabitAudioManager.SOUND_MEDICATION_CHIME
     ),
     QuickHabitTemplate(
-        label = "☕ বিকালের গ্রিন টি/পানি",
-        title = "বিকালের পানি ও ভেষজ চা রুটিন",
+        label = "💧 বিকালের পানি",
+        title = "বিকালের পানি",
         category = HabitScheduleCalculator.CATEGORY_HYDRATION,
         anchorTime = "17:00",
         preOffset = 15,
@@ -110,7 +107,8 @@ private val quickHabitTemplates = listOf(
 )
 
 /**
- * Clean, Scannable Icon Menu & Quick Action Card placed directly below the Hero / Daily Tip section on HomeScreen.
+ * Clean, Scannable Icon Menu Card placed directly below the Hero / Daily Tip section on HomeScreen.
+ * Uses pure icon button on the right (no text next to common arrow icon).
  */
 @Composable
 fun HomeHabitQuickMenuCard(
@@ -133,108 +131,96 @@ fun HomeHabitQuickMenuCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         border = onePxBorder(borderColor)
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp)
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                modifier = Modifier.weight(1f)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
+                Surface(
+                    color = MaterialTheme.colorScheme.primary,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.size(44.dp)
                 ) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.primary,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.size(44.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Default.AlarmOn,
-                                contentDescription = "Habit Planner",
-                                tint = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.width(12.dp))
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                text = "হ্যাবিট রিমাইন্ডার",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Surface(
-                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-                                shape = RoundedCornerShape(50),
-                                border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
-                            ) {
-                                Text(
-                                    text = "${HabitScheduleCalculator.toBengaliDigits(activeHabitCount.toString())}টি সক্রিয়",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
-
-                        Spacer(Modifier.height(2.dp))
-
-                        Text(
-                            text = if (!nextPostCountdownText.isNullOrBlank()) {
-                                "⏱️ $nextPostCountdownText"
-                            } else {
-                                "খাবারের আগে-পরে পানি পান, ওষুধ ও বাংলা ভয়েস রুটিন"
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = if (!nextPostCountdownText.isNullOrBlank()) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (!nextPostCountdownText.isNullOrBlank()) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.AlarmOn,
+                            contentDescription = "হ্যাবিট প্ল্যানার",
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(24.dp)
                         )
                     }
                 }
 
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(12.dp))
 
-                Surface(
-                    color = MaterialTheme.colorScheme.primary,
-                    shape = RoundedCornerShape(50)
-                ) {
+                Column(modifier = Modifier.weight(1f)) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = "প্ল্যানার",
-                            style = MaterialTheme.typography.labelMedium,
+                            text = "হ্যাবিট প্ল্যানার",
+                            style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimary
+                            color = MaterialTheme.colorScheme.onSurface
                         )
-                        Spacer(Modifier.width(4.dp))
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.size(14.dp)
-                        )
+                        Surface(
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                            shape = RoundedCornerShape(50),
+                            border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+                        ) {
+                            Text(
+                                text = "${HabitScheduleCalculator.toBengaliDigits(activeHabitCount.toString())}টি চালু",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
                     }
+
+                    Spacer(Modifier.height(2.dp))
+
+                    Text(
+                        text = if (!nextPostCountdownText.isNullOrBlank()) {
+                            "⏱️ $nextPostCountdownText"
+                        } else {
+                            "খাবার, পানি ও ওষুধের সময়সূচি"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = if (!nextPostCountdownText.isNullOrBlank()) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (!nextPostCountdownText.isNullOrBlank()) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            Spacer(Modifier.width(8.dp))
+
+            // Pure Icon Button without text
+            Surface(
+                color = MaterialTheme.colorScheme.primary,
+                shape = CircleShape,
+                modifier = Modifier.size(38.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = "খুলুন",
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
             }
         }
@@ -242,7 +228,7 @@ fun HomeHabitQuickMenuCard(
 }
 
 /**
- * Redesigned Sleep Window DND & Interactive Bangla Voice / Sound Studio Tab Content.
+ * Clean Night-Time Quiet Hours & Bangla Voice / Sound Studio Tab Content.
  */
 @Composable
 fun SleepWindowAndAudioTabContent(
@@ -264,12 +250,12 @@ fun SleepWindowAndAudioTabContent(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // 1. Visual Night-Time DND Sleep Protection Card
+        // 1. Night Quiet Hours Card (No technical "DND" or "Sleep Window" terms)
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(18.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f).solidOverSurface()
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.30f).solidOverSurface()
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
             border = onePxBorder(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
@@ -296,13 +282,13 @@ fun SleepWindowAndAudioTabContent(
                         Spacer(Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "ঘুমের সময় DND সুরক্ষা",
+                                text = "রাতের নীরব সময়",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = if (sleepDndEnabled) "সক্রিয় • ঘুমের সময় পোস্ট-অ্যালার্ম সাইলেন্ট থাকবে" else "নিষ্ক্রিয় আছে",
+                                text = if (sleepDndEnabled) "ঘুমের সময় অ্যালার্ম নীরব থাকবে" else "নীরব মোড বন্ধ আছে",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (sleepDndEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -321,7 +307,6 @@ fun SleepWindowAndAudioTabContent(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    // Sleep Start Time Card
                     Surface(
                         color = MaterialTheme.colorScheme.surface,
                         shape = RoundedCornerShape(12.dp),
@@ -345,7 +330,7 @@ fun SleepWindowAndAudioTabContent(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = "🛌 ঘুম শুরুর সময়",
+                                text = "🛌 শুরু",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -359,7 +344,6 @@ fun SleepWindowAndAudioTabContent(
                         }
                     }
 
-                    // Sleep End Time Card
                     Surface(
                         color = MaterialTheme.colorScheme.surface,
                         shape = RoundedCornerShape(12.dp),
@@ -383,7 +367,7 @@ fun SleepWindowAndAudioTabContent(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = "☀️ ঘুম শেষের সময়",
+                                text = "☀️ শেষ",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -400,12 +384,12 @@ fun SleepWindowAndAudioTabContent(
             }
         }
 
-        // 2. Interactive Bangla Voice (TTS) & Bundled Sound Studio
+        // 2. Bangla Voice & Sound Studio Card
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(18.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f).solidOverSurface()
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.30f).solidOverSurface()
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
             border = onePxBorder(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
@@ -414,46 +398,54 @@ fun SleepWindowAndAudioTabContent(
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.size(42.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text("🔊", fontSize = 20.sp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.size(42.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text("🗣️", fontSize = 20.sp)
+                            }
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "বাংলা ভয়েস ও টিউন",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "ট্যাপ করে ভয়েস ও টিউন শুনুন",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
-                    Spacer(Modifier.width(12.dp))
-                    Column {
-                        Text(
-                            text = "বাংলা ভয়েস ও সাউন্ড স্টুডিও",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "ট্যাপ করে বাংলা ভয়েস প্রম্পট ও কাস্টম সাউন্ড টোন শুনুন",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+
+                    // Pure Icon Button for Voice Test
+                    FilledIconButton(
+                        onClick = {
+                            onPreviewAlert(
+                                HabitScheduleCalculator.AUDIO_TTS_VOICE,
+                                HabitAudioManager.SOUND_WATER_DROP,
+                                "দুপুরের খাবারের ত্রিশ মিনিট বাকি। এখন এক গ্লাস পানি পান করুন।"
+                            )
+                        },
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.VolumeUp,
+                            contentDescription = "বাংলা ভয়েস শুনুন",
+                            modifier = Modifier.size(20.dp)
                         )
                     }
-                }
-
-                Button(
-                    onClick = {
-                        onPreviewAlert(
-                            HabitScheduleCalculator.AUDIO_TTS_VOICE,
-                            HabitAudioManager.SOUND_WATER_DROP,
-                            "দুপুরের খাবারের ত্রিশ মিনিট বাকি। হজমশক্তি ভালো রাখতে এখন এক গ্লাস পানি পান করুন।"
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(Icons.Default.RecordVoiceOver, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("🗣️ বাংলা ভয়েস প্রম্পট টেস্ট করুন", fontWeight = FontWeight.Bold)
                 }
 
                 Row(
@@ -462,8 +454,7 @@ fun SleepWindowAndAudioTabContent(
                 ) {
                     SoundStudioPreviewTile(
                         emoji = "💧",
-                        title = "Water Drop",
-                        subtitle = "পানি পান",
+                        title = "পানির শব্দ",
                         onClick = {
                             onPreviewAlert(
                                 HabitScheduleCalculator.AUDIO_PRESET_TONE,
@@ -475,8 +466,7 @@ fun SleepWindowAndAudioTabContent(
                     )
                     SoundStudioPreviewTile(
                         emoji = "🔔",
-                        title = "Soft Bell",
-                        subtitle = "খাবার রুটিন",
+                        title = "মৃদু ঘণ্টা",
                         onClick = {
                             onPreviewAlert(
                                 HabitScheduleCalculator.AUDIO_PRESET_TONE,
@@ -488,8 +478,7 @@ fun SleepWindowAndAudioTabContent(
                     )
                     SoundStudioPreviewTile(
                         emoji = "💊",
-                        title = "Med Chime",
-                        subtitle = "ওষুধ ও ভেষজ",
+                        title = "ওষুধ টিউন",
                         onClick = {
                             onPreviewAlert(
                                 HabitScheduleCalculator.AUDIO_PRESET_TONE,
@@ -502,36 +491,6 @@ fun SleepWindowAndAudioTabContent(
                 }
             }
         }
-
-        // 3. Concise Smart Schedule Formula Guide
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(18.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.28f).solidOverSurface()
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-            border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.30f))
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = "💡 কীভাবে ৩-ধাপের রুটিন কাজ করে?",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "১. প্রি-ইভেন্ট: খাবারের ৩০ মিনিট আগে পানি পানের কথা মনে করিয়ে দেয়।\n" +
-                        "২. মূল সময়: খাবারের সময় নোটিফিকেশনে [✅ সম্পন্ন করেছি] বাটন দেখায়।\n" +
-                        "৩. ডাইনামিক পোস্ট-ইভেন্ট: আপনি যখনই 'সম্পন্ন' চাপবেন, ঠিক সেই মুহূর্ত থেকে ৪৫ মিনিট পর পরবর্তী রিমাইন্ডার বাজবে।",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-        }
     }
 }
 
@@ -539,7 +498,6 @@ fun SleepWindowAndAudioTabContent(
 private fun SoundStudioPreviewTile(
     emoji: String,
     title: String,
-    subtitle: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -550,7 +508,7 @@ private fun SoundStudioPreviewTile(
         modifier = modifier.clickable { onClick() }
     ) {
         Column(
-            modifier = Modifier.padding(vertical = 10.dp, horizontal = 6.dp),
+            modifier = Modifier.padding(vertical = 12.dp, horizontal = 6.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(emoji, fontSize = 20.sp)
@@ -559,20 +517,16 @@ private fun SoundStudioPreviewTile(
                 text = title,
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
-                maxLines = 1
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
 }
 
 /**
- * 3-Step Guided Wizard Dialog with a Live Calculated Timeline Preview Card at the top.
+ * 3-Step Guided Wizard Dialog with a Live Preview Card and crisp 1-2 word Bengali labels.
+ * Common icons (Close, Back, Next, Volume) use pure IconButtons without duplicate text.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -599,9 +553,9 @@ fun HabitEditorDialog(
     ) -> Unit
 ) {
     val context = LocalContext.current
-    var currentStep by remember { mutableIntStateOf(1) } // 1, 2, or 3
+    var currentStep by remember { mutableIntStateOf(1) }
 
-    var title by remember { mutableStateOf(initialHabit?.title ?: "দুপুরের খাবার ও পানি পান রুটিন") }
+    var title by remember { mutableStateOf(initialHabit?.title ?: "দুপুরের খাবার") }
     var category by remember { mutableStateOf(initialHabit?.category ?: HabitScheduleCalculator.CATEGORY_MEAL_LINKED) }
     var anchorTime by remember { mutableStateOf(initialHabit?.anchorTime ?: "14:00") }
     var hasPre by remember { mutableStateOf((initialHabit?.hasPreReminder ?: 1) == 1) }
@@ -631,7 +585,6 @@ fun HabitEditorDialog(
         mutableStateOf(preMsg.isNotBlank() || exactMsg.isNotBlank() || postMsg.isNotBlank())
     }
 
-    // Live calculation of Pre-Event, Anchor, and Fallback/Dynamic Post-Event times
     val (anchorH, anchorM) = HabitScheduleCalculator.parseAnchorTime(anchorTime)
     val anchorCal = remember(anchorH, anchorM) {
         Calendar.getInstance().apply {
@@ -653,7 +606,7 @@ fun HabitEditorDialog(
     ) {
         Surface(
             modifier = Modifier
-                .fillMaxWidth(0.96f)
+                .fillMaxWidth(0.95f)
                 .padding(vertical = 12.dp),
             shape = RoundedCornerShape(22.dp),
             color = MaterialTheme.colorScheme.surface,
@@ -673,39 +626,28 @@ fun HabitEditorDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
-                        Text(
-                            text = if (initialHabit == null) "✨ নতুন হ্যাবিট রুটিন উইজার্ড" else "✏️ রুটিন কাস্টমাইজেশন উইজার্ড",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "ধাপ ${HabitScheduleCalculator.toBengaliDigits(currentStep.toString())}/৩ • ${
-                                when (currentStep) {
-                                    1 -> "রুটিনের নাম ও মূল সময়"
-                                    2 -> "প্রি ও পোস্ট টাইমার এবং বার"
-                                    else -> "বাংলা ভয়েস ও সাউন্ড স্টুডিও"
-                                }
-                            }",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "বন্ধ করুন")
+                    Text(
+                        text = if (initialHabit == null) "নতুন রুটিন" else "রুটিন সম্পাদনা",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(34.dp)
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "বন্ধ")
                     }
                 }
 
-                // ── LIVE TIMELINE PREVIEW CARD (Always visible at top of wizard) ──
+                // ── LIVE TIMELINE PREVIEW CARD (3 Equal Columns, Zero Overlap) ──
                 Surface(
-                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f).solidOverSurface(),
-                    shape = RoundedCornerShape(16.dp),
-                    border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.40f)),
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.34f).solidOverSurface(),
+                    shape = RoundedCornerShape(14.dp),
+                    border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.38f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
-                        modifier = Modifier.padding(12.dp),
+                        modifier = Modifier.padding(10.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Row(
@@ -714,8 +656,8 @@ fun HabitEditorDialog(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "👁️ লাইভ প্রিভিউ: ${title.ifBlank { "স্বাস্থ্য রুটিন" }}",
-                                style = MaterialTheme.typography.labelMedium,
+                                text = title.ifBlank { "স্বাস্থ্য রুটিন" },
+                                style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary,
                                 maxLines = 1,
@@ -723,7 +665,7 @@ fun HabitEditorDialog(
                                 modifier = Modifier.weight(1f)
                             )
                             Text(
-                                text = "${HabitScheduleCalculator.toBengaliDigits(repeatDays.size.toString())} দিন/সপ্তাহ",
+                                text = "${HabitScheduleCalculator.toBengaliDigits(repeatDays.size.toString())} দিন",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -731,30 +673,25 @@ fun HabitEditorDialog(
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             LivePreviewStepPill(
-                                label = "১. প্রি-ইভেন্ট",
+                                label = if (hasPre) "${HabitScheduleCalculator.toBengaliDigits(preOffset.toString())}মি আগে" else "আগে",
                                 value = if (hasPre) preTimeFormatted else "বন্ধ",
-                                sub = if (hasPre) "-${HabitScheduleCalculator.toBengaliDigits(preOffset.toString())}মি" else "",
                                 active = hasPre,
                                 modifier = Modifier.weight(1f)
                             )
-                            Text("➔", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
                             LivePreviewStepPill(
-                                label = "২. মূল সময়",
+                                label = "মূল সময়",
                                 value = anchorTimeFormatted,
-                                sub = anchorTime,
                                 active = true,
                                 isHighlight = true,
                                 modifier = Modifier.weight(1f)
                             )
-                            Text("➔", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
                             LivePreviewStepPill(
-                                label = "৩. পোস্ট-ইভেন্ট",
-                                value = if (hasPost) "+${HabitScheduleCalculator.toBengaliDigits(postOffset.toString())}মি পর" else "বন্ধ",
-                                sub = if (hasPost) "আনুমানিক $postSampleFormatted" else "",
+                                label = if (hasPost) "${HabitScheduleCalculator.toBengaliDigits(postOffset.toString())}মি পরে" else "পরে",
+                                value = if (hasPost) postSampleFormatted else "বন্ধ",
                                 active = hasPost,
                                 modifier = Modifier.weight(1f)
                             )
@@ -769,25 +706,22 @@ fun HabitEditorDialog(
                 ) {
                     WizardStepTabChip(
                         stepNum = "১",
-                        label = "নাম ও সময়",
+                        label = "সময়",
                         selected = currentStep == 1,
-                        completed = currentStep > 1,
                         onClick = { currentStep = 1 },
                         modifier = Modifier.weight(1f)
                     )
                     WizardStepTabChip(
                         stepNum = "২",
-                        label = "টাইমার ও দিন",
+                        label = "টাইমার",
                         selected = currentStep == 2,
-                        completed = currentStep > 2,
                         onClick = { currentStep = 2 },
                         modifier = Modifier.weight(1f)
                     )
                     WizardStepTabChip(
                         stepNum = "৩",
-                        label = "ভয়েস ও টোন",
+                        label = "সাউন্ড",
                         selected = currentStep == 3,
-                        completed = false,
                         onClick = { currentStep = 3 },
                         modifier = Modifier.weight(1f)
                     )
@@ -800,7 +734,7 @@ fun HabitEditorDialog(
                             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 if (initialHabit == null) {
                                     Text(
-                                        text = "⚡ এক ট্যাপে রেডিমেড টেমপ্লেট বেছে নিন:",
+                                        text = "প্রিসেট:",
                                         style = MaterialTheme.typography.labelMedium,
                                         fontWeight = FontWeight.Bold
                                     )
@@ -829,8 +763,8 @@ fun HabitEditorDialog(
                                 OutlinedTextField(
                                     value = title,
                                     onValueChange = { title = it },
-                                    label = { Text("রুটিনের নাম") },
-                                    placeholder = { Text("যেমন: দুপুরের খাবার ও পানি পান") },
+                                    label = { Text("নাম") },
+                                    placeholder = { Text("যেমন: দুপুরের খাবার") },
                                     singleLine = true,
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -838,64 +772,54 @@ fun HabitEditorDialog(
                                 )
 
                                 Text(
-                                    text = "ক্যাটাগরি নির্বাচন করুন:",
+                                    text = "ধরন:",
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Bold
                                 )
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    habitCategoryOptions.chunked(2).forEach { rowItems ->
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            rowItems.forEach { (catKey, labelPair) ->
-                                                val isSelected = category == catKey
-                                                Surface(
-                                                    color = if (isSelected) {
-                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
-                                                    } else {
-                                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
-                                                    },
-                                                    shape = RoundedCornerShape(12.dp),
-                                                    border = onePxBorder(
-                                                        if (isSelected) MaterialTheme.colorScheme.primary
-                                                        else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                                                    ),
-                                                    modifier = Modifier
-                                                        .weight(1f)
-                                                        .clickable {
-                                                            category = catKey
-                                                            if (catKey == HabitScheduleCalculator.CATEGORY_MEDICATION) {
-                                                                presetSoundKey = HabitAudioManager.SOUND_MEDICATION_CHIME
-                                                            }
-                                                        }
-                                                ) {
-                                                    Column(modifier = Modifier.padding(10.dp)) {
-                                                        Text(
-                                                            text = labelPair.first,
-                                                            style = MaterialTheme.typography.bodyMedium,
-                                                            fontWeight = FontWeight.Bold,
-                                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                                        )
-                                                        Text(
-                                                            text = labelPair.second,
-                                                            style = MaterialTheme.typography.labelSmall,
-                                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                            maxLines = 1,
-                                                            overflow = TextOverflow.Ellipsis
-                                                        )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    habitCategoryOptions.forEach { (catKey, catLabel) ->
+                                        val isSelected = category == catKey
+                                        Surface(
+                                            color = if (isSelected) {
+                                                MaterialTheme.colorScheme.primary
+                                            } else {
+                                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.30f)
+                                            },
+                                            shape = RoundedCornerShape(10.dp),
+                                            border = onePxBorder(
+                                                if (isSelected) MaterialTheme.colorScheme.primary
+                                                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                            ),
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clickable {
+                                                    category = catKey
+                                                    if (catKey == HabitScheduleCalculator.CATEGORY_MEDICATION) {
+                                                        presetSoundKey = HabitAudioManager.SOUND_MEDICATION_CHIME
                                                     }
                                                 }
-                                            }
+                                        ) {
+                                            Text(
+                                                text = catLabel,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                                                textAlign = TextAlign.Center,
+                                                maxLines = 1,
+                                                modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp)
+                                            )
                                         }
                                     }
                                 }
 
-                                // Large Digital Anchor Time Picker Card
+                                // Clean Anchor Time Picker Card (No T_anchor or 14:00 jargon)
                                 Surface(
                                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
                                     shape = RoundedCornerShape(14.dp),
-                                    border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.40f)),
+                                    border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.38f)),
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable {
@@ -919,13 +843,13 @@ fun HabitEditorDialog(
                                     ) {
                                         Column {
                                             Text(
-                                                text = "⏰ মূল অ্যাঙ্কর সময় (T_anchor)",
+                                                text = "মূল সময়",
                                                 style = MaterialTheme.typography.labelMedium,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                             Text(
-                                                text = "$anchorTimeFormatted ($anchorTime)",
-                                                style = MaterialTheme.typography.titleLarge,
+                                                text = anchorTimeFormatted,
+                                                style = MaterialTheme.typography.titleMedium,
                                                 fontWeight = FontWeight.Bold,
                                                 color = MaterialTheme.colorScheme.primary
                                             )
@@ -941,11 +865,10 @@ fun HabitEditorDialog(
                                                     anchorM,
                                                     false
                                                 ).show()
-                                            }
+                                            },
+                                            shape = RoundedCornerShape(10.dp)
                                         ) {
-                                            Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(16.dp))
-                                            Spacer(Modifier.width(6.dp))
-                                            Text("সময় বদলান")
+                                            Text("বদলান", fontWeight = FontWeight.Bold)
                                         }
                                     }
                                 }
@@ -956,7 +879,7 @@ fun HabitEditorDialog(
                             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 // Pre-Event Offset Card
                                 Surface(
-                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.30f),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f),
                                     shape = RoundedCornerShape(14.dp),
                                     border = onePxBorder(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
                                     modifier = Modifier.fillMaxWidth()
@@ -969,12 +892,12 @@ fun HabitEditorDialog(
                                         ) {
                                             Column(modifier = Modifier.weight(1f)) {
                                                 Text(
-                                                    text = "💧 ১. প্রি-ইভেন্ট রিমাইন্ডার",
+                                                    text = "আগের অ্যালার্ম",
                                                     style = MaterialTheme.typography.bodyMedium,
                                                     fontWeight = FontWeight.Bold
                                                 )
                                                 Text(
-                                                    text = if (hasPre) "মূল সময়ের ${HabitScheduleCalculator.toBengaliDigits(preOffset.toString())} মিনিট আগে ($preTimeFormatted)" else "প্রি-রিমাইন্ডার বন্ধ আছে",
+                                                    text = if (hasPre) "$preTimeFormatted (${HabitScheduleCalculator.toBengaliDigits(preOffset.toString())}মি আগে)" else "বন্ধ",
                                                     style = MaterialTheme.typography.labelSmall,
                                                     color = MaterialTheme.colorScheme.primary
                                                 )
@@ -982,19 +905,33 @@ fun HabitEditorDialog(
                                             Switch(checked = hasPre, onCheckedChange = { hasPre = it })
                                         }
                                         if (hasPre) {
-                                            Spacer(Modifier.height(6.dp))
+                                            Spacer(Modifier.height(8.dp))
                                             Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .horizontalScroll(rememberScrollState()),
+                                                modifier = Modifier.fillMaxWidth(),
                                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                                             ) {
                                                 listOf(15, 20, 30, 45, 60).forEach { mins ->
-                                                    FilterChip(
-                                                        selected = preOffset == mins,
-                                                        onClick = { preOffset = mins },
-                                                        label = { Text("${HabitScheduleCalculator.toBengaliDigits(mins.toString())} মি. আগে") }
-                                                    )
+                                                    val selected = preOffset == mins
+                                                    Surface(
+                                                        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                                                        shape = RoundedCornerShape(8.dp),
+                                                        border = onePxBorder(
+                                                            if (selected) MaterialTheme.colorScheme.primary
+                                                            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                                        ),
+                                                        modifier = Modifier
+                                                            .weight(1f)
+                                                            .clickable { preOffset = mins }
+                                                    ) {
+                                                        Text(
+                                                            text = "${HabitScheduleCalculator.toBengaliDigits(mins.toString())}মি",
+                                                            fontSize = 12.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                                                            textAlign = TextAlign.Center,
+                                                            modifier = Modifier.padding(vertical = 8.dp)
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
@@ -1003,7 +940,7 @@ fun HabitEditorDialog(
 
                                 // Post-Event Offset Card
                                 Surface(
-                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.30f),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f),
                                     shape = RoundedCornerShape(14.dp),
                                     border = onePxBorder(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
                                     modifier = Modifier.fillMaxWidth()
@@ -1016,12 +953,12 @@ fun HabitEditorDialog(
                                         ) {
                                             Column(modifier = Modifier.weight(1f)) {
                                                 Text(
-                                                    text = "✅ ৩. ডাইনামিক পোস্ট-ইভেন্ট রিমাইন্ডার",
+                                                    text = "পরের অ্যালার্ম",
                                                     style = MaterialTheme.typography.bodyMedium,
                                                     fontWeight = FontWeight.Bold
                                                 )
                                                 Text(
-                                                    text = if (hasPost) "খাবার/কাজ সম্পন্নের ${HabitScheduleCalculator.toBengaliDigits(postOffset.toString())} মিনিট পর বাজবে" else "পোস্ট-রিমাইন্ডার বন্ধ আছে",
+                                                    text = if (hasPost) "সম্পন্নের ${HabitScheduleCalculator.toBengaliDigits(postOffset.toString())}মি পরে" else "বন্ধ",
                                                     style = MaterialTheme.typography.labelSmall,
                                                     color = MaterialTheme.colorScheme.primary
                                                 )
@@ -1029,19 +966,33 @@ fun HabitEditorDialog(
                                             Switch(checked = hasPost, onCheckedChange = { hasPost = it })
                                         }
                                         if (hasPost) {
-                                            Spacer(Modifier.height(6.dp))
+                                            Spacer(Modifier.height(8.dp))
                                             Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .horizontalScroll(rememberScrollState()),
+                                                modifier = Modifier.fillMaxWidth(),
                                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                                             ) {
                                                 listOf(15, 30, 45, 60, 90).forEach { mins ->
-                                                    FilterChip(
-                                                        selected = postOffset == mins,
-                                                        onClick = { postOffset = mins },
-                                                        label = { Text("${HabitScheduleCalculator.toBengaliDigits(mins.toString())} মি. পরে") }
-                                                    )
+                                                    val selected = postOffset == mins
+                                                    Surface(
+                                                        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                                                        shape = RoundedCornerShape(8.dp),
+                                                        border = onePxBorder(
+                                                            if (selected) MaterialTheme.colorScheme.primary
+                                                            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                                        ),
+                                                        modifier = Modifier
+                                                            .weight(1f)
+                                                            .clickable { postOffset = mins }
+                                                    ) {
+                                                        Text(
+                                                            text = "${HabitScheduleCalculator.toBengaliDigits(mins.toString())}মি",
+                                                            fontSize = 12.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                                                            textAlign = TextAlign.Center,
+                                                            modifier = Modifier.padding(vertical = 8.dp)
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
@@ -1050,7 +1001,7 @@ fun HabitEditorDialog(
 
                                 // 7-Day Selector
                                 Text(
-                                    text = "📅 সপ্তাহের কোন কোন দিন চালু থাকবে:",
+                                    text = "দিন:",
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -1096,65 +1047,104 @@ fun HabitEditorDialog(
                         else -> {
                             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Text(
-                                    text = "🔊 অ্যালার্ম বাজার ধরন নির্বাচন করুন:",
+                                    text = "ধরন:",
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .horizontalScroll(rememberScrollState()),
+                                    modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     listOf(
-                                        HabitScheduleCalculator.AUDIO_TTS_VOICE to "🗣️ বাংলা ভয়েস + টোন",
-                                        HabitScheduleCalculator.AUDIO_PRESET_TONE to "🔔 শুধু সাউন্ড টোন",
-                                        HabitScheduleCalculator.AUDIO_SYSTEM_DEFAULT to "📱 সিস্টেম সাউন্ড"
+                                        HabitScheduleCalculator.AUDIO_TTS_VOICE to "🗣️ বাংলা ভয়েস",
+                                        HabitScheduleCalculator.AUDIO_PRESET_TONE to "🔔 টিউন",
+                                        HabitScheduleCalculator.AUDIO_SYSTEM_DEFAULT to "📱 ডিফল্ট"
                                     ).forEach { (modeKey, modeLabel) ->
-                                        FilterChip(
-                                            selected = audioMode == modeKey,
-                                            onClick = { audioMode = modeKey },
-                                            label = { Text(modeLabel) }
+                                        val selected = audioMode == modeKey
+                                        Surface(
+                                            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.30f),
+                                            shape = RoundedCornerShape(10.dp),
+                                            border = onePxBorder(
+                                                if (selected) MaterialTheme.colorScheme.primary
+                                                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                            ),
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clickable { audioMode = modeKey }
+                                        ) {
+                                            Text(
+                                                text = modeLabel,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                                                textAlign = TextAlign.Center,
+                                                maxLines = 1,
+                                                modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "সাউন্ড:",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    // Pure Icon Button for audio test
+                                    FilledTonalIconButton(
+                                        onClick = {
+                                            val sample = exactMsg.ifBlank {
+                                                "${title.ifBlank { "স্বাস্থ্য রুটিন" }} এর সময় হয়েছে।"
+                                            }
+                                            onPreviewAlert(audioMode, presetSoundKey, sample)
+                                        },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.VolumeUp,
+                                            contentDescription = "শুনুন",
+                                            modifier = Modifier.size(18.dp)
                                         )
                                     }
                                 }
 
-                                Text(
-                                    text = "🎵 সাউন্ড টোন প্রিসেট:",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     listOf(
-                                        HabitAudioManager.SOUND_WATER_DROP to "💧 Water Drop",
-                                        HabitAudioManager.SOUND_SOFT_BELL to "🔔 Soft Bell",
-                                        HabitAudioManager.SOUND_MEDICATION_CHIME to "💊 Med Chime"
+                                        HabitAudioManager.SOUND_WATER_DROP to "💧 পানির শব্দ",
+                                        HabitAudioManager.SOUND_SOFT_BELL to "🔔 মৃদু ঘণ্টা",
+                                        HabitAudioManager.SOUND_MEDICATION_CHIME to "💊 ওষুধ টিউন"
                                     ).forEach { (soundKey, soundLabel) ->
-                                        FilterChip(
-                                            selected = presetSoundKey == soundKey,
-                                            onClick = { presetSoundKey = soundKey },
-                                            label = { Text(soundLabel, fontSize = 12.sp) },
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                    }
-                                }
-
-                                FilledTonalButton(
-                                    onClick = {
-                                        val sample = exactMsg.ifBlank {
-                                            "${title.ifBlank { "স্বাস্থ্য রুটিন" }} এর নির্ধারিত সময় হয়েছে।"
+                                        val selected = presetSoundKey == soundKey
+                                        Surface(
+                                            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.30f),
+                                            shape = RoundedCornerShape(10.dp),
+                                            border = onePxBorder(
+                                                if (selected) MaterialTheme.colorScheme.primary
+                                                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                            ),
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clickable { presetSoundKey = soundKey }
+                                        ) {
+                                            Text(
+                                                text = soundLabel,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                                                textAlign = TextAlign.Center,
+                                                maxLines = 1,
+                                                modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp)
+                                            )
                                         }
-                                        onPreviewAlert(audioMode, presetSoundKey, sample)
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Icon(Icons.Default.VolumeUp, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("🔊 ভয়েস ও সাউন্ড টোন বাজিয়ে শুনুন", fontWeight = FontWeight.Bold)
+                                    }
                                 }
 
                                 // Collapsible optional custom Bangla messages
@@ -1173,7 +1163,7 @@ fun HabitEditorDialog(
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Text(
-                                                text = "✍️ কাস্টম বাংলা ভয়েস মেসেজ (ঐচ্ছিক)",
+                                                text = "কাস্টম মেসেজ (ঐচ্ছিক)",
                                                 style = MaterialTheme.typography.labelMedium,
                                                 fontWeight = FontWeight.Bold
                                             )
@@ -1194,21 +1184,21 @@ fun HabitEditorDialog(
                                                 OutlinedTextField(
                                                     value = preMsg,
                                                     onValueChange = { preMsg = it },
-                                                    label = { Text("প্রি-ইভেন্ট ভয়েস/মেসেজ") },
+                                                    label = { Text("আগের মেসেজ") },
                                                     maxLines = 2,
                                                     modifier = Modifier.fillMaxWidth()
                                                 )
                                                 OutlinedTextField(
                                                     value = exactMsg,
                                                     onValueChange = { exactMsg = it },
-                                                    label = { Text("মূল সময়ের ভয়েস/মেসেজ") },
+                                                    label = { Text("মূল সময়ের মেসেজ") },
                                                     maxLines = 2,
                                                     modifier = Modifier.fillMaxWidth()
                                                 )
                                                 OutlinedTextField(
                                                     value = postMsg,
                                                     onValueChange = { postMsg = it },
-                                                    label = { Text("পোস্ট-ইভেন্ট ভয়েস/মেসেজ") },
+                                                    label = { Text("পরের মেসেজ") },
                                                     maxLines = 2,
                                                     modifier = Modifier.fillMaxWidth()
                                                 )
@@ -1221,20 +1211,22 @@ fun HabitEditorDialog(
                     }
                 }
 
-                // ── BOTTOM WIZARD NAVIGATION BAR ──
+                // ── BOTTOM WIZARD NAVIGATION BAR (Pure Icon for Back, Clean 1-2 Word Button for Next/Save) ──
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (currentStep > 1) {
-                        OutlinedButton(
+                        OutlinedIconButton(
                             onClick = { currentStep -= 1 },
-                            shape = RoundedCornerShape(12.dp)
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.size(42.dp)
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("পূর্ববর্তী")
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "পেছনে"
+                            )
                         }
                     } else {
                         TextButton(onClick = onDismiss) {
@@ -1242,9 +1234,11 @@ fun HabitEditorDialog(
                         }
                     }
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         if (currentStep < 3) {
-                            // Also allow quick direct save if editing an existing habit
                             if (initialHabit != null) {
                                 OutlinedButton(
                                     onClick = {
@@ -1267,17 +1261,19 @@ fun HabitEditorDialog(
                                     },
                                     shape = RoundedCornerShape(12.dp)
                                 ) {
-                                    Text("সরাসরি সেভ")
+                                    Text("সেভ")
                                 }
                             }
 
-                            Button(
+                            FilledIconButton(
                                 onClick = { currentStep += 1 },
-                                shape = RoundedCornerShape(12.dp)
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.size(42.dp)
                             ) {
-                                Text("পরবর্তী ধাপ", fontWeight = FontWeight.Bold)
-                                Spacer(Modifier.width(4.dp))
-                                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ArrowForward,
+                                    contentDescription = "পরবর্তী"
+                                )
                             }
                         } else {
                             Button(
@@ -1302,9 +1298,7 @@ fun HabitEditorDialog(
                                 shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier.testTag("save_habit_button")
                             ) {
-                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("সেভ ও অ্যালার্ম চালু করুন", fontWeight = FontWeight.Bold)
+                                Text("সেভ করুন", fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -1318,7 +1312,6 @@ fun HabitEditorDialog(
 private fun LivePreviewStepPill(
     label: String,
     value: String,
-    sub: String,
     active: Boolean,
     isHighlight: Boolean = false,
     modifier: Modifier = Modifier
@@ -1337,7 +1330,7 @@ private fun LivePreviewStepPill(
         modifier = modifier
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 7.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
@@ -1345,8 +1338,10 @@ private fun LivePreviewStepPill(
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 color = if (isHighlight) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
+            Spacer(Modifier.height(2.dp))
             Text(
                 text = value,
                 fontSize = 11.sp,
@@ -1355,15 +1350,6 @@ private fun LivePreviewStepPill(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            if (sub.isNotBlank()) {
-                Text(
-                    text = sub,
-                    fontSize = 9.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
         }
     }
 }
@@ -1373,49 +1359,40 @@ private fun WizardStepTabChip(
     stepNum: String,
     label: String,
     selected: Boolean,
-    completed: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val bg = when {
-        selected -> MaterialTheme.colorScheme.primary
-        completed -> MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
-        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    val bg = if (selected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
     }
-    val fg = when {
-        selected -> MaterialTheme.colorScheme.onPrimary
-        completed -> MaterialTheme.colorScheme.primary
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    val fg = if (selected) {
+        MaterialTheme.colorScheme.onPrimary
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
     }
 
     Surface(
         color = bg,
         shape = RoundedCornerShape(10.dp),
         border = onePxBorder(
-            if (selected || completed) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+            if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
             else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
         ),
         modifier = modifier.clickable { onClick() }
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
             Text(
-                text = if (completed) "✓" else stepNum,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = fg
-            )
-            Spacer(Modifier.width(4.dp))
-            Text(
-                text = label,
-                fontSize = 11.sp,
+                text = "$stepNum. $label",
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 color = fg,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                maxLines = 1
             )
         }
     }
