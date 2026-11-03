@@ -3,9 +3,12 @@ package com.health.knowledge.ui.home
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.health.knowledge.data.local.dao.HabitDao
 import com.health.knowledge.data.repository.ArticleRepository
 import com.health.knowledge.domain.model.Article
 import com.health.knowledge.domain.model.toDomain
+import com.health.knowledge.habit.HabitScheduleCalculator
+import com.health.knowledge.habit.HabitScheduler
 import com.health.knowledge.sync.DailyTipNotificationWorker
 import com.health.knowledge.util.DatabaseSeeder
 import com.health.knowledge.util.UserPreferencesManager
@@ -19,6 +22,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
+import kotlin.math.max
 
 data class HerbalIngredientStat(
     val name: String,
@@ -30,8 +34,40 @@ data class HerbalIngredientStat(
 class HomeViewModel @Inject constructor(
     private val repository: ArticleRepository,
     private val prefsManager: UserPreferencesManager,
-    private val databaseSeeder: DatabaseSeeder
+    private val databaseSeeder: DatabaseSeeder,
+    private val habitDao: HabitDao,
+    private val habitScheduler: HabitScheduler
 ) : ViewModel() {
+
+    init {
+        viewModelScope.launch {
+            habitScheduler.seedDefaultHabitsIfNeeded()
+        }
+    }
+
+    // Active Habit Reminder count & next dynamic post-event countdown for Home Hero menu card
+    val activeHabitCount: StateFlow<Int> = habitDao.getActiveHabitCountFlow()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 3)
+
+    val nextPostCountdownText: StateFlow<String?> = habitDao.getRecentExecutionLogsFlow()
+        .map { logs ->
+            val now = System.currentTimeMillis()
+            val nextPendingPost = logs
+                .filter {
+                    it.phase == HabitScheduleCalculator.PHASE_POST_EVENT &&
+                        it.status == HabitScheduleCalculator.STATUS_PENDING &&
+                        it.scheduledTime > now
+                }
+                .minByOrNull { it.scheduledTime }
+            if (nextPendingPost != null) {
+                val minsLeft = max(1L, (nextPendingPost.scheduledTime - now + 59_000L) / 60_000L)
+                val formatted = HabitScheduleCalculator.formatMillisToBengaliTime(nextPendingPost.scheduledTime)
+                "পরবর্তী পোস্ট-রিমাইন্ডার: $formatted (${HabitScheduleCalculator.toBengaliDigits(minsLeft.toString())} মিনিট বাকি)"
+            } else {
+                null
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     // First launch database seeding state
     val isSeeding: StateFlow<Boolean> = databaseSeeder.isSeeding

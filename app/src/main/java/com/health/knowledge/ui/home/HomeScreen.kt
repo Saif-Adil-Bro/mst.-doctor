@@ -48,6 +48,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.health.knowledge.domain.model.Article
 import com.health.knowledge.ui.detail.VerificationConsentDialog
+import com.health.knowledge.ui.habit.HomeHabitQuickMenuCard
 import com.health.knowledge.ui.theme.onePxBorder
 import com.health.knowledge.ui.theme.solidOverSurface
 import com.health.knowledge.util.HealthNotificationHelper
@@ -73,6 +74,7 @@ val categories = listOf(
 fun HomeScreen(
     onArticleClick: (Int) -> Unit,
     onAdminClick: () -> Unit,
+    onHabitReminderClick: () -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val searchQuery by viewModel.searchQuery.collectAsState()
@@ -97,6 +99,8 @@ fun HomeScreen(
     val dailyReminderMinute by viewModel.dailyReminderMinute.collectAsState()
     val dailyTipArticle by viewModel.dailyTipArticle.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
+    val activeHabitCount by viewModel.activeHabitCount.collectAsState()
+    val nextPostCountdownText by viewModel.nextPostCountdownText.collectAsState()
 
     val myArticles by viewModel.myArticles.collectAsState()
     val myPendingCount by viewModel.myPendingCount.collectAsState()
@@ -569,6 +573,14 @@ fun HomeScreen(
                                                     onToggleReminder = { showThemeDialog = true }
                                                 )
                                             }
+                                        }
+
+                                        item(key = "habit_reminder_menu_card", contentType = "habit_menu") {
+                                            HomeHabitQuickMenuCard(
+                                                activeHabitCount = activeHabitCount,
+                                                nextPostCountdownText = nextPostCountdownText,
+                                                onOpenHabitModule = onHabitReminderClick
+                                            )
                                         }
                                     }
                                 }

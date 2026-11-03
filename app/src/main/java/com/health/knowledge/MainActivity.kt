@@ -14,10 +14,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.health.knowledge.habit.HabitAlarmReceiver
 import com.health.knowledge.sync.DailyTipNotificationWorker
 import com.health.knowledge.sync.SyncWorker
 import com.health.knowledge.ui.admin.AdminScreen
 import com.health.knowledge.ui.detail.DetailScreen
+import com.health.knowledge.ui.habit.HabitReminderScreen
 import com.health.knowledge.ui.home.HomeScreen
 import com.health.knowledge.ui.theme.HealthKnowledgeTheme
 import com.health.knowledge.util.HealthNotificationHelper
@@ -32,6 +34,7 @@ class MainActivity : ComponentActivity() {
     lateinit var prefsManager: UserPreferencesManager
 
     private val targetArticleIdState = mutableStateOf<Int?>(null)
+    private val openHabitModuleState = mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,6 +42,7 @@ class MainActivity : ComponentActivity() {
 
         // Initialize Notification Channels and Subscribe to "all_users" push topic
         HealthNotificationHelper.createChannels(this)
+        HabitAlarmReceiver.ensureHabitChannels(this)
         HealthNotificationHelper.subscribeToAllUsersTopic()
 
         // Schedule background sync every 6 hours (only when internet available)
@@ -57,6 +61,9 @@ class MainActivity : ComponentActivity() {
         if (initialId > 0) {
             targetArticleIdState.value = initialId
         }
+        if (intent?.getBooleanExtra("open_habit_module", false) == true) {
+            openHabitModuleState.value = true
+        }
 
         setContent {
             val themeMode by prefsManager.themeMode.collectAsState()
@@ -65,6 +72,7 @@ class MainActivity : ComponentActivity() {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     val navController = rememberNavController()
                     val targetId by targetArticleIdState
+                    val openHabitModule by openHabitModuleState
 
                     LaunchedEffect(targetId) {
                         targetId?.let { id ->
@@ -72,6 +80,13 @@ class MainActivity : ComponentActivity() {
                                 navController.navigate("detail/$id")
                                 targetArticleIdState.value = null
                             }
+                        }
+                    }
+
+                    LaunchedEffect(openHabitModule) {
+                        if (openHabitModule) {
+                            navController.navigate("habit_reminder")
+                            openHabitModuleState.value = false
                         }
                     }
 
@@ -86,7 +101,16 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onAdminClick = {
                                     navController.navigate("admin")
+                                },
+                                onHabitReminderClick = {
+                                    navController.navigate("habit_reminder")
                                 }
+                            )
+                        }
+
+                        composable("habit_reminder") {
+                            HabitReminderScreen(
+                                onBack = { navController.popBackStack() }
                             )
                         }
 
@@ -119,6 +143,9 @@ class MainActivity : ComponentActivity() {
         val id = intent.getIntExtra("open_article_id", -1)
         if (id > 0) {
             targetArticleIdState.value = id
+        }
+        if (intent.getBooleanExtra("open_habit_module", false)) {
+            openHabitModuleState.value = true
         }
     }
 }

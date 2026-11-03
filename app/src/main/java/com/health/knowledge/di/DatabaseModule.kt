@@ -2,6 +2,7 @@ package com.health.knowledge.di
 
 import android.content.Context
 import com.health.knowledge.data.local.dao.ArticleDao
+import com.health.knowledge.data.local.dao.HabitDao
 import com.health.knowledge.data.local.database.HealthDatabase
 import dagger.Module
 import dagger.Provides
@@ -23,4 +24,8 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideArticleDao(database: HealthDatabase): ArticleDao = database.articleDao()
+
+    @Provides
+    @Singleton
+    fun provideHabitDao(database: HealthDatabase): HabitDao = database.habitDao()
 }

@@ -321,6 +321,45 @@ class UserPreferencesManager @Inject constructor(
         return finalId
     }
 
+    // ── SMART HABIT SLEEP WINDOW (DND PROTECTION: Default 23:00 to 06:30) ───
+    private val _habitSleepDndEnabled = MutableStateFlow(prefs.getBoolean(KEY_HABIT_SLEEP_DND, true))
+    val habitSleepDndEnabled: StateFlow<Boolean> = _habitSleepSleepFlow()
+    private fun _habitSleepSleepFlow(): StateFlow<Boolean> = _habitSleepDndEnabled.asStateFlow()
+
+    private val _habitSleepStartHour = MutableStateFlow(prefs.getInt(KEY_HABIT_SLEEP_START_H, 23))
+    val habitSleepStartHour: StateFlow<Int> = _habitSleepStartHour.asStateFlow()
+
+    private val _habitSleepStartMinute = MutableStateFlow(prefs.getInt(KEY_HABIT_SLEEP_START_M, 0))
+    val habitSleepStartMinute: StateFlow<Int> = _habitSleepStartMinute.asStateFlow()
+
+    private val _habitSleepEndHour = MutableStateFlow(prefs.getInt(KEY_HABIT_SLEEP_END_H, 6))
+    val habitSleepEndHour: StateFlow<Int> = _habitSleepEndHour.asStateFlow()
+
+    private val _habitSleepEndMinute = MutableStateFlow(prefs.getInt(KEY_HABIT_SLEEP_END_M, 30))
+    val habitSleepEndMinute: StateFlow<Int> = _habitSleepEndMinute.asStateFlow()
+
+    fun setHabitSleepDndEnabled(enabled: Boolean) {
+        _habitSleepDndEnabled.value = enabled
+        prefs.edit().putBoolean(KEY_HABIT_SLEEP_DND, enabled).apply()
+    }
+
+    fun setHabitSleepWindow(startHour: Int, startMinute: Int, endHour: Int, endMinute: Int) {
+        val sh = startHour.coerceIn(0, 23)
+        val sm = startMinute.coerceIn(0, 59)
+        val eh = endHour.coerceIn(0, 23)
+        val em = endMinute.coerceIn(0, 59)
+        _habitSleepStartHour.value = sh
+        _habitSleepStartMinute.value = sm
+        _habitSleepEndHour.value = eh
+        _habitSleepEndMinute.value = em
+        prefs.edit()
+            .putInt(KEY_HABIT_SLEEP_START_H, sh)
+            .putInt(KEY_HABIT_SLEEP_START_M, sm)
+            .putInt(KEY_HABIT_SLEEP_END_H, eh)
+            .putInt(KEY_HABIT_SLEEP_END_M, em)
+            .apply()
+    }
+
     private fun sha256(input: String): String {
         val bytes = MessageDigest.getInstance("SHA-256").digest(input.toByteArray())
         return bytes.joinToString("") { "%02x".format(it) }
@@ -360,5 +399,11 @@ class UserPreferencesManager @Inject constructor(
         private const val KEY_IP_FETCH_TIME = "cached_ip_fetch_time"
         private const val KEY_DEVICE_FALLBACK_ID = "device_fallback_id"
         private const val KEY_MY_SUBMISSIONS = "my_submitted_articles_keys"
+
+        private const val KEY_HABIT_SLEEP_DND = "habit_sleep_dnd_enabled"
+        private const val KEY_HABIT_SLEEP_START_H = "habit_sleep_start_hour"
+        private const val KEY_HABIT_SLEEP_START_M = "habit_sleep_start_minute"
+        private const val KEY_HABIT_SLEEP_END_H = "habit_sleep_end_hour"
+        private const val KEY_HABIT_SLEEP_END_M = "habit_sleep_end_minute"
     }
 }

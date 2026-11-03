@@ -1,31 +1,112 @@
-# IconKitchen-কম্প্যাটিবল অ্যাপ আইকন সেটআপ প্ল্যান
+# স্মার্ট হ্যাবিট ও রুটিন ইঞ্জিন (Smart Habit & Routine Engine)
 
-## ১. লক্ষ্য
-অ্যাপে একটি সুন্দর ডিফল্ট/ডামি হেলথ আইকন সেট করা হবে এবং ফাইল স্ট্রাকচার হুবহু **IconKitchen (icon.kitchen)**-এর স্ট্যান্ডার্ড এক্সপোর্ট ফরম্যাটে তৈরি করা হবে—যাতে আপনি IconKitchen থেকে ডাউনলোড করা `res/` ফোল্ডারের ফাইলগুলো `app/src/main/res/`-এ পেস্ট বা রিপ্লেস করলেই কোনো কোড পরিবর্তন ছাড়াই সরাসরি আপনার আইকন সিঙ্ক হয়ে যায়।
-
----
-
-## ২. যা যা তৈরি ও কনফিগার করা হবে
-
-### ক. `AndroidManifest.xml` আপডেট
-- বর্তমানে `android:icon="@android:drawable/sym_def_app_icon"` দেওয়া আছে। এটি পরিবর্তন করে স্ট্যান্ডার্ড লঞ্চার আইকন রেফারেন্স দেওয়া হবে:
-  - `android:icon="@mipmap/ic_launcher"`
-  - `android:roundIcon="@mipmap/ic_launcher_round"`
-
-### খ. IconKitchen-এর হুবহু ফোল্ডার ও ফাইল স্ট্রাকচার তৈরি (`app/src/main/res/`)
-IconKitchen যখন Android আইকন জেনারেট করে, তখন নিচের ফাইলগুলো তৈরি করে। আমরা ঠিক একই নামে ফাইলগুলো প্রস্তুত করে রাখব:
-1. **`res/values/ic_launcher_background.xml`**
-   - `<color name="ic_launcher_background">#2E7D32</color>`
-2. **`res/mipmap-anydpi-v26/ic_launcher.xml` এবং `ic_launcher_round.xml`**
-   - Adaptive Icon কনফিগারেশন যা `@color/ic_launcher_background`, `@mipmap/ic_launcher_foreground` এবং `@mipmap/ic_launcher_monochrome` ব্যবহার করবে (IconKitchen-এর ডিফল্ট XML স্ট্রাকচার)।
-3. **সকল ডেনসিটি ফোল্ডার (`mipmap-mdpi`, `mipmap-hdpi`, `mipmap-xhdpi`, `mipmap-xxhdpi`, `mipmap-xxxhdpi`):**
-   - প্রতিটি ফোল্ডারে ৪টি করে ফাইল থাকবে:
-     - `ic_launcher.png`
-     - `ic_launcher_round.png`
-     - `ic_launcher_foreground.png`
-     - `ic_launcher_monochrome.png`
+**স্বাস্থ্য জ্ঞান (Shastho Gyan)** অ্যাপের হিরো সেকশনের ঠিক নিচে একটি **Habit Reminder** কুইক-অ্যাকশন আইকন মেনু যুক্ত করা হবে, যেখানে ট্যাপ করলে একটি অফলাইন-ফার্স্ট, ইভেন্ট-ড্রিভেন **Smart Habit & Routine Engine** মডিউল পেজ ওপেন হবে। এই মডিউলটি খাবারের সময় বা ঘুম থেকে ওঠার মতো মূল ইভেন্টের (Anchor Event) সাথে পানি পান ও ওষুধ সেবনের প্রি-ইভেন্ট, এক্স্যাক্ট-ইভেন্ট এবং ডাইনামিক পোস্ট-ইভেন্ট রিমাইন্ডার স্বয়ংক্রিয়ভাবে পরিচালনা করবে।
 
 ---
 
-## ৩. আপনি কীভাবে আপনার আইকন পেস্ট করবেন
-- IconKitchen থেকে ডাউনলোড করা ZIP ফাইলের ভেতর থাকা `android/res/` ফোল্ডারের সব ফাইল কপি করে সরাসরি প্রজেক্টের `app/src/main/res/` ফোল্ডারে পেস্ট (Replace) করে দিলেই সাথে সাথে আপনার আইকন কাজ করবে।
+### User Review & Critical Decisions
+
+> [!IMPORTANT]
+> আপনার নিশ্চিত করা পছন্দগুলোর ভিত্তিতে নিচের সিদ্ধান্তগুলো চূড়ান্ত করা হয়েছে এবং অ্যাপের পূর্বের কোনো সেটিং বা ফিচারে হাত দেওয়া হবে না:
+
+- **হিরো সেকশনের নিচে Habit Reminder মেনু**: হোম পেজের হিরো/ডেইলি টিপস সেকশনের নিচে একটি আকর্ষণীয় `1px` বর্ডারযুক্ত **Habit Reminder** কুইক-অ্যাকশন আইকন মেনু কার্ড থাকবে এবং প্রথমবার ব্যবহারের সুবিধার্থে রেডিমেড ডিফল্ট হ্যাবিট (যেমন: দুপুরের খাবার ও পানি পান, রাতের খাবার ও ভেষজ নিয়ম, সকালের খালি পেটে পানি/ওষুধ) প্রি-সিডেড থাকবে।
+- **মডিউল পেজের কন্ট্রোল ও ফিচারসমূহ**:
+  1. **"খাবার সম্পন্ন করেছি" (Mark Done) বাটন ও লাইভ পোস্ট-রিমাইন্ডার কাউন্টডাউন**: অ্যাপের ভেতর থেকে অথবা নোটিফিকেশন বারের অ্যাকশন বাটন থেকে খাবার সম্পন্ন নিশ্চিত করার সাথে সাথে রিয়েল-টাইমে পরবর্তী পানি/ওষুধের পোস্ট-ইভেন্ট রিমাইন্ডার ($T_{done} + \Delta t_{post}$) সেট হবে।
+  2. **কাস্টম প্রি-ইভেন্ট ও পোস্ট-ইভেন্ট টাইমার এবং বার (Repeat Days) সিলেক্টর**: প্রতিটি রুটিনে অ্যাঙ্কর টাইম ($T_{anchor}$), প্রি-ইভেন্ট অফসেট ($\Delta t_{pre}$, ডিফল্ট ৩০ মিনিট), পোস্ট-ইভেন্ট অফসেট ($\Delta t_{post}$, ডিফল্ট ৪৫ মিনিট) এবং সপ্তাহের নির্দিষ্ট দিন নির্বাচন করা যাবে।
+  3. **ঘুমের সময় DND (Sleep Window) সুরক্ষা ও রুটিন লগ হিস্ট্রি**: রাত ১১:০০ থেকে সকাল ৬:৩০ পর্যন্ত (কাস্টমাইজযোগ্য) স্লিপ উইন্ডোর ভেতর কোনো পোস্ট-ইভেন্ট অ্যালার্ম পড়লে অডিও স্বয়ংক্রিয়ভাবে সাইলেন্ট/সাপ্রেস হবে এবং সম্পন্ন/মিসড রুটিনের পূর্ণাঙ্গ লগ হিস্ট্রি দেখা যাবে।
+- **বাংলা ভয়েস প্রম্পট (TTS) ও কাস্টম সাউন্ড টোন**: প্রতিটি ফেজের (`PRE_EVENT`, `EXACT_EVENT`, `POST_EVENT`) জন্য বাংলা টেক্সট-টু-স্পিচ ভয়েস (`bn-BD` -> `en-US` -> ফলব্যাক টোন) এবং বান্ডেলড অডিও প্রিসেট (`water_drop`, `soft_bell`, `medication_chime`) উভয়ই সাপোর্ট করবে।
+
+---
+
+### 1. Overview & Core Concept
+
+- **What It Does**: স্বাস্থ্যবিধি অনুযায়ী খাবারের ঠিক ৩০ মিনিট আগে পানি পান, খাবারের সময় মূল রিমাইন্ডার এবং খাবার শেষ করার ঠিক ৪৫ মিনিট পর পানি বা ওষুধ গ্রহণের ডাইনামিক রিমাইন্ডার পরিচালনা করে। ইউজার যদি নির্দিষ্ট গ্রেস পিরিয়ডের (৩০ মিনিট) মধ্যে খাবার সম্পন্ন নিশ্চিত না করেন, তবে স্বয়ংক্রিয় ফলব্যাক সূত্র ($T_{anchor} + 30\text{m} + \Delta t_{post}$) অনুযায়ী পোস্ট-রিমাইন্ডার বাজে।
+- **Target Audience / Persona**: নিয়মিত স্বাস্থ্যকর জীবনযাপন, আয়ুর্বেদিক/ভেষজ নিয়ম অনুসরণকারী এবং সঠিক সময়ে পানি ও ওষুধ গ্রহণে আগ্রহী পাঠক।
+- **Key Value**: সাধারণ ঘড়ির অ্যালার্মের বদলে ব্যবহারকারীর প্রকৃত খাবার শেষ করার সময়ের ($T_{done}$) ওপর ভিত্তি করে পরবর্তী রিমাইন্ডার ডাইনামিকভাবে গণনা করে এবং বাংলা ভয়েস প্রম্পটের মাধ্যমে মনে করিয়ে দেয়।
+
+---
+
+### 2. User Experience & Visual Design
+
+- **Key User Flows**:
+  1. **হোম পেজ আইকন মেনু**: হিরো সেকশনের নিচে **⏰ হ্যাবিট রিমাইন্ডার (খাবার, পানি ও ওষুধের স্মার্ট রুটিন)** আইকন মেনু কার্ডে সক্রিয় রুটিনের সংখ্যা ও কুইক স্ট্যাটাস দেখা যাবে। কার্ডে ট্যাপ করলে **Habit Reminder Module** স্ক্রিন ওপেন হবে।
+  2. **হ্যাবিট ড্যাশবোর্ড ও কুইক অ্যাকশন**: মডিউল পেজে প্রতিটি রুটিন কার্ডে তিনটি ফেজের (`Pre-Event`, `Anchor Event`, `Post-Event`) টাইমলাইন ব্যাজ থাকবে। অ্যাঙ্কর ইভেন্টের ক্ষেত্রে সরাসরি **"✅ খাবার সম্পন্ন করেছি"** বাটন থাকবে, যা চাপলে সাথে সাথে ডাইনামিক পোস্ট-রিমাইন্ডার শিডিউল হয়ে কাউন্টডাউন দেখাবে।
+  3. **নতুন রুটিন তৈরি ও কাস্টমাইজেশন**: `+ নতুন রুটিন` বাটনে ট্যাপ করলে ক্যাটাগরি (`MEAL_LINKED`, `MEDICATION`, `HYDRATION`, `CUSTOM`), অ্যাঙ্কর টাইম পিকার, প্রি-অফসেট স্লাইডার/চিপস, পোস্ট-অফসেট স্লাইডার/চিপস, সপ্তাহের ৭ দিনের সিলেক্টর এবং অডিও মোড (`TTS_VOICE`, `PRESET_TONE`, `SYSTEM_DEFAULT`) ও বাংলা ভয়েস প্রিভিউ বাটন পাওয়া যাবে।
+  4. **নোটিফিকেশন বার ইন্টারঅ্যাকশন**: অ্যাপ না খুলেই নোটিফিকেশন বার থেকে `[✅ সম্পন্ন করেছি (Mark Done)]`, `[💤 ১০ মিনিট স্নুজ]`, অথবা `[✖ বন্ধ করুন]` বাটনে ট্যাপ করা যাবে।
+- **Visual Identity & Theme**:
+  - বর্তমান অ্যাপের সবুজ ভেষজ থিম, ডার্ক মোড ও সেপিয়া মোডের সাথে শতভাগ সামঞ্জস্যপূর্ণ।
+  - সকল কার্ডে `solidOverSurface()` ও `1px` বর্ডার (`onePxBorder`) বজায় রাখা হবে।
+- **Interactive Feedback & Motion**:
+  - খাবার সম্পন্ন মার্ক করার সাথে সাথে স্মুথ অ্যানিমেশনে পোস্ট-ইভেন্ট টাইমার ব্যাজ আপডেট হবে এবং ভয়েস/টোন প্রিভিউ বাটনে তাৎক্ষণিক অডিও ফিডব্যাক পাওয়া যাবে।
+
+---
+
+### 3. Key Product Decisions & Trade-Offs
+
+- **Decision 1: Exact Alarm Scheduling & Reboot Resilience**
+  - *Chosen Approach*: `AlarmManager.setExactAndAllowWhileIdle()` / `setAlarmClock()` ব্যবহার করে প্রতিটি ফেজের অ্যালার্ম শিডিউল করা এবং ডিভাইস রিবুট বা টাইম পরিবর্তনের পর সব সক্রিয় হ্যাবিট পুনরায় রেজিস্টার করা।
+  - *Why*: ডোজ মোড (Doze Mode) বা স্ট্যান্ডবাই অবস্থাতেও যেন ১ মিনিটও এদিক-সেদিক না হয়ে সঠিক সময়ে রিমাইন্ডার বাজে।
+- **Decision 2: Idempotent Dynamic Post-Event & Overlapping Trigger Grouping**
+  - *Chosen Approach*: ইউজার একাধিকবার "Mark Done" ট্যাপ করলে আগের পেন্ডিং `POST_EVENT` অ্যালার্ম ওভাররাইট হবে (ডুপ্লিকেট অ্যালার্ম তৈরি হবে না)। পাশাপাশি ২ মিনিটের ব্যবধানে একাধিক রিমাইন্ডার পড়লে সেগুলোকে একটি গ্রুপ সামারি নোটিফিকেশনে একত্রিত করা হবে যাতে অডিও সংঘর্ষ না ঘটে।
+  - *Why*: ইউজার এক্সপেরিয়েন্স পরিচ্ছন্ন রাখা এবং অপ্রয়োজনীয় ডাবল অ্যালার্ম রোধ করা।
+- **Decision 3: Multi-Tier Bangla TTS & Bundled Raw Audio Engine**
+  - *Chosen Approach*: অ্যান্ড্রয়েডের নেটিভ `TextToSpeech` ইঞ্জিনে প্রথমে `bn-BD` (বাংলা), না থাকলে `en-US`, এবং টিটিএস অনুপস্থিত থাকলে বান্ডেলড র-অডিও (`water_drop`, `soft_bell`, `medication_chime`) বাজানো হবে।
+  - *Why*: অফলাইনে শতভাগ নির্ভরযোগ্য ভয়েস ও সাউন্ড অ্যালার্ট নিশ্চিত করা।
+
+---
+
+### 4. Technical Architecture & Data Strategy *(Technical Reference)*
+
+#### Architecture & Component Diagram
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│                        UI Layer (Jetpack Compose)                         │
+│  ┌──────────────────────────┐        ┌─────────────────────────────────┐  │
+│  │ HomeScreen               │        │ HabitReminderScreen             │  │
+│  │  └─ Habit Menu Card      │───────▶│  ├─ Active Habits & Mark Done   │  │
+│  │     (Below Hero Section) │        │  ├─ Add/Edit Habit Modal        │  │
+│  └──────────────────────────┘        │  └─ Sleep DND & Execution Logs  │  │
+│                                      └────────────────┬────────────────┘  │
+└───────────────────────────────────────────────────────┼───────────────────┘
+                                                        │ StateFlow / Actions
+                                                        ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│                    Domain & Scheduling Engine Layer                       │
+│  ┌──────────────────────────────────┐  ┌───────────────────────────────┐  │
+│  │ HabitScheduleCalculator          │  │ HabitAudioAndTtsManager       │  │
+│  │  ├─ calcPreEvent (T_anc - Δpre)  │  │  ├─ TTS (bn-BD -> en-US)      │  │
+│  │  ├─ calcAnchorEvent (T_anc)      │  │  └─ Raw Tones (water_drop,    │  │
+│  │  ├─ calcPostEvent (T_done+Δpost) │  │     soft_bell, med_chime)     │  │
+│  │  ├─ calcFallbackPostEvent        │  └──────────────┬────────────────┘  │
+│  │  └─ Sleep Window DND Check       │                 │                   │
+│  └────────────────┬─────────────────┘                 │                   │
+│                   ▼                                   ▼                   │
+│  ┌─────────────────────────────────────────────────────────────────────┐  │
+│  │ HabitScheduler & HabitAlarmReceiver (BroadcastReceiver + Boot)      │  │
+│  │  ├─ AlarmManager (PRE_EVENT, EXACT_EVENT, POST_EVENT, FALLBACK)     │  │
+│  │  ├─ Actions: ACTION_MEAL_DONE, ACTION_SNOOZE (10m), ACTION_DISMISS  │  │
+│  │  └─ Channels: health_urgent (High/Max), health_routine (Default)    │  │
+│  └──────────────────────────────────┬──────────────────────────────────┘  │
+└─────────────────────────────────────┼─────────────────────────────────────┘
+                                      ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│                   Persistence Layer (Room SQLite v6)                      │
+│  ┌───────────────────┐  ┌──────────────────────┐  ┌────────────────────┐  │
+│  │ habits            │  │ reminder_configs     │  │ habit_execution_   │  │
+│  │ (Anchor, Offsets, │──│ (Phase, Template,    │  │ logs (Scheduled,   │  │
+│  │  RepeatDays)      │  │  AudioMode, Tone/TTS)│  │  Executed, Status) │  │
+│  └───────────────────┘  └──────────────────────┘  └────────────────────┘  │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Data Model & State (Room Schema Migration 5 -> 6)
+- **`habits`**: `id` (PK), `title`, `category` (`MEAL_LINKED`, `MEDICATION`, `HYDRATION`, `CUSTOM`), `anchor_time` (`HH:mm`), `has_pre_reminder`, `pre_offset_mins` (default 30), `has_post_reminder`, `post_offset_mins` (default 45), `repeat_days` (JSON array string e.g. `"[1,2,3,4,5,6,7]"`), `is_active`, `created_at`.
+- **`reminder_configs`**: `id` (PK), `habit_id` (FK CASCADE), `phase` (`PRE_EVENT`, `EXACT_EVENT`, `POST_EVENT`), `message_template`, `audio_mode` (`TTS_VOICE`, `PRESET_TONE`, `SYSTEM_DEFAULT`), `preset_sound_key`, `tts_text`.
+- **`habit_execution_logs`**: `id` (PK), `habit_id` (FK CASCADE), `phase`, `scheduled_time`, `executed_time`, `status` (`PENDING`, `COMPLETED`, `SNOOZED`, `MISSED`, `DISMISSED`).
+
+#### Interactive Component & State Mapping
+- **`schedulePreEvent(habit)`**: $T_{pre} = T_{anchor} - \Delta t_{pre}$ সময়ে অ্যালার্ম সেট করে (মধ্যরাত বা ডে-বাউন্ডারি অতিক্রম করলে স্বয়ংক্রিয়ভাবে পূর্ববর্তী/পরবর্তী দিনের টাইমস্ট্যাম্প সমন্বয় করে)।
+- **`scheduleAnchorEvent(habit)`**: ঠিক $T_{anchor}$ সময়ে অ্যালার্ম সেট করে এবং নোটিফিকেশনে `[Mark Done]` ও `[Snooze 10m]` অ্যাকশন যুক্ত করে; পাশাপাশি ইউজার কনফার্ম না করলে গ্রেস পিরিয়ড শেষে ফলব্যাক পোস্ট-ইভেন্ট ($T_{anchor} + 30\text{m} + \Delta t_{post}$) শিডিউল রাখে।
+- **`scheduleDynamicPostEvent(habitId, completedTimestamp)`**: ইউজার `ACTION_MEAL_DONE` বা অ্যাপের বাটনে ট্যাপ করলে ফলব্যাক ক্যানসেল করে ঠিক $T_{done} + \Delta t_{post}$ সময়ে ইডেমপোটেন্ট পোস্ট-ইভেন্ট অ্যালার্ম সেট করে।
+- **Unit Verification**: নেগেটিভ অফসেট, মিডনাইট বাউন্ডারি ক্রসিং (যেমন রাত ১২:১৫-এর খাবারের ৩০ মিনিট আগের রিমাইন্ডার রাত ১১:৪৫-এ যাওয়া) এবং স্লিপ উইন্ডো (২৩:০০–০৬:৩০) সাপ্রেশন যাচাইয়ের জন্য স্বয়ংক্রিয় ইউনিট টেস্ট যুক্ত থাকবে।
