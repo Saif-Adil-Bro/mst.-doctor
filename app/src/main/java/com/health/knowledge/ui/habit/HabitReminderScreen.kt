@@ -6,6 +6,13 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -23,6 +30,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -38,6 +46,7 @@ import com.health.knowledge.ui.theme.onePxBorder
 import com.health.knowledge.ui.theme.solidOverSurface
 import com.health.knowledge.util.HealthNotificationHelper
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlin.math.max
@@ -181,13 +190,13 @@ fun HabitReminderScreen(
                         }
                         Column {
                             Text(
-                                text = "⏰ স্মার্ট হ্যাবিট ও রুটিন",
+                                text = "⏰ হ্যাবিট প্ল্যানার",
                                 color = Color.White,
                                 fontSize = 19.sp,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "${HabitScheduleCalculator.toBengaliDigits(activeHabitCount.toString())}টি সক্রিয় রুটিন • অফলাইন এক্স্যাক্ট অ্যালার্ম",
+                                text = "${HabitScheduleCalculator.toBengaliDigits(activeHabitCount.toString())}টি সক্রিয় রুটিন • অফলাইন স্মার্ট অ্যালার্ম",
                                 color = Color.White.copy(alpha = 0.86f),
                                 fontSize = 12.sp
                             )
@@ -220,7 +229,7 @@ fun HabitReminderScreen(
                     Tab(
                         selected = selectedTab == 0,
                         onClick = { selectedTab = 0 },
-                        text = { Text("⏰ সক্রিয় রুটিন (${habits.size})", fontWeight = FontWeight.SemiBold) }
+                        text = { Text("⏰ রুটিন (${habits.size})", fontWeight = FontWeight.SemiBold) }
                     )
                     Tab(
                         selected = selectedTab == 1,
@@ -230,7 +239,7 @@ fun HabitReminderScreen(
                     Tab(
                         selected = selectedTab == 2,
                         onClick = { selectedTab = 2 },
-                        text = { Text("📜 লগ হিস্ট্রি", fontWeight = FontWeight.SemiBold) }
+                        text = { Text("📜 হিস্ট্রি", fontWeight = FontWeight.SemiBold) }
                     )
                 }
             }
@@ -243,7 +252,7 @@ fun HabitReminderScreen(
         ) {
             when (selectedTab) {
                 0 -> {
-                    ActiveHabitsListTab(
+                    ActiveHabitsDashboardTab(
                         habits = habits,
                         configsByHabit = configsByHabit,
                         executionLogs = executionLogs,
@@ -318,7 +327,7 @@ fun HabitReminderScreen(
 }
 
 @Composable
-private fun ActiveHabitsListTab(
+private fun ActiveHabitsDashboardTab(
     habits: List<HabitEntity>,
     configsByHabit: Map<String, List<ReminderConfigEntity>>,
     executionLogs: List<HabitExecutionLogEntity>,
@@ -331,6 +340,9 @@ private fun ActiveHabitsListTab(
     onDeleteClick: (HabitEntity) -> Unit,
     onAddFirstHabit: () -> Unit
 ) {
+    // Track which habit cards are expanded (Progressive Disclosure: collapsed by default)
+    var expandedHabitIds by remember { mutableStateOf(setOf<String>()) }
+
     val pendingPostLogsByHabit = remember(executionLogs, nowMillis) {
         executionLogs
             .filter {
@@ -339,6 +351,27 @@ private fun ActiveHabitsListTab(
                     it.scheduledTime > nowMillis
             }
             .associateBy { it.habitId }
+    }
+
+    // Calculate today's completed habits count for the Progress Ring
+    val startOfTodayMillis = remember(nowMillis) {
+        Calendar.getInstance().apply {
+            timeInMillis = nowMillis
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+    }
+
+    val completedHabitIdsToday = remember(executionLogs, startOfTodayMillis) {
+        executionLogs
+            .filter {
+                it.status == HabitScheduleCalculator.STATUS_COMPLETED &&
+                    (it.executedTime ?: it.scheduledTime) >= startOfTodayMillis
+            }
+            .map { it.habitId }
+            .toSet()
     }
 
     if (habits.isEmpty()) {
@@ -376,36 +409,67 @@ private fun ActiveHabitsListTab(
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item(key = "habit_intro_banner") {
-            Surface(
-                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f).solidOverSurface(),
-                shape = RoundedCornerShape(14.dp),
-                border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
-                modifier = Modifier.fillMaxWidth()
+        // 1. Top Dashboard Hero Card: Today's Progress Ring + Next Alarm / Post-Meal Countdown Banner
+        item(key = "dashboard_summary_hero") {
+            HabitDashboardSummaryHeroCard(
+                habits = habits,
+                completedHabitIdsToday = completedHabitIdsToday,
+                pendingPostLogsByHabit = pendingPostLogsByHabit,
+                nowMillis = nowMillis
+            )
+        }
+
+        // Section Header with Expand/Collapse All toggle
+        item(key = "routines_section_header") {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 2.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("💡", fontSize = 20.sp)
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        text = "খাবার বা মূল কাজ শেষ করার সাথে সাথে '✅ সম্পন্ন করেছি' বাটনে ট্যাপ করুন—তাহলে ঠিক সেই মুহূর্ত থেকে পরবর্তী পানি/ওষুধের পোস্ট-রিমাইন্ডার গণনা শুরু হবে।",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
+                Text(
+                    text = "📋 আপনার রুটিন তালিকা (বিস্তারিত দেখতে কার্ডে ট্যাপ করুন)",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                val allExpanded = expandedHabitIds.size == habits.size
+                Text(
+                    text = if (allExpanded) "সব সংক্ষিপ্ত করুন ▲" else "সব প্রসারিত করুন ▼",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.clickable {
+                        expandedHabitIds = if (allExpanded) {
+                            emptySet()
+                        } else {
+                            habits.map { it.id }.toSet()
+                        }
+                    }
+                )
             }
         }
 
+        // 2. Collapsible Routine Cards (Progressive Disclosure)
         items(habits, key = { it.id }) { habit ->
-            HabitRoutineItemCard(
+            val isExpanded = habit.id in expandedHabitIds
+            CollapsibleHabitRoutineCard(
                 habit = habit,
                 configs = configsByHabit[habit.id].orEmpty(),
                 pendingPostLog = pendingPostLogsByHabit[habit.id],
+                isCompletedToday = habit.id in completedHabitIdsToday,
+                isExpanded = isExpanded,
                 nowMillis = nowMillis,
+                onToggleExpand = {
+                    expandedHabitIds = if (isExpanded) {
+                        expandedHabitIds - habit.id
+                    } else {
+                        expandedHabitIds + habit.id
+                    }
+                },
                 onMarkDoneClick = { onMarkDoneClick(habit) },
                 onSnoozeClick = { onSnoozeClick(habit) },
                 onTestAlertClick = { phase -> onTestAlertClick(habit, phase) },
@@ -417,12 +481,198 @@ private fun ActiveHabitsListTab(
     }
 }
 
+/**
+ * 1. Top Dashboard Hero Card: Today's Progress Ring + Next Alarm / Post-Meal Countdown Banner.
+ */
 @Composable
-private fun HabitRoutineItemCard(
+private fun HabitDashboardSummaryHeroCard(
+    habits: List<HabitEntity>,
+    completedHabitIdsToday: Set<String>,
+    pendingPostLogsByHabit: Map<String, HabitExecutionLogEntity>,
+    nowMillis: Long
+) {
+    val activeHabits = remember(habits) { habits.filter { it.isActive == 1 } }
+    val totalActive = activeHabits.size.coerceAtLeast(1)
+    val completedActiveCount = activeHabits.count { it.id in completedHabitIdsToday }
+    val rawProgress = (completedActiveCount.toFloat() / totalActive.toFloat()).coerceIn(0f, 1f)
+    val animatedProgress by animateFloatAsState(
+        targetValue = rawProgress,
+        animationSpec = tween(durationMillis = 500),
+        label = "habit_progress_ring"
+    )
+    val percentInt = (rawProgress * 100).toInt()
+
+    // Find either the earliest active dynamic post-meal countdown OR the next upcoming scheduled trigger
+    val earliestPendingPost = pendingPostLogsByHabit.values.minByOrNull { it.scheduledTime }
+
+    val nextUpcomingTriggerPair = remember(activeHabits, nowMillis) {
+        activeHabits.flatMap { habit ->
+            val list = mutableListOf<Triple<HabitEntity, String, Long>>()
+            if (habit.hasPreReminder == 1) {
+                val preMillis = HabitScheduleCalculator.calculateNextOccurrenceMillis(
+                    anchorTime = habit.anchorTime,
+                    signedOffsetMins = -habit.preOffsetMins,
+                    repeatDaysJson = habit.repeatDays,
+                    nowMillis = nowMillis
+                )
+                list.add(Triple(habit, "প্রি-রিমাইন্ডার", preMillis))
+            }
+            val exactMillis = HabitScheduleCalculator.calculateNextOccurrenceMillis(
+                anchorTime = habit.anchorTime,
+                signedOffsetMins = 0,
+                repeatDaysJson = habit.repeatDays,
+                nowMillis = nowMillis
+            )
+            list.add(Triple(habit, "মূল সময়", exactMillis))
+            list
+        }.minByOrNull { it.third }
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("habit_dashboard_hero_card"),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.36f).solidOverSurface()
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.40f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Left: Animated Today's Progress Ring
+            Box(
+                modifier = Modifier.size(74.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(
+                    progress = { 1f },
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                    strokeWidth = 7.dp,
+                    strokeCap = StrokeCap.Round
+                )
+                CircularProgressIndicator(
+                    progress = { animatedProgress },
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.primary,
+                    strokeWidth = 7.dp,
+                    strokeCap = StrokeCap.Round
+                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "${HabitScheduleCalculator.toBengaliDigits(percentInt.toString())}%",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "${HabitScheduleCalculator.toBengaliDigits(completedActiveCount.toString())}/${HabitScheduleCalculator.toBengaliDigits(activeHabits.size.toString())} সম্পন্ন",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            // Right: Next Alarm Banner / Active Post-Meal Countdown
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = "আজকের রুটিন অগ্রগতি",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                if (earliestPendingPost != null) {
+                    val habitTitle = habits.firstOrNull { it.id == earliestPendingPost.habitId }?.title ?: "রুটিন"
+                    val minsLeft = max(1L, (earliestPendingPost.scheduledTime - nowMillis + 59_000L) / 60_000L)
+                    val timeFormatted = HabitScheduleCalculator.formatMillisToBengaliTime(earliestPendingPost.scheduledTime)
+
+                    Surface(
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                        shape = RoundedCornerShape(12.dp),
+                        border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                            Text(
+                                text = "⏱️ চলমান পোস্ট-রিমাইন্ডার (${HabitScheduleCalculator.toBengaliDigits(minsLeft.toString())} মি. বাকি)",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "$habitTitle • $timeFormatted",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                } else if (nextUpcomingTriggerPair != null) {
+                    val (nextHabit, phaseName, triggerTime) = nextUpcomingTriggerPair
+                    val timeFormatted = HabitScheduleCalculator.formatMillisToBengaliTime(triggerTime)
+
+                    Surface(
+                        color = MaterialTheme.colorScheme.surface,
+                        shape = RoundedCornerShape(12.dp),
+                        border = onePxBorder(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                            Text(
+                                text = "🔔 পরবর্তী অ্যালার্ম • $phaseName ($timeFormatted)",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = nextHabit.title,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                } else {
+                    Text(
+                        text = "সকল রুটিন অফলাইনে সক্রিয় রয়েছে।",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 2. Clean Collapsible Routine Card (Progressive Disclosure):
+ * - Collapsed View: Shows only Category Icon, Title, Main Anchor Time, and primary [✅ সম্পন্ন] button.
+ * - Expanded View (on card tap): Reveals the 3-step visual timeline, active days, and secondary actions.
+ */
+@Composable
+private fun CollapsibleHabitRoutineCard(
     habit: HabitEntity,
     configs: List<ReminderConfigEntity>,
     pendingPostLog: HabitExecutionLogEntity?,
+    isCompletedToday: Boolean,
+    isExpanded: Boolean,
     nowMillis: Long,
+    onToggleExpand: () -> Unit,
     onMarkDoneClick: () -> Unit,
     onSnoozeClick: () -> Unit,
     onTestAlertClick: (String) -> Unit,
@@ -432,31 +682,25 @@ private fun HabitRoutineItemCard(
 ) {
     val isActive = habit.isActive == 1
     val cardBg = if (isActive) {
-        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f).solidOverSurface()
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.26f).solidOverSurface()
     } else {
-        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.14f).solidOverSurface()
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.12f).solidOverSurface()
     }
-    val borderColor = if (isActive) {
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.42f)
-    } else {
-        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+    val borderColor = when {
+        pendingPostLog != null -> MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
+        isActive -> MaterialTheme.colorScheme.primary.copy(alpha = 0.38f)
+        else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
     }
 
-    val categoryBadge = when (habit.category) {
-        HabitScheduleCalculator.CATEGORY_MEAL_LINKED -> "🍽️ খাবার ও পানি"
-        HabitScheduleCalculator.CATEGORY_MEDICATION -> "💊 ওষুধ ও ভেষজ"
-        HabitScheduleCalculator.CATEGORY_HYDRATION -> "💧 হাইড্রেশন"
-        else -> "⏰ কাস্টম রুটিন"
-    }
-
-    val exactCfg = configs.firstOrNull { it.phase == HabitScheduleCalculator.PHASE_EXACT_EVENT }
-    val audioBadge = when (exactCfg?.audioMode) {
-        HabitScheduleCalculator.AUDIO_TTS_VOICE -> "🗣️ বাংলা ভয়েস + টোন"
-        HabitScheduleCalculator.AUDIO_PRESET_TONE -> "🔔 প্রিসেট টোন"
-        else -> "📱 সিস্টেম সাউন্ড"
+    val categoryEmoji = when (habit.category) {
+        HabitScheduleCalculator.CATEGORY_MEAL_LINKED -> "🍽️"
+        HabitScheduleCalculator.CATEGORY_MEDICATION -> "💊"
+        HabitScheduleCalculator.CATEGORY_HYDRATION -> "💧"
+        else -> "⏰"
     }
 
     val (anchorH, anchorM) = HabitScheduleCalculator.parseAnchorTime(habit.anchorTime)
+    val anchorFormatted = HabitScheduleCalculator.formatHourMinuteBengali(anchorH, anchorM)
     val preTimeMillis = HabitScheduleCalculator.calculateNextOccurrenceMillis(
         anchorTime = habit.anchorTime,
         signedOffsetMins = -habit.preOffsetMins,
@@ -464,12 +708,19 @@ private fun HabitRoutineItemCard(
         nowMillis = nowMillis - 12 * 3600_000L
     )
     val preFormatted = HabitScheduleCalculator.formatMillisToBengaliTime(preTimeMillis)
-    val anchorFormatted = HabitScheduleCalculator.formatHourMinuteBengali(anchorH, anchorM)
+
+    val exactCfg = configs.firstOrNull { it.phase == HabitScheduleCalculator.PHASE_EXACT_EVENT }
+    val audioBadge = when (exactCfg?.audioMode) {
+        HabitScheduleCalculator.AUDIO_TTS_VOICE -> "🗣️ বাংলা ভয়েস"
+        HabitScheduleCalculator.AUDIO_PRESET_TONE -> "🔔 সাউন্ড টোন"
+        else -> "📱 সিস্টেম সাউন্ড"
+    }
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .testTag("habit_card_${habit.id}"),
+            .testTag("habit_card_${habit.id}")
+            .clickable { onToggleExpand() },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = cardBg),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
@@ -478,237 +729,344 @@ private fun HabitRoutineItemCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(horizontal = 14.dp, vertical = 12.dp)
         ) {
-            // Top Row: Title + Category + Switch
+            // ── COLLAPSED COMPACT ROW (Only Main Time + Title + Mark Done Button) ──
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    // Category Icon Box
+                    Surface(
+                        color = if (isActive) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                        } else {
+                            MaterialTheme.colorScheme.surface
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        border = onePxBorder(
+                            if (isActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+                            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                        ),
+                        modifier = Modifier.size(44.dp)
                     ) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-                            shape = RoundedCornerShape(6.dp)
-                        ) {
-                            Text(
-                                text = categoryBadge,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
-                            )
-                        }
-                        Surface(
-                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f),
-                            shape = RoundedCornerShape(6.dp)
-                        ) {
-                            Text(
-                                text = audioBadge,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
-                            )
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(categoryEmoji, fontSize = 20.sp)
                         }
                     }
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = habit.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
 
-                Switch(
-                    checked = isActive,
-                    onCheckedChange = { onToggleActive() }
-                )
-            }
+                    Spacer(Modifier.width(12.dp))
 
-            // 3-Phase Timeline Row (Pre -> Anchor -> Dynamic Post)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // Phase 1: Pre-Event
-                PhaseTimelineBadge(
-                    title = "১. প্রি-ইভেন্ট",
-                    subtitle = if (habit.hasPreReminder == 1) {
-                        "${HabitScheduleCalculator.toBengaliDigits(habit.preOffsetMins.toString())}মি আগে ($preFormatted)"
-                    } else {
-                        "বন্ধ আছে"
-                    },
-                    enabled = habit.hasPreReminder == 1 && isActive,
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable { onTestAlertClick(HabitScheduleCalculator.PHASE_PRE_EVENT) }
-                )
-
-                // Phase 2: Exact Anchor Event
-                PhaseTimelineBadge(
-                    title = "২. মূল সময়",
-                    subtitle = anchorFormatted,
-                    enabled = isActive,
-                    isPrimary = true,
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable { onTestAlertClick(HabitScheduleCalculator.PHASE_EXACT_EVENT) }
-                )
-
-                // Phase 3: Post-Event
-                PhaseTimelineBadge(
-                    title = "৩. পোস্ট-ইভেন্ট",
-                    subtitle = if (habit.hasPostReminder == 1) {
-                        "সম্পন্নের ${HabitScheduleCalculator.toBengaliDigits(habit.postOffsetMins.toString())}মি পর"
-                    } else {
-                        "বন্ধ আছে"
-                    },
-                    enabled = habit.hasPostReminder == 1 && isActive,
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable { onTestAlertClick(HabitScheduleCalculator.PHASE_POST_EVENT) }
-                )
-            }
-
-            // Active Dynamic Post-Event Countdown Banner (if scheduled)
-            if (pendingPostLog != null && pendingPostLog.scheduledTime > nowMillis) {
-                val remainingMins = max(1L, (pendingPostLog.scheduledTime - nowMillis + 59_000L) / 60_000L)
-                val targetTimeFormatted = HabitScheduleCalculator.formatMillisToBengaliTime(pendingPostLog.scheduledTime)
-                Surface(
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-                    shape = RoundedCornerShape(10.dp),
-                    border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.40f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Text("⏱️", fontSize = 15.sp)
-                            Spacer(Modifier.width(6.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = habit.title,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isActive) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(Modifier.height(3.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
                             Text(
-                                text = "পোস্ট-ইভেন্ট রিমাইন্ডার বাজবে: $targetTimeFormatted (${HabitScheduleCalculator.toBengaliDigits(remainingMins.toString())} মিনিট বাকি)",
+                                text = "⏰ $anchorFormatted",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary
                             )
+                            if (pendingPostLog != null && pendingPostLog.scheduledTime > nowMillis) {
+                                val minsLeft = max(1L, (pendingPostLog.scheduledTime - nowMillis + 59_000L) / 60_000L)
+                                Surface(
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                    shape = RoundedCornerShape(50)
+                                ) {
+                                    Text(
+                                        text = "⏱️ ${HabitScheduleCalculator.toBengaliDigits(minsLeft.toString())}মি বাকি",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                                    )
+                                }
+                            } else if (isCompletedToday) {
+                                Surface(
+                                    color = Color(0xFF2E7D32).copy(alpha = 0.14f),
+                                    shape = RoundedCornerShape(50)
+                                ) {
+                                    Text(
+                                        text = "✓ আজ সম্পন্ন",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF2E7D32),
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                                    )
+                                }
+                            } else if (!isActive) {
+                                Text(
+                                    text = "• বন্ধ আছে",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 }
-            }
 
-            // Repeat Days Row
-            val activeDays = HabitScheduleCalculator.parseRepeatDays(habit.repeatDays)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "দিন:",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                bengaliWeekDays.forEach { (dayNum, dayLabel) ->
-                    val on = dayNum in activeDays
-                    Surface(
-                        color = if (on) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f) else Color.Transparent,
-                        shape = RoundedCornerShape(6.dp),
-                        border = onePxBorder(
-                            if (on) MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
-                            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-                        )
+                Spacer(Modifier.width(8.dp))
+
+                // Primary Mark Done Button + Expand Chevron
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Button(
+                        onClick = onMarkDoneClick,
+                        modifier = Modifier.testTag("mark_done_${habit.id}"),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 7.dp)
                     ) {
+                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(4.dp))
                         Text(
-                            text = dayLabel,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
-                            color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            text = "সম্পন্ন",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    IconButton(
+                        onClick = onToggleExpand,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (isExpanded) "সংক্ষিপ্ত করুন" else "বিস্তারিত দেখুন",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
             }
 
-            // Action Buttons: [✅ খাবার/রুটিন সম্পন্ন করেছি (Mark Done)] + [🔔 টেস্ট] + [💤 স্নুজ] + [✏️/🗑️]
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
+            // ── EXPANDED DETAILS SECTION (Revealed on Card Tap) ──
+            AnimatedVisibility(
+                visible = isExpanded,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
             ) {
-                Button(
-                    onClick = onMarkDoneClick,
+                Column(
                     modifier = Modifier
-                        .weight(1f)
-                        .testTag("mark_done_${habit.id}"),
-                    shape = RoundedCornerShape(10.dp),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
+                        .fillMaxWidth()
+                        .padding(top = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
+                    HorizontalDivider(
+                        thickness = 0.8.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+
+                    // Active Post-Event Countdown Banner (if active)
+                    if (pendingPostLog != null && pendingPostLog.scheduledTime > nowMillis) {
+                        val remainingMins = max(1L, (pendingPostLog.scheduledTime - nowMillis + 59_000L) / 60_000L)
+                        val targetTimeFormatted = HabitScheduleCalculator.formatMillisToBengaliTime(pendingPostLog.scheduledTime)
+                        Surface(
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                            shape = RoundedCornerShape(10.dp),
+                            border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.40f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("⏱️", fontSize = 15.sp)
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = "পরবর্তী পোস্ট-রিমাইন্ডার বাজবে: $targetTimeFormatted (${HabitScheduleCalculator.toBengaliDigits(remainingMins.toString())} মিনিট বাকি)",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+
+                    // 3-Phase Connected Timeline Badges (Tap any phase to test voice/sound)
                     Text(
-                        text = "সম্পন্ন করেছি (${HabitScheduleCalculator.toBengaliDigits(habit.postOffsetMins.toString())}মি টাইমার)",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        text = "৩-ধাপের অ্যালার্ম টাইমলাইন (যেকোনো ধাপে ট্যাপ করে ভয়েস টেস্ট করুন):",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        PhaseTimelineBadge(
+                            title = "১. প্রি-ইভেন্ট",
+                            subtitle = if (habit.hasPreReminder == 1) {
+                                "${HabitScheduleCalculator.toBengaliDigits(habit.preOffsetMins.toString())}মি আগে ($preFormatted)"
+                            } else {
+                                "বন্ধ আছে"
+                            },
+                            enabled = habit.hasPreReminder == 1 && isActive,
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onTestAlertClick(HabitScheduleCalculator.PHASE_PRE_EVENT) }
+                        )
 
-                FilledTonalIconButton(
-                    onClick = { onTestAlertClick(HabitScheduleCalculator.PHASE_EXACT_EVENT) },
-                    modifier = Modifier.size(38.dp)
-                ) {
-                    Icon(
-                        Icons.Default.VolumeUp,
-                        contentDescription = "টেস্ট অ্যালার্ম ও ভয়েস",
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+                        Text("➔", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
 
-                FilledTonalIconButton(
-                    onClick = onSnoozeClick,
-                    modifier = Modifier.size(38.dp)
-                ) {
-                    Icon(
-                        Icons.Default.Snooze,
-                        contentDescription = "১০ মিনিট স্নুজ",
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+                        PhaseTimelineBadge(
+                            title = "২. মূল সময়",
+                            subtitle = anchorFormatted,
+                            enabled = isActive,
+                            isPrimary = true,
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onTestAlertClick(HabitScheduleCalculator.PHASE_EXACT_EVENT) }
+                        )
 
-                IconButton(
-                    onClick = onEditClick,
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(
-                        Icons.Default.Edit,
-                        contentDescription = "এডিট রুটিন",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+                        Text("➔", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
 
-                IconButton(
-                    onClick = onDeleteClick,
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(
-                        Icons.Default.DeleteOutline,
-                        contentDescription = "ডিলিট রুটিন",
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(18.dp)
-                    )
+                        PhaseTimelineBadge(
+                            title = "৩. পোস্ট-ইভেন্ট",
+                            subtitle = if (habit.hasPostReminder == 1) {
+                                "সম্পন্নের +${HabitScheduleCalculator.toBengaliDigits(habit.postOffsetMins.toString())}মি পর"
+                            } else {
+                                "বন্ধ আছে"
+                            },
+                            enabled = habit.hasPostReminder == 1 && isActive,
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onTestAlertClick(HabitScheduleCalculator.PHASE_POST_EVENT) }
+                        )
+                    }
+
+                    // Weekdays + Audio Badge + Active Switch Row
+                    val activeDays = HabitScheduleCalculator.parseRepeatDays(habit.repeatDays)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .weight(1f)
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            bengaliWeekDays.forEach { (dayNum, dayLabel) ->
+                                val on = dayNum in activeDays
+                                Surface(
+                                    color = if (on) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent,
+                                    shape = RoundedCornerShape(6.dp),
+                                    border = onePxBorder(
+                                        if (on) MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
+                                        else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                                    )
+                                ) {
+                                    Text(
+                                        text = dayLabel,
+                                        fontSize = 10.sp,
+                                        fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                            Surface(
+                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f),
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Text(
+                                    text = audioBadge,
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.width(8.dp))
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = if (isActive) "চালু" else "বন্ধ",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Switch(
+                                checked = isActive,
+                                onCheckedChange = { onToggleActive() }
+                            )
+                        }
+                    }
+
+                    // Clean Secondary Action Toolbar
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedButton(
+                            onClick = { onTestAlertClick(HabitScheduleCalculator.PHASE_EXACT_EVENT) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                        ) {
+                            Icon(Icons.Default.VolumeUp, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("টেস্ট ভয়েস", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
+
+                        OutlinedButton(
+                            onClick = onSnoozeClick,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                        ) {
+                            Icon(Icons.Default.Snooze, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("১০মি স্নুজ", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
+
+                        FilledTonalIconButton(
+                            onClick = onEditClick,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Edit,
+                                contentDescription = "এডিট রুটিন",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(17.dp)
+                            )
+                        }
+
+                        FilledTonalIconButton(
+                            onClick = onDeleteClick,
+                            modifier = Modifier.size(36.dp),
+                            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
+                            )
+                        ) {
+                            Icon(
+                                Icons.Default.DeleteOutline,
+                                contentDescription = "ডিলিট রুটিন",
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(17.dp)
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -741,12 +1099,12 @@ private fun PhaseTimelineBadge(
         modifier = modifier
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp),
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 7.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.labelSmall,
+                fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 color = if (isPrimary) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1
@@ -754,7 +1112,7 @@ private fun PhaseTimelineBadge(
             Spacer(Modifier.height(2.dp))
             Text(
                 text = subtitle,
-                style = MaterialTheme.typography.labelSmall,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
@@ -770,10 +1128,22 @@ private fun ExecutionLogsTabContent(
     habitsById: Map<String, HabitEntity>,
     onClearLogs: () -> Unit
 ) {
+    var statusFilter by remember { mutableStateOf("ALL") }
     val dateFormatter = remember {
         SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault())
     }
-    val baseSurface = MaterialTheme.colorScheme.surface
+
+    val filteredLogs = remember(logs, statusFilter) {
+        when (statusFilter) {
+            "COMPLETED" -> logs.filter { it.status == HabitScheduleCalculator.STATUS_COMPLETED }
+            "PENDING" -> logs.filter { it.status == HabitScheduleCalculator.STATUS_PENDING }
+            "OTHER" -> logs.filter {
+                it.status != HabitScheduleCalculator.STATUS_COMPLETED &&
+                    it.status != HabitScheduleCalculator.STATUS_PENDING
+            }
+            else -> logs
+        }
+    }
 
     if (logs.isEmpty()) {
         Box(
@@ -800,26 +1170,48 @@ private fun ExecutionLogsTabContent(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        item(key = "logs_header") {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "রুটিন ও অ্যালার্ম ট্র্যাকিং লগ (${logs.size})",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                TextButton(onClick = onClearLogs) {
-                    Icon(Icons.Default.DeleteSweep, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("হিস্ট্রি মুছুন")
+        item(key = "logs_header_and_filters") {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "রুটিন ট্র্যাকিং লগ (${filteredLogs.size})",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    TextButton(onClick = onClearLogs) {
+                        Icon(Icons.Default.DeleteSweep, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("হিস্ট্রি মুছুন")
+                    }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(
+                        "ALL" to "সব (${logs.size})",
+                        "COMPLETED" to "✅ সম্পন্ন",
+                        "PENDING" to "⏳ অপেক্ষমাণ",
+                        "OTHER" to "💤 স্নুজড/বন্ধ"
+                    ).forEach { (key, label) ->
+                        FilterChip(
+                            selected = statusFilter == key,
+                            onClick = { statusFilter = key },
+                            label = { Text(label, fontSize = 12.sp) }
+                        )
+                    }
                 }
             }
         }
 
-        items(logs, key = { it.id }) { log ->
+        items(filteredLogs, key = { it.id }) { log ->
             val habitTitle = habitsById[log.habitId]?.title ?: "স্বাস্থ্য রুটিন"
             val phaseLabel = when (log.phase) {
                 HabitScheduleCalculator.PHASE_PRE_EVENT -> "💧 প্রি-ইভেন্ট"
@@ -837,9 +1229,9 @@ private fun ExecutionLogsTabContent(
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(14.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f).solidOverSurface()
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.26f).solidOverSurface()
                 ),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                 border = onePxBorder(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
@@ -853,17 +1245,21 @@ private fun ExecutionLogsTabContent(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "$habitTitle • $phaseLabel",
+                            text = habitTitle,
                             style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         val timeToShow = log.executedTime ?: log.scheduledTime
                         Text(
-                            text = "সময়: ${dateFormatter.format(Date(timeToShow))}",
+                            text = "$phaseLabel • ${dateFormatter.format(Date(timeToShow))}",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+
+                    Spacer(Modifier.width(8.dp))
 
                     Surface(
                         color = statusColor.copy(alpha = 0.14f),
