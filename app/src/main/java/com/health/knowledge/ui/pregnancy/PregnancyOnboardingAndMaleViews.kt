@@ -1,11 +1,15 @@
 package com.health.knowledge.ui.pregnancy
 
 import android.app.DatePickerDialog
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -16,6 +20,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -43,8 +49,11 @@ import com.health.knowledge.util.UserPreferencesManager
 import java.util.Calendar
 
 /**
- * Dynamic, visual Profile Setup / Onboarding Wizard shown when a user first enters
- * "প্রেগন্যান্সি — আগে ও পরে" or taps the profile edit icon.
+ * Step-by-Step Profile Setup / Onboarding Wizard for "প্রেগন্যান্সি — আগে ও পরে".
+ * Guides users sequentially:
+ * - Step 1: Gender (Male -> direct entry to Male Dashboard; Female -> advances to Step 2)
+ * - Step 2: Stage (Planning vs Pregnant)
+ * - Step 3: Dates, cycle length, and symptoms report
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -65,11 +74,16 @@ fun PregnancyProfileOnboardingView(
 ) {
     val context = LocalContext.current
 
+    var currentStep by remember { mutableIntStateOf(1) }
     var selectedGender by remember(initialGender) { mutableStateOf(initialGender) }
     var selectedStage by remember(initialStageMode) { mutableStateOf(initialStageMode) }
     var pickedDateMillis by remember(initialStartMillis) { mutableLongStateOf(initialStartMillis) }
     var selectedCycleDays by remember(initialCycleDays) { mutableIntStateOf(initialCycleDays) }
     var selectedSymptoms by remember(initialSymptoms) { mutableStateOf(initialSymptoms) }
+
+    val isMale = selectedGender == UserPreferencesManager.GENDER_MALE
+    val totalSteps = if (isMale) 1 else 3
+    val progress = if (isMale) 1f else (currentStep.toFloat() / 3f)
 
     val liveTimeline = remember(pickedDateMillis, selectedCycleDays) {
         PregnancyPlannerEngine.calculateTimelineStatus(
@@ -105,340 +119,488 @@ fun PregnancyProfileOnboardingView(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Welcome Header Banner
+        // Step Indicator & Progress Header
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("pregnancy_onboarding_banner"),
+                .testTag("pregnancy_onboarding_progress_card"),
             shape = RoundedCornerShape(18.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.38f).solidOverSurface()
+                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f).solidOverSurface()
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-            border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.42f))
+            border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.38f))
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Surface(
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                    shape = CircleShape,
-                    modifier = Modifier.size(54.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text("🤱", fontSize = 26.sp)
-                    }
-                }
-                Text(
-                    text = "আপনার প্রোফাইল সাজিয়ে নিন",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = "সঠিক স্বাস্থ্য পরামর্শ ও ডেলিভারি হিসাব পেতে নিচের তথ্যগুলো নির্বাচন করুন",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
-            }
-        }
-
-        // STEP 1: Gender Selection (👨 পুরুষ vs 👩 নারী)
-        Text(
-            text = "১. আপনার জেন্ডার নির্বাচন করুন",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            OnboardingChoiceCard(
-                emoji = "👩",
-                titleBn = "নারী",
-                subtitleBn = "প্ল্যানিং ও গর্ভকালীন গাইড",
-                isSelected = selectedGender == UserPreferencesManager.GENDER_FEMALE,
-                onClick = { selectedGender = UserPreferencesManager.GENDER_FEMALE },
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("select_gender_female")
-            )
-
-            OnboardingChoiceCard(
-                emoji = "👨",
-                titleBn = "পুরুষ",
-                subtitleBn = "স্বাস্থ্য ট্রিকস ও বাবার করণীয়",
-                isSelected = selectedGender == UserPreferencesManager.GENDER_MALE,
-                onClick = { selectedGender = UserPreferencesManager.GENDER_MALE },
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("select_gender_male")
-            )
-        }
-
-        // If MALE is selected -> Show Male Highlights Card
-        AnimatedVisibility(
-            visible = selectedGender == UserPreferencesManager.GENDER_MALE,
-            enter = expandVertically() + fadeIn(),
-            exit = shrinkVertically() + fadeOut()
-        ) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f).solidOverSurface()
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.38f))
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "👨 পুরুষদের ড্যাশবোর্ডে যা থাকছে:",
+                        text = when {
+                            isMale -> "ধাপ ১ / ১ • আপনার পরিচয়"
+                            currentStep == 1 -> "ধাপ ১ / ৩ • আপনার পরিচয়"
+                            currentStep == 2 -> "ধাপ ২ / ৩ • বর্তমান অবস্থা"
+                            else -> "ধাপ ৩ / ৩ • তারিখ ও লক্ষণ"
+                        },
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
-                    Text(
-                        text = "• পুরুষের ফার্টিলিটি ও হরমোন বৃদ্ধির প্রাকৃতিক হেলথ ট্রিকস\n• সুন্নাহ সুপারফুড (কালোজিরা, মধু, খেজুর, ডুমুর ও জয়তুন)\n• সন্তান নেওয়ার আগে ও স্ত্রীর গর্ভকালে হবু বাবার করণীয়\n• নেক সন্তান লাভের কুরআনি দোয়া ও প্রতিদিনের রিমাইন্ডার",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        lineHeight = 20.sp
-                    )
+
+                    Surface(
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = if (isMale) "১০০%" else "${(progress * 100).toInt()}% সম্পন্ন",
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
+
+                LinearProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                    drawStopIndicator = {}
+                )
             }
         }
 
-        // If FEMALE is selected -> Step 2 (Planning vs Pregnant) + Step 3 (LMP Date, Cycle & Symptoms)
-        AnimatedVisibility(
-            visible = selectedGender == UserPreferencesManager.GENDER_FEMALE,
-            enter = expandVertically() + fadeIn(),
-            exit = shrinkVertically() + fadeOut()
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text(
-                    text = "২. আপনার বর্তমান অবস্থা কোনটি?",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    OnboardingChoiceCard(
-                        emoji = "🌱",
-                        titleBn = "প্ল্যান করছি",
-                        subtitleBn = "সন্তান নেওয়ার প্রস্তুতি",
-                        isSelected = selectedStage == UserPreferencesManager.STAGE_PRE_CONCEPTION,
-                        onClick = {
-                            selectedStage = UserPreferencesManager.STAGE_PRE_CONCEPTION
-                            // Default last period to 12 days ago if previous date was far in the past
-                            val now = System.currentTimeMillis()
-                            if (now - pickedDateMillis > 35L * 86_400_000L) {
-                                pickedDateMillis = now - 12L * 86_400_000L
-                            }
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("select_stage_planning")
+        // Animated Step Content
+        AnimatedContent(
+            targetState = if (isMale) 1 else currentStep,
+            transitionSpec = {
+                if (targetState > initialState) {
+                    (slideInHorizontally { width -> width / 2 } + fadeIn()).togetherWith(
+                        slideOutHorizontally { width -> -width / 2 } + fadeOut()
                     )
-
-                    OnboardingChoiceCard(
-                        emoji = "🤰",
-                        titleBn = "গর্ভবতী",
-                        subtitleBn = "মাসিক বন্ধ হয়েছে",
-                        isSelected = selectedStage == UserPreferencesManager.STAGE_POST_CONCEPTION,
-                        onClick = { selectedStage = UserPreferencesManager.STAGE_POST_CONCEPTION },
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("select_stage_pregnant")
+                } else {
+                    (slideInHorizontally { width -> -width / 2 } + fadeIn()).togetherWith(
+                        slideOutHorizontally { width -> width / 2 } + fadeOut()
                     )
                 }
-
-                // STEP 3: Menstrual Report & Symptoms
-                Text(
-                    text = if (selectedStage == UserPreferencesManager.STAGE_POST_CONCEPTION) {
-                        "৩. কবে মাসিক বন্ধ হয়েছে ও লক্ষণ রিপোর্ট"
-                    } else {
-                        "৩. শেষ মাসিকের তারিখ ও চক্রের তথ্য"
-                    },
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.26f).solidOverSurface()
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                    border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.38f))
-                ) {
+            },
+            label = "OnboardingStepContent"
+        ) { step ->
+            when (step) {
+                1 -> {
+                    // STEP 1: Gender Selection
                     Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        // Date Picker Row
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = if (selectedStage == UserPreferencesManager.STAGE_POST_CONCEPTION) {
-                                        "শেষ মাসিকের প্রথম দিন (মাসিক বন্ধ)"
-                                    } else {
-                                        "সর্বশেষ মাসিক শুরুর তারিখ"
-                                    },
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(Modifier.height(2.dp))
-                                Text(
-                                    text = HabitDateAndReportEngine.formatFullDateBn(pickedDateMillis),
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-
-                            FilledTonalButton(
-                                onClick = ::openLmpDatePicker,
-                                shape = RoundedCornerShape(10.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                            ) {
-                                Text("তারিখ দিন", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-
-                        // Cycle Days Selector (26..35 days)
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(
-                                text = "মাসিক চক্রের গড় দিন: ${HabitScheduleCalculator.toBengaliDigits(selectedCycleDays.toString())} দিন",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.SemiBold,
+                                text = "আপনার জেন্ডার নির্বাচন করুন",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
-                            Row(
+                            Text(
+                                text = "আপনার পরিচয় অনুযায়ী সঠিক হেলথ গাইড ও টিপস সাজানো হবে।",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            OnboardingChoiceCard(
+                                emoji = "👩",
+                                titleBn = "নারী",
+                                subtitleBn = "প্ল্যানিং ও গর্ভকালীন গাইড",
+                                isSelected = selectedGender == UserPreferencesManager.GENDER_FEMALE,
+                                onClick = {
+                                    selectedGender = UserPreferencesManager.GENDER_FEMALE
+                                },
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    .weight(1f)
+                                    .testTag("select_gender_female")
+                            )
+
+                            OnboardingChoiceCard(
+                                emoji = "👨",
+                                titleBn = "পুরুষ",
+                                subtitleBn = "ফার্টিলিটি ট্রিকস ও বাবার দায়িত্ব",
+                                isSelected = selectedGender == UserPreferencesManager.GENDER_MALE,
+                                onClick = {
+                                    selectedGender = UserPreferencesManager.GENDER_MALE
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("select_gender_male")
+                            )
+                        }
+
+                        // Male Features Preview Card
+                        AnimatedVisibility(
+                            visible = selectedGender == UserPreferencesManager.GENDER_MALE,
+                            enter = expandVertically() + fadeIn(),
+                            exit = shrinkVertically() + fadeOut()
+                        ) {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f).solidOverSurface()
+                                ),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                                border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
                             ) {
-                                listOf(26, 27, 28, 29, 30, 32, 35).forEach { days ->
-                                    val isChosen = selectedCycleDays == days
-                                    FilterChip(
-                                        selected = isChosen,
-                                        onClick = { selectedCycleDays = days },
-                                        label = {
-                                            Text(
-                                                text = "${HabitScheduleCalculator.toBengaliDigits(days.toString())} দিন",
-                                                fontSize = 12.sp,
-                                                fontWeight = if (isChosen) FontWeight.Bold else FontWeight.Medium
-                                            )
-                                        }
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(
+                                        text = "👨 পুরুষদের ড্যাশবোর্ডে যা যা থাকছে:",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        text = "• টেস্টোস্টেরন ও ফার্টিলিটি বৃদ্ধির ৭টি কার্যকরী ট্রিকস\n• সুন্নাহ সুপারফুড তালিকা (কালোজিরা-মধু, ডুমুর ও জয়তুন)\n• গর্ভকালীন স্ত্রীর যত্ন ও হবু বাবার দায়িত্ব চেকলিস্ট\n• নেক সন্তান লাভের কুরআনি দোয়া ও সময়োপযোগী আমল",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        lineHeight = 20.sp
                                     )
                                 }
                             }
                         }
+                    }
+                }
 
-                        // Instant Live Calculation Preview inside Onboarding!
-                        Surface(
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                            shape = RoundedCornerShape(12.dp),
-                            border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
-                            modifier = Modifier.fillMaxWidth()
+                2 -> {
+                    // STEP 2: Female Stage Selection (Planning vs Pregnant)
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = "আপনার বর্তমান অবস্থা কোনটি?",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "আপনার মাতৃত্বের বর্তমান পর্যায় নির্বাচন করুন যাতে সঠিক ট্র্যাকার সক্রিয় হয়।",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            OnboardingChoiceCard(
+                                emoji = "🌱",
+                                titleBn = "প্ল্যান করছি",
+                                subtitleBn = "সন্তান নেওয়ার পূর্বপ্রস্তুতি ও ওভুলেশন",
+                                isSelected = selectedStage == UserPreferencesManager.STAGE_PRE_CONCEPTION,
+                                onClick = {
+                                    selectedStage = UserPreferencesManager.STAGE_PRE_CONCEPTION
+                                    val now = System.currentTimeMillis()
+                                    if (now - pickedDateMillis > 35L * 86_400_000L) {
+                                        pickedDateMillis = now - 12L * 86_400_000L
+                                    }
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("select_stage_planning")
+                            )
+
+                            OnboardingChoiceCard(
+                                emoji = "🤰",
+                                titleBn = "গর্ভবতী",
+                                subtitleBn = "মাসিক বন্ধ হয়েছে • সাপ্তাহিক বৃদ্ধি",
+                                isSelected = selectedStage == UserPreferencesManager.STAGE_POST_CONCEPTION,
+                                onClick = {
+                                    selectedStage = UserPreferencesManager.STAGE_POST_CONCEPTION
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("select_stage_pregnant")
+                            )
+                        }
+
+                        // Guidance Card for Stage Selection
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f).solidOverSurface()
+                            ),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                            border = onePxBorder(MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                                    shape = CircleShape,
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text(
+                                            text = if (selectedStage == UserPreferencesManager.STAGE_PRE_CONCEPTION) "💡" else "🩺",
+                                            fontSize = 18.sp
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = if (selectedStage == UserPreferencesManager.STAGE_PRE_CONCEPTION) {
+                                        "পরবর্তী ধাপে আপনার সর্বশেষ মাসিকের দিন দিয়ে সম্ভাব্য ওভুলেশন ও উর্বর সময় জানা যাবে।"
+                                    } else {
+                                        "পরবর্তী ধাপে মাসিক বন্ধের তারিখ দিয়ে স্বয়ংক্রিয় সম্ভাব্য ডেলিভারি তারিখ (EDD) ও শিশুর বৃদ্ধি দেখা যাবে।"
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    lineHeight = 18.sp
+                                )
+                            }
+                        }
+                    }
+                }
+
+                else -> {
+                    // STEP 3: Dates, Menstrual Cycle & Symptoms
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = if (selectedStage == UserPreferencesManager.STAGE_POST_CONCEPTION) {
+                                    "কবে মাসিক বন্ধ হয়েছে ও লক্ষণ রিপোর্ট"
+                                } else {
+                                    "শেষ মাসিকের তারিখ ও লক্ষণ রিপোর্ট"
+                                },
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "সঠিক দিন গণনা ও তাৎক্ষণিক ঘরোয়া পরামর্শ পেতে তথ্যগুলো পূরণ করুন।",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        // Date Picker Card with Live Preview
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f).solidOverSurface()
+                            ),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                            border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.38f))
                         ) {
                             Column(
-                                modifier = Modifier.padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                if (selectedStage == UserPreferencesManager.STAGE_POST_CONCEPTION) {
-                                    Text(
-                                        text = "✨ আজ ${HabitScheduleCalculator.toBengaliDigits(liveTimeline.elapsedDays.toString())} দিন হলো (${HabitScheduleCalculator.toBengaliDigits(liveTimeline.currentWeek.toString())} সপ্তাহ)",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                    Text(
-                                        text = "🎯 সম্ভাব্য ডেলিভারি: ${liveTimeline.eddDateFormattedBn}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                } else {
-                                    Text(
-                                        text = "🌸 সম্ভাব্য উর্বর সময়: ${liveFertile.fertileStartFormattedBn} – ${liveFertile.fertileEndFormattedBn}",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                    Text(
-                                        text = "সম্ভাব্য ওভুলেশন দিন: ${liveFertile.ovulationDateFormattedBn}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = if (selectedStage == UserPreferencesManager.STAGE_POST_CONCEPTION) {
+                                                "শেষ মাসিকের প্রথম দিন (মাসিক বন্ধ)"
+                                            } else {
+                                                "সর্বশেষ মাসিক শুরুর তারিখ"
+                                            },
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Spacer(Modifier.height(2.dp))
+                                        Text(
+                                            text = HabitDateAndReportEngine.formatFullDateBn(pickedDateMillis),
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+
+                                    FilledTonalButton(
+                                        onClick = ::openLmpDatePicker,
+                                        shape = RoundedCornerShape(10.dp),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                    ) {
+                                        Text("তারিখ দিন", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+
+                                // Instant Live Calculation Preview
+                                Surface(
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.38f)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        if (selectedStage == UserPreferencesManager.STAGE_POST_CONCEPTION) {
+                                            Text(
+                                                text = "✨ আজ ${HabitScheduleCalculator.toBengaliDigits(liveTimeline.elapsedDays.toString())} দিন হলো (${HabitScheduleCalculator.toBengaliDigits(liveTimeline.currentWeek.toString())} সপ্তাহ)",
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                            Text(
+                                                text = "🎯 সম্ভাব্য ডেলিভারি: ${liveTimeline.eddDateFormattedBn}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        } else {
+                                            Text(
+                                                text = "🌸 সম্ভাব্য উর্বর সময়: ${liveFertile.fertileStartFormattedBn} – ${liveFertile.fertileEndFormattedBn}",
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                            Text(
+                                                text = "সম্ভাব্য ওভুলেশন দিন: ${liveFertile.ovulationDateFormattedBn}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Cycle Days Selector (26..35 days)
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f).solidOverSurface()
+                            ),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                            border = onePxBorder(MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "মাসিক চক্রের গড় দিন: ${HabitScheduleCalculator.toBengaliDigits(selectedCycleDays.toString())} দিন",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    listOf(26, 27, 28, 29, 30, 32, 35).forEach { days ->
+                                        val isChosen = selectedCycleDays == days
+                                        FilterChip(
+                                            selected = isChosen,
+                                            onClick = { selectedCycleDays = days },
+                                            label = {
+                                                Text(
+                                                    text = "${HabitScheduleCalculator.toBengaliDigits(days.toString())} দিন",
+                                                    fontSize = 12.sp,
+                                                    fontWeight = if (isChosen) FontWeight.Bold else FontWeight.Medium
+                                                )
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }
 
                         // Symptom Selector Chips
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(
-                                text = "বর্তমান শারীরিক লক্ষণ (ট্যাপ করুন):",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            FlowRow(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f).solidOverSurface()
+                            ),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                            border = onePxBorder(MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                PregnancyPlannerEngine.symptomOptions.forEach { sym ->
-                                    val selected = sym.id in selectedSymptoms
-                                    FilterChip(
-                                        selected = selected,
-                                        onClick = {
-                                            val next = selectedSymptoms.toMutableSet()
-                                            if (sym.id == "normal") {
-                                                next.clear()
-                                                next.add("normal")
-                                            } else {
-                                                next.remove("normal")
-                                                if (sym.id in next) next.remove(sym.id) else next.add(sym.id)
-                                                if (next.isEmpty()) next.add("normal")
+                                Text(
+                                    text = "বর্তমান শারীরিক লক্ষণ (প্রযোজ্যগুলো সিলেক্ট করুন):",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                FlowRow(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    PregnancyPlannerEngine.symptomOptions.forEach { sym ->
+                                        val selected = sym.id in selectedSymptoms
+                                        FilterChip(
+                                            selected = selected,
+                                            onClick = {
+                                                val next = selectedSymptoms.toMutableSet()
+                                                if (sym.id == "normal") {
+                                                    next.clear()
+                                                    next.add("normal")
+                                                } else {
+                                                    next.remove("normal")
+                                                    if (sym.id in next) next.remove(sym.id) else next.add(sym.id)
+                                                    if (next.isEmpty()) next.add("normal")
+                                                }
+                                                selectedSymptoms = next
+                                            },
+                                            label = {
+                                                Text(
+                                                    text = "${sym.emoji} ${sym.labelBn}",
+                                                    fontSize = 12.sp,
+                                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+                                                )
                                             }
-                                            selectedSymptoms = next
-                                        },
-                                        label = {
-                                            Text(
-                                                text = "${sym.emoji} ${sym.labelBn}",
-                                                fontSize = 12.sp,
-                                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
-                                            )
-                                        }
-                                    )
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -447,28 +609,82 @@ fun PregnancyProfileOnboardingView(
             }
         }
 
-        // Submit Button
-        Button(
-            onClick = {
-                onCompleteSetup(
-                    selectedGender,
-                    selectedStage,
-                    pickedDateMillis,
-                    selectedCycleDays,
-                    selectedSymptoms
-                )
-            },
+        // Navigation Buttons Bar
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(50.dp)
-                .testTag("complete_pregnancy_onboarding_button"),
-            shape = RoundedCornerShape(14.dp)
+                .padding(top = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "ড্যাশবোর্ডে যান",
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold
-            )
+            if (!isMale && currentStep > 1) {
+                OutlinedButton(
+                    onClick = { currentStep -= 1 },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(50.dp)
+                        .testTag("onboarding_prev_button"),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "পূর্ববর্তী",
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = "পূর্ববর্তী",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            Button(
+                onClick = {
+                    if (isMale) {
+                        onCompleteSetup(
+                            selectedGender,
+                            selectedStage,
+                            pickedDateMillis,
+                            selectedCycleDays,
+                            selectedSymptoms
+                        )
+                    } else {
+                        if (currentStep < 3) {
+                            currentStep += 1
+                        } else {
+                            onCompleteSetup(
+                                selectedGender,
+                                selectedStage,
+                                pickedDateMillis,
+                                selectedCycleDays,
+                                selectedSymptoms
+                            )
+                        }
+                    }
+                },
+                modifier = Modifier
+                    .weight(if (!isMale && currentStep > 1) 1.5f else 1f)
+                    .height(50.dp)
+                    .testTag(
+                        if (isMale) "onboarding_start_male_button"
+                        else if (currentStep < 3) "onboarding_next_step_button"
+                        else "complete_pregnancy_onboarding_button"
+                    ),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                val buttonText = when {
+                    isMale -> "শুরু করুন 🚀"
+                    currentStep < 3 -> "পরবর্তী ধাপ ➔"
+                    else -> "প্রোফাইল সম্পন্ন করুন ✨"
+                }
+                Text(
+                    text = buttonText,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
     }
 }

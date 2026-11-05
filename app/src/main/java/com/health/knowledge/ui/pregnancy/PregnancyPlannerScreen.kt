@@ -173,8 +173,8 @@ fun PregnancyPlannerScreen(
                                 text = when {
                                     !isOnboarded -> "প্রোফাইল সেটআপ"
                                     userGender == UserPreferencesManager.GENDER_MALE -> "👨 পুরুষ স্বাস্থ্য ও পিতৃত্ব গাইড"
-                                    stageMode == UserPreferencesManager.STAGE_PRE_CONCEPTION -> "🌱 সন্তান নেওয়ার পরিকল্পনা"
-                                    else -> "${timelineStatus.trimesterLabelBn} • ${HabitScheduleCalculator.toBengaliDigits(timelineStatus.currentWeek.toString())} সপ্তাহ"
+                                    stageMode == UserPreferencesManager.STAGE_PRE_CONCEPTION -> "🌱 সন্তান নেওয়ার পরিকল্পনা • উর্বর সময় ট্র্যাকার"
+                                    else -> "${timelineStatus.trimesterLabelBn} • ${HabitScheduleCalculator.toBengaliDigits(timelineStatus.currentWeek.toString())} সপ্তাহ (${HabitScheduleCalculator.toBengaliDigits(timelineStatus.elapsedDays.toString())} দিন)"
                                 },
                                 color = Color.White.copy(alpha = 0.88f),
                                 fontSize = 12.sp,
@@ -225,40 +225,6 @@ fun PregnancyPlannerScreen(
                                 }
                             }
                         }
-                    }
-                }
-
-                // Show Female Stage Switcher only when onboarded as Female
-                if (isOnboarded && userGender == UserPreferencesManager.GENDER_FEMALE) {
-                    TabRow(
-                        selectedTabIndex = if (stageMode == UserPreferencesManager.STAGE_PRE_CONCEPTION) 0 else 1,
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = Color.White
-                    ) {
-                        Tab(
-                            selected = stageMode == UserPreferencesManager.STAGE_PRE_CONCEPTION,
-                            onClick = { viewModel.setStageMode(UserPreferencesManager.STAGE_PRE_CONCEPTION) },
-                            text = {
-                                Text(
-                                    text = "🌱 আগে (প্রস্তুতি)",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp
-                                )
-                            },
-                            modifier = Modifier.testTag("tab_pre_conception")
-                        )
-                        Tab(
-                            selected = stageMode == UserPreferencesManager.STAGE_POST_CONCEPTION,
-                            onClick = { viewModel.setStageMode(UserPreferencesManager.STAGE_POST_CONCEPTION) },
-                            text = {
-                                Text(
-                                    text = "🤰 পরে (গর্ভকাল)",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp
-                                )
-                            },
-                            modifier = Modifier.testTag("tab_post_conception")
-                        )
                     }
                 }
             }

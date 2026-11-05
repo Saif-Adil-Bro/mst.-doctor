@@ -1,6 +1,6 @@
 {
-  "summary": "'প্রেগন্যান্সি — আগে ও পরে' মডিউলের নতুন ডায়নামিক অনবোর্ডিং (জেন্ডার নির্বাচন: পুরুষ/নারী, নারীর ক্ষেত্রে প্ল্যানিং বনাম গর্ভবতী, শেষ মাসিকের তারিখ, মাসিক চক্রের দিন ও লক্ষণ রিপোর্ট) এবং প্রোফাইল অনুযায়ী পার্সোনালাইজড ইউআই/ইউএক্স রিডিজাইন পরিকল্পনা।",
-  "updatedAt": "2026-11-05T09:40:59.842572236Z",
+  "summary": "Implementation plan to redesign the pregnancy onboarding into a smooth, interactive 3-step wizard (Step 1: Gender, Step 2: Planning vs Pregnant, Step 3: Dates & Symptoms), where male users transition immediately to the male dashboard, while female users enjoy an animated, focused step-by-step onboarding flow.",
+  "updatedAt": "2026-11-05T12:47:50.469911537Z",
   "requestFeedback": true,
   "userFacing": true
 }
