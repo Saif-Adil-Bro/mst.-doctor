@@ -252,5 +252,30 @@ class HabitScheduleCalculatorTest {
             assertEquals(week, growth.week)
             assertTrue(growth.sizeComparisonBn.isNotBlank())
         }
+
+        // Verify cycle-adjusted EDD (30-day cycle adds +2 days -> 282 total days)
+        val status30Cycle = com.health.knowledge.pregnancy.PregnancyPlannerEngine.calculateTimelineStatus(
+            startMillis = startMillis,
+            cycleDays = 30,
+            referenceDateMillis = refMillis
+        )
+        assertEquals(182, status30Cycle.remainingDays)
+        assertEquals(30, status30Cycle.cycleDays)
+
+        // Verify Fertile Window & Ovulation calculation (14 days into a 28-day cycle = ovulation day)
+        val lmpMillis = HabitDateAndReportEngine.addDays(refMillis, -13) // Day 14 of cycle
+        val fertileStatus = com.health.knowledge.pregnancy.PregnancyPlannerEngine.calculateFertileWindow(
+            lastPeriodStartMillis = lmpMillis,
+            cycleDays = 28,
+            referenceDateMillis = refMillis
+        )
+        assertEquals(14, fertileStatus.currentCycleDay)
+        assertTrue(fertileStatus.isCurrentlyFertile)
+        assertTrue(fertileStatus.statusHeadlineBn.isNotBlank())
+
+        // Verify male health catalog and symptom options are populated
+        assertTrue(com.health.knowledge.pregnancy.PregnancyPlannerEngine.maleHealthTipsCatalog.size >= 6)
+        assertTrue(com.health.knowledge.pregnancy.PregnancyPlannerEngine.symptomOptions.size >= 7)
     }
 }
+

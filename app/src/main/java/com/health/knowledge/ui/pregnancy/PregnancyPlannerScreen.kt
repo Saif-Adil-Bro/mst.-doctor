@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.health.knowledge.habit.HabitScheduleCalculator
+import com.health.knowledge.pregnancy.FertileWindowStatus
 import com.health.knowledge.pregnancy.IslamicPregnancyAmal
 import com.health.knowledge.pregnancy.PregnancyChecklistItem
 import com.health.knowledge.pregnancy.PregnancyPlannerEngine
@@ -55,14 +56,28 @@ fun PregnancyPlannerScreen(
     BackHandler { onBack() }
 
     val context = LocalContext.current
+    val isOnboarded by viewModel.isOnboarded.collectAsState()
+    val userGender by viewModel.userGender.collectAsState()
     val stageMode by viewModel.stageMode.collectAsState()
     val startMillis by viewModel.pregnancyStartMillis.collectAsState()
+    val cycleDays by viewModel.cycleDays.collectAsState()
+    val selectedSymptoms by viewModel.selectedSymptoms.collectAsState()
     val completedChecks by viewModel.completedChecks.collectAsState()
     val allHabits by viewModel.allHabits.collectAsState()
     val quoteIndex by viewModel.quoteIndex.collectAsState()
 
-    val timelineStatus = remember(startMillis) {
-        PregnancyPlannerEngine.calculateTimelineStatus(startMillis)
+    val timelineStatus = remember(startMillis, cycleDays) {
+        PregnancyPlannerEngine.calculateTimelineStatus(
+            startMillis = startMillis,
+            cycleDays = cycleDays
+        )
+    }
+
+    val fertileStatus = remember(startMillis, cycleDays) {
+        PregnancyPlannerEngine.calculateFertileWindow(
+            lastPeriodStartMillis = startMillis,
+            cycleDays = cycleDays
+        )
     }
 
     var selectedWeekForGrowth by remember(timelineStatus.currentWeek) {
@@ -90,7 +105,7 @@ fun PregnancyPlannerScreen(
                     set(Calendar.MILLISECOND, 0)
                 }.timeInMillis
                 viewModel.updateStartDateMillis(picked)
-                Toast.makeText(context, "✅ শুরুর তারিখ আপডেট হয়েছে", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "✅ তারিখ আপডেট হয়েছে", Toast.LENGTH_SHORT).show()
             },
             cal.get(Calendar.YEAR),
             cal.get(Calendar.MONTH),
@@ -155,10 +170,11 @@ fun PregnancyPlannerScreen(
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = if (stageMode == UserPreferencesManager.STAGE_PRE_CONCEPTION) {
-                                    "সন্তান নেওয়ার পূর্বপ্রস্তুতি ও দোয়া"
-                                } else {
-                                    "${timelineStatus.trimesterLabelBn} • ${HabitScheduleCalculator.toBengaliDigits(timelineStatus.currentWeek.toString())} সপ্তাহ"
+                                text = when {
+                                    !isOnboarded -> "প্রোফাইল সেটআপ"
+                                    userGender == UserPreferencesManager.GENDER_MALE -> "👨 পুরুষ স্বাস্থ্য ও পিতৃত্ব গাইড"
+                                    stageMode == UserPreferencesManager.STAGE_PRE_CONCEPTION -> "🌱 সন্তান নেওয়ার পরিকল্পনা"
+                                    else -> "${timelineStatus.trimesterLabelBn} • ${HabitScheduleCalculator.toBengaliDigits(timelineStatus.currentWeek.toString())} সপ্তাহ"
                                 },
                                 color = Color.White.copy(alpha = 0.88f),
                                 fontSize = 12.sp,
@@ -168,122 +184,201 @@ fun PregnancyPlannerScreen(
                         }
                     }
 
-                    // Pure Icon Button for Calendar Date Setup
-                    Surface(
-                        color = Color.White.copy(alpha = 0.2f),
-                        shape = CircleShape,
-                        modifier = Modifier
-                            .size(38.dp)
-                            .testTag("pregnancy_calendar_button")
-                            .clickable {
-                                viewModel.setStageMode(UserPreferencesManager.STAGE_POST_CONCEPTION)
-                                openStartDatePicker()
+                    // Pure Icon Buttons: Profile Setup & Calendar Date
+                    if (isOnboarded) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Surface(
+                                color = Color.White.copy(alpha = 0.2f),
+                                shape = CircleShape,
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .testTag("pregnancy_profile_edit_button")
+                                    .clickable { viewModel.reopenOnboarding() }
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.ManageAccounts,
+                                        contentDescription = "প্রোফাইল",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Default.CalendarMonth,
-                                contentDescription = "তারিখ নির্বাচন",
-                                tint = Color.White,
-                                modifier = Modifier.size(20.dp)
-                            )
+
+                            if (userGender == UserPreferencesManager.GENDER_FEMALE) {
+                                Surface(
+                                    color = Color.White.copy(alpha = 0.2f),
+                                    shape = CircleShape,
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .testTag("pregnancy_calendar_button")
+                                        .clickable { openStartDatePicker() }
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Default.CalendarMonth,
+                                            contentDescription = "তারিখ নির্বাচন",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
 
-                // Stage Switcher: 🌱 আগে (প্রস্তুতি) | 🤰 পরে (গর্ভকাল)
-                TabRow(
-                    selectedTabIndex = if (stageMode == UserPreferencesManager.STAGE_PRE_CONCEPTION) 0 else 1,
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = Color.White
-                ) {
-                    Tab(
-                        selected = stageMode == UserPreferencesManager.STAGE_PRE_CONCEPTION,
-                        onClick = { viewModel.setStageMode(UserPreferencesManager.STAGE_PRE_CONCEPTION) },
-                        text = {
-                            Text(
-                                text = "🌱 আগে (প্রস্তুতি)",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            )
-                        },
-                        modifier = Modifier.testTag("tab_pre_conception")
-                    )
-                    Tab(
-                        selected = stageMode == UserPreferencesManager.STAGE_POST_CONCEPTION,
-                        onClick = { viewModel.setStageMode(UserPreferencesManager.STAGE_POST_CONCEPTION) },
-                        text = {
-                            Text(
-                                text = "🤰 পরে (গর্ভকাল)",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            )
-                        },
-                        modifier = Modifier.testTag("tab_post_conception")
-                    )
+                // Show Female Stage Switcher only when onboarded as Female
+                if (isOnboarded && userGender == UserPreferencesManager.GENDER_FEMALE) {
+                    TabRow(
+                        selectedTabIndex = if (stageMode == UserPreferencesManager.STAGE_PRE_CONCEPTION) 0 else 1,
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = Color.White
+                    ) {
+                        Tab(
+                            selected = stageMode == UserPreferencesManager.STAGE_PRE_CONCEPTION,
+                            onClick = { viewModel.setStageMode(UserPreferencesManager.STAGE_PRE_CONCEPTION) },
+                            text = {
+                                Text(
+                                    text = "🌱 আগে (প্রস্তুতি)",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                            },
+                            modifier = Modifier.testTag("tab_pre_conception")
+                        )
+                        Tab(
+                            selected = stageMode == UserPreferencesManager.STAGE_POST_CONCEPTION,
+                            onClick = { viewModel.setStageMode(UserPreferencesManager.STAGE_POST_CONCEPTION) },
+                            text = {
+                                Text(
+                                    text = "🤰 পরে (গর্ভকাল)",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                            },
+                            modifier = Modifier.testTag("tab_post_conception")
+                        )
+                    }
                 }
             }
         }
     ) { paddingValues ->
-        if (stageMode == UserPreferencesManager.STAGE_PRE_CONCEPTION) {
-            PreConceptionStageContent(
-                quote = currentQuote,
-                completedChecks = completedChecks,
-                activeHabitIds = activeHabitIds,
-                onNextQuote = viewModel::nextQuote,
-                onSpeakText = viewModel::speakBengaliPrompt,
-                onToggleCheck = viewModel::toggleCheckItem,
-                onToggleReminderPreset = { preset ->
-                    viewModel.togglePregnancyReminderPreset(preset) { isNowActive ->
-                        val msg = if (isNowActive) "✅ অ্যালার্ম চালু হয়েছে!" else "🔕 অ্যালার্ম বন্ধ করা হয়েছে"
-                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                    }
-                },
-                onSwitchToPostConception = {
-                    viewModel.setStageMode(UserPreferencesManager.STAGE_POST_CONCEPTION)
-                },
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-            )
-        } else {
-            PostConceptionStageContent(
-                timelineStatus = timelineStatus,
-                selectedWeek = selectedWeekForGrowth,
-                onSelectWeek = { selectedWeekForGrowth = it.coerceIn(1, 40) },
-                postSubTab = postSubTab,
-                onSelectSubTab = { postSubTab = it },
-                quote = currentQuote,
-                completedChecks = completedChecks,
-                activeHabitIds = activeHabitIds,
-                onPickStartDate = ::openStartDatePicker,
-                onPickEddDate = ::openEddDatePicker,
-                onNextQuote = viewModel::nextQuote,
-                onSpeakText = viewModel::speakBengaliPrompt,
-                onToggleCheck = viewModel::toggleCheckItem,
-                onToggleReminderPreset = { preset ->
-                    viewModel.togglePregnancyReminderPreset(preset) { isNowActive ->
-                        val msg = if (isNowActive) "✅ অ্যালার্ম চালু হয়েছে!" else "🔕 অ্যালার্ম বন্ধ করা হয়েছে"
-                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                    }
-                },
-                onOpenHabitPlanner = onOpenHabitPlanner,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-            )
+        when {
+            !isOnboarded -> {
+                PregnancyProfileOnboardingView(
+                    initialGender = userGender,
+                    initialStageMode = stageMode,
+                    initialStartMillis = startMillis,
+                    initialCycleDays = cycleDays,
+                    initialSymptoms = selectedSymptoms,
+                    onCompleteSetup = { gender, stage, lmpMillis, cycle, symptoms ->
+                        viewModel.completeOnboarding(
+                            gender = gender,
+                            stageMode = stage,
+                            startMillis = lmpMillis,
+                            cycleDays = cycle,
+                            symptoms = symptoms
+                        )
+                        Toast.makeText(context, "✅ আপনার প্রোফাইল প্রস্তুত হয়েছে!", Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier.padding(paddingValues)
+                )
+            }
+
+            userGender == UserPreferencesManager.GENDER_MALE -> {
+                MaleHealthAndFatherhoodDashboard(
+                    quote = currentQuote,
+                    completedChecks = completedChecks,
+                    activeHabitIds = activeHabitIds,
+                    onNextQuote = viewModel::nextQuote,
+                    onSpeakText = viewModel::speakBengaliPrompt,
+                    onToggleCheck = viewModel::toggleCheckItem,
+                    onToggleReminderPreset = { preset ->
+                        viewModel.togglePregnancyReminderPreset(preset) { isNowActive ->
+                            val msg = if (isNowActive) "✅ অ্যালার্ম চালু হয়েছে!" else "🔕 অ্যালার্ম বন্ধ করা হয়েছে"
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    onEditProfile = viewModel::reopenOnboarding,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues)
+                )
+            }
+
+            stageMode == UserPreferencesManager.STAGE_PRE_CONCEPTION -> {
+                PreConceptionStageContent(
+                    fertileStatus = fertileStatus,
+                    selectedSymptoms = selectedSymptoms,
+                    quote = currentQuote,
+                    completedChecks = completedChecks,
+                    activeHabitIds = activeHabitIds,
+                    onPickLastPeriodDate = ::openStartDatePicker,
+                    onToggleSymptom = viewModel::toggleSymptom,
+                    onNextQuote = viewModel::nextQuote,
+                    onSpeakText = viewModel::speakBengaliPrompt,
+                    onToggleCheck = viewModel::toggleCheckItem,
+                    onToggleReminderPreset = { preset ->
+                        viewModel.togglePregnancyReminderPreset(preset) { isNowActive ->
+                            val msg = if (isNowActive) "✅ অ্যালার্ম চালু হয়েছে!" else "🔕 অ্যালার্ম বন্ধ করা হয়েছে"
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    onSwitchToPostConception = {
+                        viewModel.setStageMode(UserPreferencesManager.STAGE_POST_CONCEPTION)
+                    },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues)
+                )
+            }
+
+            else -> {
+                PostConceptionStageContent(
+                    timelineStatus = timelineStatus,
+                    selectedSymptoms = selectedSymptoms,
+                    selectedWeek = selectedWeekForGrowth,
+                    onSelectWeek = { selectedWeekForGrowth = it.coerceIn(1, 40) },
+                    postSubTab = postSubTab,
+                    onSelectSubTab = { postSubTab = it },
+                    quote = currentQuote,
+                    completedChecks = completedChecks,
+                    activeHabitIds = activeHabitIds,
+                    onPickStartDate = ::openStartDatePicker,
+                    onPickEddDate = ::openEddDatePicker,
+                    onToggleSymptom = viewModel::toggleSymptom,
+                    onNextQuote = viewModel::nextQuote,
+                    onSpeakText = viewModel::speakBengaliPrompt,
+                    onToggleCheck = viewModel::toggleCheckItem,
+                    onToggleReminderPreset = { preset ->
+                        viewModel.togglePregnancyReminderPreset(preset) { isNowActive ->
+                            val msg = if (isNowActive) "✅ অ্যালার্ম চালু হয়েছে!" else "🔕 অ্যালার্ম বন্ধ করা হয়েছে"
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    onOpenHabitPlanner = onOpenHabitPlanner,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues)
+                )
+            }
         }
     }
 }
 
 /**
- * ── MODE 1: সন্তান নেওয়ার আগে করণীয়, কুরআনি দোয়া ও প্রস্তুতি রিমাইন্ডার ──
+ * ── FEMALE MODE 1: সন্তান নেওয়ার আগে করণীয়, উর্বর সময় (Fertile Window), লক্ষণ ও দোয়া ──
  */
 @Composable
 private fun PreConceptionStageContent(
+    fertileStatus: FertileWindowStatus,
+    selectedSymptoms: Set<String>,
     quote: PregnancyQuote,
     completedChecks: Set<String>,
     activeHabitIds: Set<String>,
+    onPickLastPeriodDate: () -> Unit,
+    onToggleSymptom: (String) -> Unit,
     onNextQuote: () -> Unit,
     onSpeakText: (String) -> Unit,
     onToggleCheck: (String) -> Unit,
@@ -302,79 +397,27 @@ private fun PreConceptionStageContent(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // 1. Pre-Conception Readiness Summary Banner
-        item(key = "pre_summary_banner") {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.36f).solidOverSurface()
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "🌱 সন্তান নেওয়ার পূর্বপ্রস্তুতি",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "সুস্থ ও নেক সন্তানের জন্য শারীরিক ও আত্মিক প্রস্তুতি",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Surface(
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-                            shape = RoundedCornerShape(50),
-                            border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
-                        ) {
-                            Text(
-                                text = "${HabitScheduleCalculator.toBengaliDigits(doneCount.toString())}/${HabitScheduleCalculator.toBengaliDigits(preChecklist.size.toString())} সম্পন্ন",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "ইতিমধ্যে কনসিভ হলে ডেলিভারি হিসাব দেখুন:",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Button(
-                            onClick = onSwitchToPostConception,
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
-                            Text("গর্ভকালীন ট্র্যাকার", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
+        // 1. Fertile Window & Ovulation Hero Card
+        item(key = "pre_fertile_window_hero") {
+            FertileWindowHeroCard(
+                fertileStatus = fertileStatus,
+                doneCount = doneCount,
+                totalCount = preChecklist.size,
+                onPickLastPeriodDate = onPickLastPeriodDate,
+                onSwitchToPostConception = onSwitchToPostConception
+            )
         }
 
-        // 2. Emotional & Spiritual Quote Card
+        // 2. Symptom Report & Personalized Advice Card
+        item(key = "pre_symptom_advice_card") {
+            SymptomAdviceSectionCard(
+                selectedSymptoms = selectedSymptoms,
+                onToggleSymptom = onToggleSymptom,
+                onSpeakAdvice = onSpeakText
+            )
+        }
+
+        // 3. Emotional & Spiritual Quote Card
         item(key = "pre_quote_card") {
             PregnancyQuoteCard(
                 quote = quote,
@@ -383,7 +426,7 @@ private fun PreConceptionStageContent(
             )
         }
 
-        // 3. Pre-Conception Checklist Header & Items
+        // 4. Pre-Conception Checklist Header & Items
         item(key = "pre_checklist_header") {
             Text(
                 text = "✅ সন্তান নেওয়ার আগে করণীয়",
@@ -402,7 +445,7 @@ private fun PreConceptionStageContent(
             )
         }
 
-        // 4. Pre-Conception Islamic Duas
+        // 5. Pre-Conception Islamic Duas
         item(key = "pre_duas_header") {
             Spacer(Modifier.height(4.dp))
             Text(
@@ -422,7 +465,7 @@ private fun PreConceptionStageContent(
             )
         }
 
-        // 5. Pre-Conception Reminders
+        // 6. Pre-Conception Reminders
         item(key = "pre_reminders_header") {
             Spacer(Modifier.height(4.dp))
             Text(
@@ -443,12 +486,128 @@ private fun PreConceptionStageContent(
     }
 }
 
+@Composable
+private fun FertileWindowHeroCard(
+    fertileStatus: FertileWindowStatus,
+    doneCount: Int,
+    totalCount: Int,
+    onPickLastPeriodDate: () -> Unit,
+    onSwitchToPostConception: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("fertile_window_hero_card"),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.36f).solidOverSurface()
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.42f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "🌸 সন্তান নেওয়ার পরিকল্পনা ও উর্বর সময়",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = fertileStatus.statusHeadlineBn,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                Surface(
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                    shape = RoundedCornerShape(50),
+                    border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
+                ) {
+                    Text(
+                        text = "${HabitScheduleCalculator.toBengaliDigits(doneCount.toString())}/${HabitScheduleCalculator.toBengaliDigits(totalCount.toString())} সম্পন্ন",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                shape = RoundedCornerShape(12.dp),
+                border = onePxBorder(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "🎯 সম্ভাব্য উর্বর সময়: ${fertileStatus.fertileStartFormattedBn} – ${fertileStatus.fertileEndFormattedBn}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF2E7D32)
+                    )
+                    Text(
+                        text = "সম্ভাব্য ওভুলেশন: ${fertileStatus.ovulationDateFormattedBn}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "শেষ মাসিক: ${fertileStatus.lastPeriodFormattedBn} • চক্র: ${HabitScheduleCalculator.toBengaliDigits(fertileStatus.cycleDays.toString())} দিন (আজ ${HabitScheduleCalculator.toBengaliDigits(fertileStatus.currentCycleDay.toString())}তম দিন)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onPickLastPeriodDate,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 7.dp)
+                ) {
+                    Text("মাসিকের তারিখ", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+
+                Button(
+                    onClick = onSwitchToPostConception,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 7.dp)
+                ) {
+                    Text("গর্ভবতী হয়েছি", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
 /**
- * ── MODE 2: গর্ভধারণের পরে (সম্ভাব্য ডেলিভারি তারিখ, আজ কত দিন হলো, বৃদ্ধি, করণীয়-বর্জনীয় ও দোয়া) ──
+ * ── FEMALE MODE 2: গর্ভধারণের পরে (সম্ভাব্য ডেলিভারি তারিখ, আজ কত দিন হলো, লক্ষণ পরামর্শ, বৃদ্ধি, করণীয়-বর্জনীয় ও দোয়া) ──
  */
 @Composable
 private fun PostConceptionStageContent(
     timelineStatus: PregnancyTimelineStatus,
+    selectedSymptoms: Set<String>,
     selectedWeek: Int,
     onSelectWeek: (Int) -> Unit,
     postSubTab: Int,
@@ -458,6 +617,7 @@ private fun PostConceptionStageContent(
     activeHabitIds: Set<String>,
     onPickStartDate: () -> Unit,
     onPickEddDate: () -> Unit,
+    onToggleSymptom: (String) -> Unit,
     onNextQuote: () -> Unit,
     onSpeakText: (String) -> Unit,
     onToggleCheck: (String) -> Unit,
@@ -482,7 +642,16 @@ private fun PostConceptionStageContent(
             )
         }
 
-        // 2. Heartwarming Emotional & Spiritual Quote Card
+        // 2. Interactive Symptom Report & Personalized Care Card
+        item(key = "post_symptom_advice_card") {
+            SymptomAdviceSectionCard(
+                selectedSymptoms = selectedSymptoms,
+                onToggleSymptom = onToggleSymptom,
+                onSpeakAdvice = onSpeakText
+            )
+        }
+
+        // 3. Heartwarming Emotional & Spiritual Quote Card
         item(key = "post_quote_card") {
             PregnancyQuoteCard(
                 quote = quote,
@@ -491,7 +660,7 @@ private fun PostConceptionStageContent(
             )
         }
 
-        // 3. 4 Sub-Tab Pills: 👶 বৃদ্ধি | ✓ করণীয় | 🤲 দোয়া | 🔔 অ্যালার্ম
+        // 4. 4 Sub-Tab Pills: 👶 বৃদ্ধি | ✓ করণীয় | 🤲 দোয়া | 🔔 অ্যালার্ম
         item(key = "post_sub_tabs") {
             Row(
                 modifier = Modifier
@@ -682,11 +851,121 @@ private fun PostConceptionStageContent(
 }
 
 /**
+ * Interactive Symptom Report & Instant Personalized Care Advice Card.
+ */
+@Composable
+private fun SymptomAdviceSectionCard(
+    selectedSymptoms: Set<String>,
+    onToggleSymptom: (String) -> Unit,
+    onSpeakAdvice: (String) -> Unit
+) {
+    val activeSymptomObjects = remember(selectedSymptoms) {
+        val matched = PregnancyPlannerEngine.symptomOptions.filter { it.id in selectedSymptoms }
+        matched.ifEmpty { listOf(PregnancyPlannerEngine.symptomOptions.first()) }
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("symptom_advice_card"),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.26f).solidOverSurface()
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "🩺 আজ আপনার শারীরিক অনুভূতি কেমন?",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                val firstAdvice = activeSymptomObjects.first()
+                FilledTonalIconButton(
+                    onClick = {
+                        onSpeakAdvice("${firstAdvice.adviceTitleBn}। ${firstAdvice.adviceDetailBn}")
+                    },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        Icons.Default.VolumeUp,
+                        contentDescription = "শুনুন",
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                PregnancyPlannerEngine.symptomOptions.forEach { sym ->
+                    val isSelected = sym.id in selectedSymptoms
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { onToggleSymptom(sym.id) },
+                        label = {
+                            Text(
+                                text = "${sym.emoji} ${sym.labelBn}",
+                                fontSize = 11.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                            )
+                        }
+                    )
+                }
+            }
+
+            activeSymptomObjects.forEach { sym ->
+                Surface(
+                    color = MaterialTheme.colorScheme.surface,
+                    shape = RoundedCornerShape(12.dp),
+                    border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Text(
+                            text = "${sym.emoji} ${sym.adviceTitleBn}",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = sym.adviceDetailBn,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            lineHeight = 18.sp
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
  * Hero Card displaying:
  * - Animated Progress Ring (% & week/40)
  * - আজ কত দিন হলো (Elapsed Days & Weeks+Days)
  * - সম্ভাব্য ডেলিভারির তারিখ (EDD) & কত দিন বাকি (Remaining Days)
- * - Buttons to set শুরুর তারিখ or ডেলিভারি তারিখ
+ * - Buttons to set মাসিকের তারিখ or ডেলিভারি তারিখ
  */
 @Composable
 private fun PregnancyCountdownHeroCard(
@@ -824,7 +1103,7 @@ private fun PregnancyCountdownHeroCard(
                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 7.dp)
                 ) {
                     Text(
-                        text = "শুরুর তারিখ",
+                        text = "মাসিকের তারিখ",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -1044,7 +1323,7 @@ private fun WeeklyBabyGrowthSectionCard(
  * Heartwarming Emotional & Spiritual Quote Card with Pure Icon Buttons for Voice & Next.
  */
 @Composable
-private fun PregnancyQuoteCard(
+internal fun PregnancyQuoteCard(
     quote: PregnancyQuote,
     onNextQuote: () -> Unit,
     onSpeakQuote: () -> Unit
@@ -1128,7 +1407,7 @@ private fun PregnancyQuoteCard(
 }
 
 @Composable
-private fun PregnancyChecklistRowCard(
+internal fun PregnancyChecklistRowCard(
     item: PregnancyChecklistItem,
     isChecked: Boolean,
     isDontItem: Boolean,
@@ -1201,7 +1480,7 @@ private fun PregnancyChecklistRowCard(
 }
 
 @Composable
-private fun IslamicPregnancyAmalCard(
+internal fun IslamicPregnancyAmalCard(
     amal: IslamicPregnancyAmal,
     onSpeakClick: () -> Unit
 ) {
@@ -1305,7 +1584,7 @@ private fun IslamicPregnancyAmalCard(
 }
 
 @Composable
-private fun PregnancyReminderPresetCard(
+internal fun PregnancyReminderPresetCard(
     preset: PregnancyReminderPreset,
     isActive: Boolean,
     onToggle: () -> Unit

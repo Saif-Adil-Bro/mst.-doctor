@@ -28,8 +28,12 @@ class PregnancyPlannerViewModel @Inject constructor(
     private val audioManager: HabitAudioManager
 ) : ViewModel() {
 
+    val isOnboarded: StateFlow<Boolean> = prefsManager.pregnancyOnboarded
+    val userGender: StateFlow<String> = prefsManager.pregnancyGender
     val stageMode: StateFlow<String> = prefsManager.pregnancyStageMode
     val pregnancyStartMillis: StateFlow<Long> = prefsManager.pregnancyStartMillis
+    val cycleDays: StateFlow<Int> = prefsManager.pregnancyCycleDays
+    val selectedSymptoms: StateFlow<Set<String>> = prefsManager.pregnancySymptoms
     val completedChecks: StateFlow<Set<String>> = prefsManager.pregnancyCompletedChecks
 
     val allHabits: StateFlow<List<HabitEntity>> = habitDao.getAllHabitsFlow()
@@ -37,6 +41,30 @@ class PregnancyPlannerViewModel @Inject constructor(
 
     private val _quoteIndex = MutableStateFlow(0)
     val quoteIndex: StateFlow<Int> = _quoteIndex.asStateFlow()
+
+    fun completeOnboarding(
+        gender: String,
+        stageMode: String,
+        startMillis: Long,
+        cycleDays: Int,
+        symptoms: Set<String>
+    ) {
+        prefsManager.savePregnancyProfileSetup(
+            gender = gender,
+            stageMode = stageMode,
+            startMillis = startMillis,
+            cycleDays = cycleDays,
+            symptoms = symptoms
+        )
+    }
+
+    fun reopenOnboarding() {
+        prefsManager.setPregnancyOnboarded(false)
+    }
+
+    fun setGender(gender: String) {
+        prefsManager.setPregnancyGender(gender)
+    }
 
     fun setStageMode(mode: String) {
         prefsManager.setPregnancyStageMode(mode)
@@ -47,8 +75,19 @@ class PregnancyPlannerViewModel @Inject constructor(
     }
 
     fun updateFromExpectedDeliveryDateMillis(eddMillis: Long) {
-        val computedStart = PregnancyPlannerEngine.startMillisFromEdd(eddMillis)
+        val computedStart = PregnancyPlannerEngine.startMillisFromEdd(
+            eddMillis = eddMillis,
+            cycleDays = cycleDays.value
+        )
         prefsManager.setPregnancyStartMillis(computedStart)
+    }
+
+    fun updateCycleDays(days: Int) {
+        prefsManager.setPregnancyCycleDays(days)
+    }
+
+    fun toggleSymptom(symptomId: String) {
+        prefsManager.togglePregnancySymptom(symptomId)
     }
 
     fun toggleCheckItem(itemKey: String) {

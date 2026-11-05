@@ -365,6 +365,16 @@ class UserPreferencesManager @Inject constructor(
         System.currentTimeMillis() - (84L * 86_400_000L) // Default 12 weeks (84 days)
     }
 
+    private val _pregnancyOnboarded = MutableStateFlow(
+        prefs.getBoolean(KEY_PREGNANCY_ONBOARDED, false)
+    )
+    val pregnancyOnboarded: StateFlow<Boolean> = _pregnancyOnboarded.asStateFlow()
+
+    private val _pregnancyGender = MutableStateFlow(
+        prefs.getString(KEY_PREGNANCY_GENDER, GENDER_FEMALE) ?: GENDER_FEMALE
+    )
+    val pregnancyGender: StateFlow<String> = _pregnancyGender.asStateFlow()
+
     private val _pregnancyStageMode = MutableStateFlow(
         prefs.getString(KEY_PREGNANCY_STAGE_MODE, STAGE_POST_CONCEPTION) ?: STAGE_POST_CONCEPTION
     )
@@ -375,10 +385,30 @@ class UserPreferencesManager @Inject constructor(
     )
     val pregnancyStartMillis: StateFlow<Long> = _pregnancyStartMillis.asStateFlow()
 
+    private val _pregnancyCycleDays = MutableStateFlow(
+        prefs.getInt(KEY_PREGNANCY_CYCLE_DAYS, 28).coerceIn(22, 38)
+    )
+    val pregnancyCycleDays: StateFlow<Int> = _pregnancyCycleDays.asStateFlow()
+
+    private val _pregnancySymptoms = MutableStateFlow<Set<String>>(
+        prefs.getStringSet(KEY_PREGNANCY_SYMPTOMS, setOf("normal"))?.toSet() ?: setOf("normal")
+    )
+    val pregnancySymptoms: StateFlow<Set<String>> = _pregnancySymptoms.asStateFlow()
+
     private val _pregnancyCompletedChecks = MutableStateFlow<Set<String>>(
         prefs.getStringSet(KEY_PREGNANCY_CHECKS, emptySet())?.toSet() ?: emptySet()
     )
     val pregnancyCompletedChecks: StateFlow<Set<String>> = _pregnancyCompletedChecks.asStateFlow()
+
+    fun setPregnancyOnboarded(onboarded: Boolean) {
+        _pregnancyOnboarded.value = onboarded
+        prefs.edit().putBoolean(KEY_PREGNANCY_ONBOARDED, onboarded).apply()
+    }
+
+    fun setPregnancyGender(gender: String) {
+        _pregnancyGender.value = gender
+        prefs.edit().putString(KEY_PREGNANCY_GENDER, gender).apply()
+    }
 
     fun setPregnancyStageMode(mode: String) {
         _pregnancyStageMode.value = mode
@@ -388,6 +418,59 @@ class UserPreferencesManager @Inject constructor(
     fun setPregnancyStartMillis(startMillis: Long) {
         _pregnancyStartMillis.value = startMillis
         prefs.edit().putLong(KEY_PREGNANCY_START_MILLIS, startMillis).apply()
+    }
+
+    fun setPregnancyCycleDays(days: Int) {
+        val safeDays = days.coerceIn(22, 38)
+        _pregnancyCycleDays.value = safeDays
+        prefs.edit().putInt(KEY_PREGNANCY_CYCLE_DAYS, safeDays).apply()
+    }
+
+    fun togglePregnancySymptom(symptomId: String) {
+        val current = _pregnancySymptoms.value.toMutableSet()
+        if (symptomId == "normal") {
+            current.clear()
+            current.add("normal")
+        } else {
+            current.remove("normal")
+            if (symptomId in current) {
+                current.remove(symptomId)
+            } else {
+                current.add(symptomId)
+            }
+            if (current.isEmpty()) {
+                current.add("normal")
+            }
+        }
+        val immutable = current.toSet()
+        _pregnancySymptoms.value = immutable
+        prefs.edit().putStringSet(KEY_PREGNANCY_SYMPTOMS, immutable).apply()
+    }
+
+    fun savePregnancyProfileSetup(
+        gender: String,
+        stageMode: String,
+        startMillis: Long,
+        cycleDays: Int,
+        symptoms: Set<String>
+    ) {
+        val safeDays = cycleDays.coerceIn(22, 38)
+        val safeSymptoms = if (symptoms.isEmpty()) setOf("normal") else symptoms.toSet()
+        _pregnancyGender.value = gender
+        _pregnancyStageMode.value = stageMode
+        _pregnancyStartMillis.value = startMillis
+        _pregnancyCycleDays.value = safeDays
+        _pregnancySymptoms.value = safeSymptoms
+        _pregnancyOnboarded.value = true
+
+        prefs.edit()
+            .putString(KEY_PREGNANCY_GENDER, gender)
+            .putString(KEY_PREGNANCY_STAGE_MODE, stageMode)
+            .putLong(KEY_PREGNANCY_START_MILLIS, startMillis)
+            .putInt(KEY_PREGNANCY_CYCLE_DAYS, safeDays)
+            .putStringSet(KEY_PREGNANCY_SYMPTOMS, safeSymptoms)
+            .putBoolean(KEY_PREGNANCY_ONBOARDED, true)
+            .apply()
     }
 
     fun togglePregnancyCheckItem(itemKey: String) {
@@ -448,9 +531,15 @@ class UserPreferencesManager @Inject constructor(
         private const val KEY_HABIT_SLEEP_END_H = "habit_sleep_end_hour"
         private const val KEY_HABIT_SLEEP_END_M = "habit_sleep_end_minute"
 
+        private const val KEY_PREGNANCY_ONBOARDED = "pregnancy_profile_onboarded_v2"
+        private const val KEY_PREGNANCY_GENDER = "pregnancy_user_gender"
         private const val KEY_PREGNANCY_STAGE_MODE = "pregnancy_stage_mode"
         private const val KEY_PREGNANCY_START_MILLIS = "pregnancy_start_millis"
+        private const val KEY_PREGNANCY_CYCLE_DAYS = "pregnancy_cycle_days"
+        private const val KEY_PREGNANCY_SYMPTOMS = "pregnancy_reported_symptoms"
         private const val KEY_PREGNANCY_CHECKS = "pregnancy_completed_checks"
+        const val GENDER_MALE = "MALE"
+        const val GENDER_FEMALE = "FEMALE"
         const val STAGE_PRE_CONCEPTION = "PRE"
         const val STAGE_POST_CONCEPTION = "POST"
     }

@@ -3,13 +3,14 @@ package com.health.knowledge.pregnancy
 import androidx.compose.runtime.Immutable
 import com.health.knowledge.habit.HabitDateAndReportEngine
 import com.health.knowledge.habit.HabitScheduleCalculator
-import java.util.Calendar
 import kotlin.math.roundToInt
 
 @Immutable
 data class PregnancyTimelineStatus(
     val startMillis: Long,
     val eddMillis: Long,
+    val cycleDays: Int,
+    val totalCycleAdjustedDays: Int,
     val startDateFormattedBn: String,
     val eddDateFormattedBn: String,
     val elapsedDays: Int,
@@ -20,6 +21,40 @@ data class PregnancyTimelineStatus(
     val trimesterLabelBn: String,
     val progressFraction: Float,
     val progressPercent: Int
+)
+
+@Immutable
+data class FertileWindowStatus(
+    val lastPeriodStartMillis: Long,
+    val cycleDays: Int,
+    val lastPeriodFormattedBn: String,
+    val fertileStartFormattedBn: String,
+    val fertileEndFormattedBn: String,
+    val ovulationDateFormattedBn: String,
+    val nextPeriodFormattedBn: String,
+    val currentCycleDay: Int,
+    val isCurrentlyFertile: Boolean,
+    val statusHeadlineBn: String
+)
+
+@Immutable
+data class PregnancySymptomOption(
+    val id: String,
+    val emoji: String,
+    val labelBn: String,
+    val adviceTitleBn: String,
+    val adviceDetailBn: String
+)
+
+@Immutable
+data class MaleHealthTip(
+    val id: String,
+    val category: String, // "TRICKS", "SUNNAH_FOOD", "FATHER_GUIDE"
+    val emoji: String,
+    val badgeBn: String,
+    val titleBn: String,
+    val detailBn: String,
+    val tipHighlightBn: String
 )
 
 @Immutable
@@ -37,7 +72,7 @@ data class WeeklyBabyGrowth(
 @Immutable
 data class PregnancyChecklistItem(
     val id: String,
-    val category: String, // "PRE_CONCEPTION", "DO", "DONT", "NEWBORN_SUNNAH"
+    val category: String, // "PRE_CONCEPTION", "DO", "DONT", "NEWBORN_SUNNAH", "FATHER_DUTY"
     val trimester: Int,   // 0 = all trimesters, 1, 2, 3
     val titleBn: String,
     val subtitleBn: String
@@ -84,15 +119,20 @@ object PregnancyPlannerEngine {
 
     fun calculateTimelineStatus(
         startMillis: Long,
+        cycleDays: Int = 28,
         referenceDateMillis: Long = System.currentTimeMillis()
     ): PregnancyTimelineStatus {
+        val safeCycle = cycleDays.coerceIn(22, 38)
+        val cycleOffset = safeCycle - 28
+        val totalAdjustedDays = (TOTAL_PREGNANCY_DAYS + cycleOffset).coerceIn(266, 295)
+
         val cleanStart = HabitDateAndReportEngine.startOfDayMillis(startMillis)
         val cleanRef = HabitDateAndReportEngine.startOfDayMillis(referenceDateMillis)
-        val eddMillis = HabitDateAndReportEngine.addDays(cleanStart, TOTAL_PREGNANCY_DAYS)
+        val eddMillis = HabitDateAndReportEngine.addDays(cleanStart, totalAdjustedDays)
 
         val rawElapsed = ((cleanRef - cleanStart) / DAY_MILLIS).toInt()
-        val elapsedDays = rawElapsed.coerceIn(1, TOTAL_PREGNANCY_DAYS)
-        val remainingDays = (TOTAL_PREGNANCY_DAYS - elapsedDays).coerceAtLeast(0)
+        val elapsedDays = rawElapsed.coerceIn(1, totalAdjustedDays)
+        val remainingDays = (totalAdjustedDays - elapsedDays).coerceAtLeast(0)
 
         val currentWeek = ((elapsedDays - 1) / 7 + 1).coerceIn(1, 40)
         val extraDaysInWeek = (elapsedDays - 1) % 7
@@ -108,12 +148,14 @@ object PregnancyPlannerEngine {
             else -> "৩য় ত্রৈমাসিক"
         }
 
-        val fraction = (elapsedDays.toFloat() / TOTAL_PREGNANCY_DAYS.toFloat()).coerceIn(0f, 1f)
+        val fraction = (elapsedDays.toFloat() / totalAdjustedDays.toFloat()).coerceIn(0f, 1f)
         val percent = (fraction * 100f).roundToInt().coerceIn(0, 100)
 
         return PregnancyTimelineStatus(
             startMillis = cleanStart,
             eddMillis = eddMillis,
+            cycleDays = safeCycle,
+            totalCycleAdjustedDays = totalAdjustedDays,
             startDateFormattedBn = HabitDateAndReportEngine.formatFullDateBn(cleanStart),
             eddDateFormattedBn = HabitDateAndReportEngine.formatFullDateBn(eddMillis),
             elapsedDays = elapsedDays,
@@ -128,12 +170,63 @@ object PregnancyPlannerEngine {
     }
 
     /**
-     * Converts a user-selected Expected Delivery Date (EDD) into the corresponding
-     * pregnancy start timestamp (EDD - 280 days).
+     * Calculates ovulation & fertile window for women planning to conceive based on
+     * last period start date and menstrual cycle length (22..38 days).
      */
-    fun startMillisFromEdd(eddMillis: Long): Long {
+    fun calculateFertileWindow(
+        lastPeriodStartMillis: Long,
+        cycleDays: Int = 28,
+        referenceDateMillis: Long = System.currentTimeMillis()
+    ): FertileWindowStatus {
+        val safeCycle = cycleDays.coerceIn(22, 38)
+        val cleanRef = HabitDateAndReportEngine.startOfDayMillis(referenceDateMillis)
+        var cycleStart = HabitDateAndReportEngine.startOfDayMillis(lastPeriodStartMillis)
+
+        // Roll forward to the active cycle if the recorded LMP was multiple cycles ago
+        while (HabitDateAndReportEngine.addDays(cycleStart, safeCycle) <= cleanRef) {
+            cycleStart = HabitDateAndReportEngine.addDays(cycleStart, safeCycle)
+        }
+
+        val nextPeriodMillis = HabitDateAndReportEngine.addDays(cycleStart, safeCycle)
+        val ovulationDayOffset = (safeCycle - 14).coerceAtLeast(8)
+        val ovulationMillis = HabitDateAndReportEngine.addDays(cycleStart, ovulationDayOffset)
+        val fertileStartMillis = HabitDateAndReportEngine.addDays(ovulationMillis, -4)
+        val fertileEndMillis = HabitDateAndReportEngine.addDays(ovulationMillis, 1)
+
+        val currentCycleDay = (((cleanRef - cycleStart) / DAY_MILLIS).toInt() + 1).coerceIn(1, safeCycle)
+        val isFertileNow = cleanRef in fertileStartMillis..fertileEndMillis
+
+        val statusHeadline = when {
+            isFertileNow -> "🌟 এখন আপনার উর্বর সময় (Fertile Window) চলছে!"
+            cleanRef < fertileStartMillis -> {
+                val daysLeft = ((fertileStartMillis - cleanRef) / DAY_MILLIS).toInt().coerceAtLeast(1)
+                "উর্বর সময় শুরু হতে ${HabitScheduleCalculator.toBengaliDigits(daysLeft.toString())} দিন বাকি"
+            }
+            else -> {
+                val daysToNext = ((nextPeriodMillis - cleanRef) / DAY_MILLIS).toInt().coerceAtLeast(1)
+                "পরবর্তী চক্রের সম্ভাব্য তারিখ ${HabitScheduleCalculator.toBengaliDigits(daysToNext.toString())} দিন পর"
+            }
+        }
+
+        return FertileWindowStatus(
+            lastPeriodStartMillis = cycleStart,
+            cycleDays = safeCycle,
+            lastPeriodFormattedBn = HabitDateAndReportEngine.formatShortDateBn(cycleStart),
+            fertileStartFormattedBn = HabitDateAndReportEngine.formatShortDateBn(fertileStartMillis),
+            fertileEndFormattedBn = HabitDateAndReportEngine.formatShortDateBn(fertileEndMillis),
+            ovulationDateFormattedBn = HabitDateAndReportEngine.formatFullDateBn(ovulationMillis),
+            nextPeriodFormattedBn = HabitDateAndReportEngine.formatFullDateBn(nextPeriodMillis),
+            currentCycleDay = currentCycleDay,
+            isCurrentlyFertile = isFertileNow,
+            statusHeadlineBn = statusHeadline
+        )
+    }
+
+    fun startMillisFromEdd(eddMillis: Long, cycleDays: Int = 28): Long {
+        val safeCycle = cycleDays.coerceIn(22, 38)
+        val totalAdjustedDays = (TOTAL_PREGNANCY_DAYS + (safeCycle - 28)).coerceIn(266, 295)
         val cleanEdd = HabitDateAndReportEngine.startOfDayMillis(eddMillis)
-        return HabitDateAndReportEngine.addDays(cleanEdd, -TOTAL_PREGNANCY_DAYS)
+        return HabitDateAndReportEngine.addDays(cleanEdd, -totalAdjustedDays)
     }
 
     fun getGrowthForWeek(week: Int): WeeklyBabyGrowth {
@@ -141,6 +234,187 @@ object PregnancyPlannerEngine {
         return weeklyGrowthCatalog.firstOrNull { it.week == safeWeek }
             ?: weeklyGrowthCatalog.last()
     }
+
+    val symptomOptions: List<PregnancySymptomOption> = listOf(
+        PregnancySymptomOption(
+            id = "normal",
+            emoji = "😊",
+            labelBn = "স্বাভাবিক",
+            adviceTitleBn = "আলহামদুলিল্লাহ, আপনার শরীর স্বাভাবিক আছে",
+            adviceDetailBn = "প্রতিদিনের সুষম খাবার, ৮–১০ গ্লাস পানি এবং নিয়মিত বিশ্রাম ও কুরআন তিলাওয়াত অব্যাহত রাখুন।"
+        ),
+        PregnancySymptomOption(
+            id = "nausea",
+            emoji = "🤢",
+            labelBn = "বমিভাব",
+            adviceTitleBn = "সকালের বমিভাব ও অরুচি কমানোর উপায়",
+            adviceDetailBn = "সকালে ঘুম থেকে উঠেই বিস্কুট বা মুড়ি খান। একবারে বেশি না খেয়ে অল্প অল্প করে বারবার খান এবং আদা-লেবুর ঘ্রাণ বা হালকা আদা পানি পান করুন।"
+        ),
+        PregnancySymptomOption(
+            id = "fatigue",
+            emoji = "😴",
+            labelBn = "ক্লান্তি",
+            adviceTitleBn = "অতিরিক্ত ক্লান্তি ও দুর্বলতায় করণীয়",
+            adviceDetailBn = "দুপুরে অন্তত ১ ঘণ্টা বাম কাত হয়ে বিশ্রাম নিন। খাদ্যতালিকায় খেজুর, দুধ, ডিম ও আয়রনসমৃদ্ধ খাবার রাখুন এবং হিমোগ্লোবিন পরীক্ষা করুন।"
+        ),
+        PregnancySymptomOption(
+            id = "dizziness",
+            emoji = "💫",
+            labelBn = "মাথা ঘোরা",
+            adviceTitleBn = "মাথা ঘোরা বা দুর্বল লাগলে সতর্কতা",
+            adviceDetailBn = "হঠাৎ শোয়া বা বসা থেকে দ্রুত উঠবেন না। পর্যাপ্ত পানি ও ডাবের পানি পান করুন এবং রক্তচাপ (Blood Pressure) নিয়মিত চেক করুন।"
+        ),
+        PregnancySymptomOption(
+            id = "back_pain",
+            emoji = "🦴",
+            labelBn = "কোমর ব্যথা",
+            adviceTitleBn = "কোমর ও পিঠের ব্যথায় আরাম পাওয়ার কৌশল",
+            adviceDetailBn = "সোজা হয়ে বসুন, নিচু হয়ে কিছু তুলবেন না এবং ঘুমানোর সময় দুই হাঁটুর মাঝখানে নরম বালিশ ব্যবহার করুন। ক্যালসিয়াম ও ভিটামিন-ডি নিয়মিত নিন।"
+        ),
+        PregnancySymptomOption(
+            id = "heartburn",
+            emoji = "🔥",
+            labelBn = "বুক জ্বালা",
+            adviceTitleBn = "অ্যাসিডিটি ও বুক জ্বালাপোড়া রোধে করণীয়",
+            adviceDetailBn = "অতিরিক্ত তেল-মসলা ও ভাজাপোড়া খাবার এড়িয়ে চলুন। রাতের খাবার ঘুমানোর অন্তত ২ ঘণ্টা আগে সম্পন্ন করুন এবং মাথা সামান্য উঁচু রেখে ঘুমান।"
+        ),
+        PregnancySymptomOption(
+            id = "cramps",
+            emoji = "⚡",
+            labelBn = "তলপেটে টান",
+            adviceTitleBn = "তলপেটে হালকা টান বা পায়ে খিল ধরা",
+            adviceDetailBn = "ভারী কাজ সম্পূর্ণ বন্ধ রাখুন ও পর্যাপ্ত পানি পান করুন। তবে তীব্র ব্যথা বা রক্তপাত দেখা দিলে দেরি না করে দ্রুত চিকিৎসকের পরামর্শ নিন।"
+        )
+    )
+
+    val maleHealthTipsCatalog: List<MaleHealthTip> = listOf(
+        // 1. TRICKS (পুরুষের ফার্টিলিটি ও স্বাস্থ্য ট্রিকস)
+        MaleHealthTip(
+            id = "male_trick_sleep_testosterone",
+            category = "TRICKS",
+            emoji = "🌙",
+            badgeBn = "হরমোন ও শক্তি",
+            titleBn = "রাত ১১টার মধ্যে ঘুম ও গভীর বিশ্রাম",
+            detailBn = "গবেষণায় দেখা গেছে, রাতে ৭–৮ ঘণ্টা গভীর ঘুম পুরুষের টেস্টোস্টেরন হরমোন ও শুক্রাণুর গুণগত মান ৩০% পর্যন্ত উন্নত রাখে।",
+            tipHighlightBn = "রাত জাগা ও অতিরিক্ত মোবাইল ব্যবহার হরমোন কমিয়ে দেয়।"
+        ),
+        MaleHealthTip(
+            id = "male_trick_zinc_selenium",
+            category = "TRICKS",
+            emoji = "🥜",
+            badgeBn = "ফার্টিলিটি বুস্ট",
+            titleBn = "জিঙ্ক, সেলেনিয়াম ও অ্যান্টিঅক্সিডেন্ট গ্রহণ",
+            detailBn = "কুমড়োর বিচি, কাঠবাদাম, আখরোট, ডিম ও সামুদ্রিক মাছে থাকা জিঙ্ক ও ওমেগা-৩ পুরুষের প্রজনন সক্ষমতা ও গতিশীলতা বৃদ্ধি করে।",
+            tipHighlightBn = "প্রতিদিন সকালে ৫–৭টি ভেজানো কাঠবাদাম ও ২টি আখরোট খান।"
+        ),
+        MaleHealthTip(
+            id = "male_trick_heat_protection",
+            category = "TRICKS",
+            emoji = "🌡️",
+            badgeBn = "গুরুত্বপূর্ণ সতর্কতা",
+            titleBn = "অতিরিক্ত তাপ ও টাইট পোশাক পরিহার",
+            detailBn = "কোলের ওপর ল্যাপটপ রেখে দীর্ঘক্ষণ কাজ করা, অতিরিক্ত গরম পানিতে গোসল বা খুব টাইট পোশাক শুক্রাণু উৎপাদনে বাধা সৃষ্টি করে।",
+            tipHighlightBn = "ঢিলেঢালা সুতি পোশাক পরুন এবং একটানা বসে থাকলে প্রতি ঘণ্টায় হাঁটুন।"
+        ),
+        MaleHealthTip(
+            id = "male_trick_smoke_stress",
+            category = "TRICKS",
+            emoji = "🚭",
+            badgeBn = "সুস্থ শুক্রাণু",
+            titleBn = "ধূমপান ত্যাগ ও মানসিক চাপ নিয়ন্ত্রণ",
+            detailBn = "ধূমপান ও তামাকজাত দ্রব্য শুক্রাণুর ডিএনএ ক্ষতিগ্রস্ত করে। সুস্থ সন্তানের পরিকল্পনার অন্তত ৩ মাস আগে থেকেই ধূমপান সম্পূর্ণ বর্জন করুন।",
+            tipHighlightBn = "প্রতিদিন ৩০ মিনিট দ্রুত হাঁটা বা ব্যায়াম রক্ত সঞ্চালন বাড়ায়।"
+        ),
+
+        // 2. SUNNAH_FOOD (সুন্নাহ পুষ্টি ও খাবার)
+        MaleHealthTip(
+            id = "male_sunnah_kalojira_honey",
+            category = "SUNNAH_FOOD",
+            emoji = "🍯",
+            badgeBn = "সুন্নাহ সুপারফুড",
+            titleBn = "কালোজিরা ও খাঁটি মধুর জাদুকরী মিশ্রণ",
+            detailBn = "রাসূলুল্লাহ (সা.) বলেছেন, মৃত্যু ছাড়া সর্বরোগের মহৌষধ কালোজিরা। আধুনিক গবেষণায় কালোজিরা ও মধু পুরুষের ফার্টিলিটি ও স্ট্যামিনা বৃদ্ধিতে অত্যন্ত কার্যকর প্রমাণিত।",
+            tipHighlightBn = "সকালে খালি পেটে আধা চামচ কালোজিরা ও ১ চামচ মধু চিবিয়ে খান।"
+        ),
+        MaleHealthTip(
+            id = "male_sunnah_dates_milk",
+            category = "SUNNAH_FOOD",
+            emoji = "🥛",
+            badgeBn = "শারীরিক শক্তি",
+            titleBn = "হালকা গরম দুধে খেজুর ও কিসমিস",
+            detailBn = "খেজুরে রয়েছে প্রাকৃতিক আয়রন, পটাশিয়াম, ম্যাগনেসিয়াম ও অ্যামিনো অ্যাসিড, যা স্নায়বিক ক্লান্তি দূর করে এবং প্রজনন শক্তি বৃদ্ধি করে।",
+            tipHighlightBn = "রাতে ঘুমানোর ১ ঘণ্টা আগে ১ গ্লাস কুসুম গরম দুধ ও ৩–৫টি খেজুর খান।"
+        ),
+        MaleHealthTip(
+            id = "male_sunnah_fig_olive",
+            category = "SUNNAH_FOOD",
+            emoji = "🫒",
+            badgeBn = "কুরআনি ফল",
+            titleBn = "ত্বীন (ডুমুর), জয়তুন ও ডালিম",
+            detailBn = "পবিত্র কুরআনে বর্ণিত ত্বীন (ডুমুর) ও জয়তুন (অলিভ অয়েল) এবং ডালিম রক্ত সঞ্চালন বাড়ায়, হৃদযন্ত্র সুস্থ রাখে এবং হরমোনের ভারসাম্য রক্ষা করে।",
+            tipHighlightBn = "সালাদে এক্সট্রা ভার্জিন অলিভ অয়েল ও মৌসুমি ডালিম রাখুন।"
+        ),
+
+        // 3. FATHER_GUIDE (হবু বাবার করণীয় গাইড)
+        MaleHealthTip(
+            id = "male_father_emotional_support",
+            category = "FATHER_GUIDE",
+            emoji = "💝",
+            badgeBn = "মানসিক যত্ন",
+            titleBn = "স্ত্রীর মেজাজের পরিবর্তন ও মানসিক সাপোর্ট",
+            detailBn = "গর্ভকালে হরমোনের কারণে স্ত্রীর বমিভাব, ক্লান্তি ও আবেগপ্রবণতা বাড়ে। এই সময়ে স্বামীর একটু সহানুভূতি, হাসিমুখ ও সান্ত্বনা মা ও গর্ভস্থ সন্তানের জন্য সবচেয়ে বড় ওষুধ।",
+            tipHighlightBn = "স্ত্রীকে কখনোই মানসিক চাপ বা কটু কথা বলবেন না।"
+        ),
+        MaleHealthTip(
+            id = "male_father_heavy_work_nutrition",
+            category = "FATHER_GUIDE",
+            emoji = "🏡",
+            badgeBn = "দৈনন্দিন দায়িত্ব",
+            titleBn = "ভারী কাজে সাহায্য ও পুষ্টি নিশ্চিত করা",
+            detailBn = "স্ত্রীর ভারী কাজগুলো নিজে করুন এবং তিনি সময়মতো আয়রন, ক্যালসিয়াম, দুধ, ডিম ও পানি খাচ্ছেন কি না তা যত্নসহকারে খেয়াল রাখুন।",
+            tipHighlightBn = "ডাক্তারের চেকআপ ও আল্ট্রাসাউন্ডের দিন স্ত্রীর সাথে নিজে যান।"
+        ),
+        MaleHealthTip(
+            id = "male_father_spiritual_bond",
+            category = "FATHER_GUIDE",
+            emoji = "🤲",
+            badgeBn = "ইসলামি পিতৃত্ব",
+            titleBn = "একসাথে কুরআন তিলাওয়াত ও নেক সন্তানের দোয়া",
+            detailBn = "সন্তান গর্ভে আসার পর থেকেই বাবার দোয়া সন্তানের তাকদীর ও চরিত্র গঠনে ভূমিকা রাখে। প্রতিদিন স্ত্রীর পাশে বসে কুরআন তিলাওয়াত ও দোয়া করুন।",
+            tipHighlightBn = "হালাল উপার্জন নিশ্চিত করুন—এটি নেক সন্তানের প্রধান ভিত্তি।"
+        )
+    )
+
+    val fatherhoodChecklist: List<PregnancyChecklistItem> = listOf(
+        PregnancyChecklistItem(
+            id = "father_check_sunnah_food",
+            category = "FATHER_DUTY",
+            trimester = 0,
+            titleBn = "কালোজিরা, মধু, খেজুর ও বাদাম গ্রহণ",
+            subtitleBn = "প্রজনন স্বাস্থ্য ও স্ট্যামিনা অটুট রাখতে প্রতিদিনের সুন্নাহ খাবার গ্রহণ করুন।"
+        ),
+        PregnancyChecklistItem(
+            id = "father_check_wife_medicine",
+            category = "FATHER_DUTY",
+            trimester = 0,
+            titleBn = "স্ত্রীর ভিটামিন, ফলিক অ্যাসিড ও পুষ্টির খোঁজ নেওয়া",
+            subtitleBn = "স্ত্রী সময়মতো ওষুধ ও পুষ্টিকর খাবার খেয়েছেন কি না প্রতিদিন খোঁজ নিন।"
+        ),
+        PregnancyChecklistItem(
+            id = "father_check_no_smoke_sleep",
+            category = "FATHER_DUTY",
+            trimester = 0,
+            titleBn = "ধূমপানমুক্ত পরিবেশ ও ৭–৮ ঘণ্টা ঘুম",
+            subtitleBn = "গর্ভবতী স্ত্রী ও অনাগত সন্তানের সুরক্ষায় ঘরের পরিবেশ ধোঁয়ামুক্ত ও প্রশান্ত রাখুন।"
+        ),
+        PregnancyChecklistItem(
+            id = "father_check_dua_halal",
+            category = "FATHER_DUTY",
+            trimester = 0,
+            titleBn = "ফরয নামাযের পর নেক সন্তানের জন্য দোয়া",
+            subtitleBn = "রাব্বি হাবলী মিনাস সালিহীন ও রাব্বানা হাবলানা দোয়া নিয়মিত পাঠ করুন।"
+        )
+    )
 
     val preConceptionChecklist: List<PregnancyChecklistItem> = listOf(
         PregnancyChecklistItem(
