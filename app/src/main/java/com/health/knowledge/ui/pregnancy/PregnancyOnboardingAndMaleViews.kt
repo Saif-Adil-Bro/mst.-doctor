@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -35,6 +34,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.health.knowledge.domain.model.Article
 import com.health.knowledge.habit.HabitDateAndReportEngine
 import com.health.knowledge.habit.HabitScheduleCalculator
 import com.health.knowledge.pregnancy.IslamicPregnancyAmal
@@ -43,6 +43,7 @@ import com.health.knowledge.pregnancy.PregnancyChecklistItem
 import com.health.knowledge.pregnancy.PregnancyPlannerEngine
 import com.health.knowledge.pregnancy.PregnancyQuote
 import com.health.knowledge.pregnancy.PregnancyReminderPreset
+import com.health.knowledge.ui.home.ArticleCard
 import com.health.knowledge.ui.theme.onePxBorder
 import com.health.knowledge.ui.theme.solidOverSurface
 import com.health.knowledge.util.UserPreferencesManager
@@ -82,7 +83,6 @@ fun PregnancyProfileOnboardingView(
     var selectedSymptoms by remember(initialSymptoms) { mutableStateOf(initialSymptoms) }
 
     val isMale = selectedGender == UserPreferencesManager.GENDER_MALE
-    val totalSteps = if (isMale) 1 else 3
     val progress = if (isMale) 1f else (currentStep.toFloat() / 3f)
 
     val liveTimeline = remember(pickedDateMillis, selectedCycleDays) {
@@ -759,14 +759,23 @@ fun MaleHealthAndFatherhoodDashboard(
     quote: PregnancyQuote,
     completedChecks: Set<String>,
     activeHabitIds: Set<String>,
+    pregnancyPosts: List<Article> = emptyList(),
+    isAdminMode: Boolean = false,
     onNextQuote: () -> Unit,
     onSpeakText: (String) -> Unit,
     onToggleCheck: (String) -> Unit,
     onToggleReminderPreset: (PregnancyReminderPreset) -> Unit,
     onEditProfile: () -> Unit,
+    onArticleClick: (Int) -> Unit = {},
+    onBookmarkToggle: (Int, Boolean) -> Unit = { _, _ -> },
+    onReactionClick: (Article) -> Unit = {},
+    onVerifyClick: (Article) -> Unit = {},
+    onPinToggle: (Article) -> Unit = {},
+    onDeleteClick: (Article) -> Unit = {},
+    onOpenAdminPostDialog: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    var selectedMaleTab by remember { mutableIntStateOf(0) } // 0=ট্রিকস, 1=পুষ্টি, 2=দায়িত্ব, 3=দোয়া
+    var selectedMaleTab by remember { mutableIntStateOf(0) } // 0=ট্রিকস, 1=পুষ্টি, 2=দায়িত্ব, 3=দোয়া, 4=পোস্ট
 
     val fatherDuties = PregnancyPlannerEngine.fatherhoodChecklist
     val doneDutyCount = fatherDuties.count { it.id in completedChecks }
@@ -788,7 +797,7 @@ fun MaleHealthAndFatherhoodDashboard(
 
     LazyColumn(
         modifier = modifier,
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(bottom = 84.dp, top = 16.dp, start = 16.dp, end = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // 1. Male Hero Banner Card
@@ -900,7 +909,7 @@ fun MaleHealthAndFatherhoodDashboard(
             )
         }
 
-        // 3. 4 Sub-Tabs: ⚡ ট্রিকস | 🍯 পুষ্টি | 🤝 দায়িত্ব | 🤲 দোয়া
+        // 3. 5 Sub-Tabs: ⚡ ট্রিকস | 🍯 পুষ্টি | 🤝 দায়িত্ব | 🤲 দোয়া | 📝 পোস্ট
         item(key = "male_sub_tabs") {
             Row(
                 modifier = Modifier
@@ -912,7 +921,8 @@ fun MaleHealthAndFatherhoodDashboard(
                     0 to "⚡ ট্রিকস",
                     1 to "🍯 পুষ্টি",
                     2 to "🤝 দায়িত্ব",
-                    3 to "🤲 দোয়া"
+                    3 to "🤲 দোয়া",
+                    4 to "📝 পোস্ট (${HabitScheduleCalculator.toBengaliDigits(pregnancyPosts.size.toString())})"
                 ).forEach { (idx, label) ->
                     FilterChip(
                         selected = selectedMaleTab == idx,
@@ -1015,6 +1025,73 @@ fun MaleHealthAndFatherhoodDashboard(
                         isActive = preset.id in activeHabitIds,
                         onToggle = { onToggleReminderPreset(preset) }
                     )
+                }
+            }
+
+            4 -> {
+                item(key = "male_posts_header") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "📝 প্রেগন্যান্সি ও পিতৃত্ব পোস্ট (Firestore)",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "অ্যাডমিন কর্তৃক প্রকাশিত যাচাইকৃত স্বাস্থ্যতথ্য ও পরামর্শ",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (isAdminMode) {
+                            FilledTonalButton(
+                                onClick = onOpenAdminPostDialog,
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("পোস্ট করুন", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+
+                if (pregnancyPosts.isEmpty()) {
+                    item(key = "male_posts_empty") {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            border = onePxBorder(MaterialTheme.colorScheme.outlineVariant)
+                        ) {
+                            Text(
+                                text = "এখনো কোনো প্রেগন্যান্সি পোস্ট যুক্ত করা হয়নি।",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(20.dp)
+                            )
+                        }
+                    }
+                } else {
+                    items(pregnancyPosts, key = { "male_preg_post_${it.id}" }) { article ->
+                        Box(modifier = Modifier.offset(x = 0.dp)) {
+                            ArticleCard(
+                                article = article,
+                                isAdminMode = isAdminMode,
+                                onClick = { onArticleClick(article.id) },
+                                onBookmarkToggle = { onBookmarkToggle(article.id, article.isBookmarked) },
+                                onReactionClick = { onReactionClick(article) },
+                                onVerifyClick = { onVerifyClick(article) },
+                                onPinToggle = { onPinToggle(article) },
+                                onDeleteClick = { onDeleteClick(article) }
+                            )
+                        }
+                    }
                 }
             }
         }

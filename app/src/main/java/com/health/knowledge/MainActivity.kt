@@ -123,6 +123,12 @@ class MainActivity : ComponentActivity() {
                                 onBack = { navController.popBackStack() },
                                 onOpenHabitPlanner = {
                                     navController.navigate("habit_reminder")
+                                },
+                                onArticleClick = { id ->
+                                    navController.navigate("detail/$id")
+                                },
+                                onAdminClick = {
+                                    navController.navigate("admin")
                                 }
                             )
                         }

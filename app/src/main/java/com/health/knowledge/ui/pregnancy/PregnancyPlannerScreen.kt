@@ -8,6 +8,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -32,7 +33,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.health.knowledge.domain.model.Article
 import com.health.knowledge.habit.HabitScheduleCalculator
 import com.health.knowledge.pregnancy.FertileWindowStatus
 import com.health.knowledge.pregnancy.IslamicPregnancyAmal
@@ -41,6 +45,9 @@ import com.health.knowledge.pregnancy.PregnancyPlannerEngine
 import com.health.knowledge.pregnancy.PregnancyQuote
 import com.health.knowledge.pregnancy.PregnancyReminderPreset
 import com.health.knowledge.pregnancy.PregnancyTimelineStatus
+import com.health.knowledge.ui.detail.VerificationConsentDialog
+import com.health.knowledge.ui.home.AdminPasswordDialog
+import com.health.knowledge.ui.home.ArticleCard
 import com.health.knowledge.ui.theme.onePxBorder
 import com.health.knowledge.ui.theme.solidOverSurface
 import com.health.knowledge.util.UserPreferencesManager
@@ -51,6 +58,8 @@ import java.util.Calendar
 fun PregnancyPlannerScreen(
     onBack: () -> Unit,
     onOpenHabitPlanner: () -> Unit = {},
+    onArticleClick: (Int) -> Unit = {},
+    onAdminClick: () -> Unit = {},
     viewModel: PregnancyPlannerViewModel = hiltViewModel()
 ) {
     BackHandler { onBack() }
@@ -65,6 +74,17 @@ fun PregnancyPlannerScreen(
     val completedChecks by viewModel.completedChecks.collectAsState()
     val allHabits by viewModel.allHabits.collectAsState()
     val quoteIndex by viewModel.quoteIndex.collectAsState()
+    val isAdminMode by viewModel.isAdminMode.collectAsState()
+    val pregnancyArticles by viewModel.pregnancyArticles.collectAsState()
+    val isRefreshingPosts by viewModel.isRefreshingPosts.collectAsState()
+
+    // 5-click detector on Header Title for Hidden Admin Unlock (same as Mother Component)
+    var tapCount by remember { mutableIntStateOf(0) }
+    var lastTapTime by remember { mutableLongStateOf(0L) }
+    var showPasswordDialog by remember { mutableStateOf(false) }
+    var showAdminAddPostDialog by remember { mutableStateOf(false) }
+    var articleToVerify by remember { mutableStateOf<Article?>(null) }
+    var articleToDelete by remember { mutableStateOf<Article?>(null) }
 
     val timelineStatus = remember(startMillis, cycleDays) {
         PregnancyPlannerEngine.calculateTimelineStatus(
@@ -84,7 +104,7 @@ fun PregnancyPlannerScreen(
         mutableIntStateOf(timelineStatus.currentWeek)
     }
 
-    var postSubTab by remember { mutableIntStateOf(0) } // 0=বৃদ্ধি, 1=করণীয়, 2=দোয়া, 3=অ্যালার্ম
+    var postSubTab by remember { mutableIntStateOf(0) } // 0=বৃদ্ধি, 1=করণীয়, 2=দোয়া, 3=অ্যালার্ম, 4=পোস্ট
 
     val quotes = PregnancyPlannerEngine.emotionalAndMotivationalQuotes
     val currentQuote = quotes.getOrElse(quoteIndex % quotes.size.coerceAtLeast(1)) {
@@ -93,6 +113,111 @@ fun PregnancyPlannerScreen(
 
     val activeHabitIds = remember(allHabits) {
         allHabits.filter { it.isActive == 1 }.map { it.id }.toSet()
+    }
+
+    if (showPasswordDialog) {
+        AdminPasswordDialog(
+            onDismiss = { showPasswordDialog = false },
+            onUnlockAsync = { password, onResult ->
+                viewModel.verifyAdminGlobal(password) { ok ->
+                    if (ok) {
+                        showPasswordDialog = false
+                        Toast.makeText(
+                            context,
+                            "🔓 অ্যাডমিন মোড আনলক হয়েছে! এখন প্রেগন্যান্সি মডিউলে পোস্ট করতে পারবেন।",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                    onResult(ok)
+                }
+            },
+            onResetPasswordAsync = { recoveryCode, newPassword, onResult ->
+                viewModel.resetAdminPasswordGlobal(recoveryCode, newPassword) { ok, msg ->
+                    if (ok) {
+                        showPasswordDialog = false
+                        Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                    }
+                    onResult(ok, msg)
+                }
+            }
+        )
+    }
+
+    if (showAdminAddPostDialog && isAdminMode) {
+        PregnancyAdminPostDialog(
+            defaultStageTag = when {
+                userGender == UserPreferencesManager.GENDER_MALE -> PregnancyPlannerViewModel.CAT_MALE_FATHERHOOD
+                stageMode == UserPreferencesManager.STAGE_PRE_CONCEPTION -> PregnancyPlannerViewModel.CAT_PRE_CONCEPTION
+                else -> PregnancyPlannerViewModel.CAT_POST_CONCEPTION
+            },
+            onDismiss = { showAdminAddPostDialog = false },
+            onSubmit = { title, content, meds, stageTag, photoUrl, source, isPinned ->
+                viewModel.submitAdminPregnancyPost(
+                    title = title,
+                    content = content,
+                    medicines = meds,
+                    stageTag = stageTag,
+                    photoUrl = photoUrl,
+                    source = source,
+                    isPinned = isPinned
+                ) { ok, msg ->
+                    if (ok) {
+                        showAdminAddPostDialog = false
+                    }
+                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                }
+            }
+        )
+    }
+
+    articleToVerify?.let { target ->
+        VerificationConsentDialog(
+            article = target,
+            onDismiss = { articleToVerify = null },
+            onSubmit = { name, contact, comment ->
+                viewModel.submitVerification(target, name, contact, comment) {
+                    articleToVerify = null
+                    Toast.makeText(
+                        context,
+                        "✅ আপনার সত্যায়ন ও ভেরিফিকেশন সফলভাবে প্রকাশিত হয়েছে!",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            },
+            onRemoveVerification = if (target.isVerified) {
+                {
+                    viewModel.removeVerification(target) {
+                        articleToVerify = null
+                        Toast.makeText(context, "ভেরিফিকেশন তুলে নেওয়া হয়েছে", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } else null
+        )
+    }
+
+    articleToDelete?.let { target ->
+        AlertDialog(
+            onDismissRequest = { articleToDelete = null },
+            title = { Text("পোস্ট ডিলিট নিশ্চিত করুন") },
+            text = { Text("আপনি কি নিশ্চিত যে \"${target.title.take(50)}...\" পোস্টটি গ্লোবালি ডিলিট করতে চান?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deleteArticle(target)
+                        articleToDelete = null
+                        Toast.makeText(context, "পোস্টটি গ্লোবালি ডিলিট করা হয়েছে", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("ডিলিট করুন")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { articleToDelete = null }) {
+                    Text("বাতিল")
+                }
+            }
+        )
     }
 
     fun openStartDatePicker() {
@@ -160,15 +285,55 @@ fun PregnancyPlannerScreen(
                                 tint = Color.White
                             )
                         }
-                        Column {
-                            Text(
-                                text = "প্রেগন্যান্সি — আগে ও পরে",
-                                color = Color.White,
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                        Column(
+                            modifier = Modifier.clickable(
+                                indication = null,
+                                interactionSource = remember { MutableInteractionSource() }
+                            ) {
+                                val now = System.currentTimeMillis()
+                                if (now - lastTapTime > 2500L) {
+                                    tapCount = 1
+                                } else {
+                                    tapCount++
+                                }
+                                lastTapTime = now
+                                if (tapCount >= 5) {
+                                    tapCount = 0
+                                    if (!isAdminMode) {
+                                        showPasswordDialog = true
+                                    } else {
+                                        onAdminClick()
+                                    }
+                                }
+                            }
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "প্রেগন্যান্সি — আগে ও পরে",
+                                    color = Color.White,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                if (isAdminMode) {
+                                    Surface(
+                                        color = Color(0xFFFFD54F),
+                                        shape = RoundedCornerShape(6.dp)
+                                    ) {
+                                        Text(
+                                            text = "অ্যাডমিন",
+                                            color = Color(0xFF1B1B1B),
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                            }
                             Text(
                                 text = when {
                                     !isOnboarded -> "প্রোফাইল সেটআপ"
@@ -184,9 +349,29 @@ fun PregnancyPlannerScreen(
                         }
                     }
 
-                    // Pure Icon Buttons: Profile Setup & Calendar Date
+                    // Pure Icon Buttons: Admin Add Post (Admin-Only), Profile Setup & Calendar Date
                     if (isOnboarded) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (isAdminMode) {
+                                Surface(
+                                    color = Color(0xFFFFD54F),
+                                    shape = CircleShape,
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .testTag("pregnancy_admin_add_post_top_button")
+                                        .clickable { showAdminAddPostDialog = true }
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Default.PostAdd,
+                                            contentDescription = "অ্যাডমিন পোস্ট যোগ করুন",
+                                            tint = Color(0xFF1B1B1B),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+                            }
+
                             Surface(
                                 color = Color.White.copy(alpha = 0.2f),
                                 shape = CircleShape,
@@ -228,6 +413,19 @@ fun PregnancyPlannerScreen(
                     }
                 }
             }
+        },
+        floatingActionButton = {
+            // Strictly Admin-Only FAB to publish pregnancy posts to Firestore
+            if (isOnboarded && isAdminMode) {
+                ExtendedFloatingActionButton(
+                    onClick = { showAdminAddPostDialog = true },
+                    icon = { Icon(Icons.Default.CloudUpload, contentDescription = null) },
+                    text = { Text("নতুন পোস্ট (অ্যাডমিন)", fontWeight = FontWeight.Bold) },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.testTag("pregnancy_admin_fab")
+                )
+            }
         }
     ) { paddingValues ->
         when {
@@ -257,6 +455,8 @@ fun PregnancyPlannerScreen(
                     quote = currentQuote,
                     completedChecks = completedChecks,
                     activeHabitIds = activeHabitIds,
+                    pregnancyPosts = pregnancyArticles,
+                    isAdminMode = isAdminMode,
                     onNextQuote = viewModel::nextQuote,
                     onSpeakText = viewModel::speakBengaliPrompt,
                     onToggleCheck = viewModel::toggleCheckItem,
@@ -267,6 +467,13 @@ fun PregnancyPlannerScreen(
                         }
                     },
                     onEditProfile = viewModel::reopenOnboarding,
+                    onArticleClick = onArticleClick,
+                    onBookmarkToggle = viewModel::toggleBookmark,
+                    onReactionClick = viewModel::reactToArticle,
+                    onVerifyClick = { articleToVerify = it },
+                    onPinToggle = viewModel::togglePinArticle,
+                    onDeleteClick = { articleToDelete = it },
+                    onOpenAdminPostDialog = { showAdminAddPostDialog = true },
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(paddingValues)
@@ -280,6 +487,9 @@ fun PregnancyPlannerScreen(
                     quote = currentQuote,
                     completedChecks = completedChecks,
                     activeHabitIds = activeHabitIds,
+                    pregnancyPosts = pregnancyArticles,
+                    isAdminMode = isAdminMode,
+                    isRefreshingPosts = isRefreshingPosts,
                     onPickLastPeriodDate = ::openStartDatePicker,
                     onToggleSymptom = viewModel::toggleSymptom,
                     onNextQuote = viewModel::nextQuote,
@@ -294,6 +504,14 @@ fun PregnancyPlannerScreen(
                     onSwitchToPostConception = {
                         viewModel.setStageMode(UserPreferencesManager.STAGE_POST_CONCEPTION)
                     },
+                    onRefreshPosts = viewModel::syncPregnancyPostsFromFirestore,
+                    onArticleClick = onArticleClick,
+                    onBookmarkToggle = viewModel::toggleBookmark,
+                    onReactionClick = viewModel::reactToArticle,
+                    onVerifyClick = { articleToVerify = it },
+                    onPinToggle = viewModel::togglePinArticle,
+                    onDeleteClick = { articleToDelete = it },
+                    onOpenAdminPostDialog = { showAdminAddPostDialog = true },
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(paddingValues)
@@ -311,6 +529,9 @@ fun PregnancyPlannerScreen(
                     quote = currentQuote,
                     completedChecks = completedChecks,
                     activeHabitIds = activeHabitIds,
+                    pregnancyPosts = pregnancyArticles,
+                    isAdminMode = isAdminMode,
+                    isRefreshingPosts = isRefreshingPosts,
                     onPickStartDate = ::openStartDatePicker,
                     onPickEddDate = ::openEddDatePicker,
                     onToggleSymptom = viewModel::toggleSymptom,
@@ -324,6 +545,14 @@ fun PregnancyPlannerScreen(
                         }
                     },
                     onOpenHabitPlanner = onOpenHabitPlanner,
+                    onRefreshPosts = viewModel::syncPregnancyPostsFromFirestore,
+                    onArticleClick = onArticleClick,
+                    onBookmarkToggle = viewModel::toggleBookmark,
+                    onReactionClick = viewModel::reactToArticle,
+                    onVerifyClick = { articleToVerify = it },
+                    onPinToggle = viewModel::togglePinArticle,
+                    onDeleteClick = { articleToDelete = it },
+                    onOpenAdminPostDialog = { showAdminAddPostDialog = true },
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(paddingValues)
@@ -334,7 +563,7 @@ fun PregnancyPlannerScreen(
 }
 
 /**
- * ── FEMALE MODE 1: সন্তান নেওয়ার আগে করণীয়, উর্বর সময় (Fertile Window), লক্ষণ ও দোয়া ──
+ * ── FEMALE MODE 1: সন্তান নেওয়ার আগে করণীয়, উর্বর সময় (Fertile Window), লক্ষণ, দোয়া ও ফায়ারস্টোর পোস্ট ──
  */
 @Composable
 private fun PreConceptionStageContent(
@@ -343,6 +572,9 @@ private fun PreConceptionStageContent(
     quote: PregnancyQuote,
     completedChecks: Set<String>,
     activeHabitIds: Set<String>,
+    pregnancyPosts: List<Article>,
+    isAdminMode: Boolean,
+    isRefreshingPosts: Boolean,
     onPickLastPeriodDate: () -> Unit,
     onToggleSymptom: (String) -> Unit,
     onNextQuote: () -> Unit,
@@ -350,6 +582,14 @@ private fun PreConceptionStageContent(
     onToggleCheck: (String) -> Unit,
     onToggleReminderPreset: (PregnancyReminderPreset) -> Unit,
     onSwitchToPostConception: () -> Unit,
+    onRefreshPosts: () -> Unit,
+    onArticleClick: (Int) -> Unit,
+    onBookmarkToggle: (Int, Boolean) -> Unit,
+    onReactionClick: (Article) -> Unit,
+    onVerifyClick: (Article) -> Unit,
+    onPinToggle: (Article) -> Unit,
+    onDeleteClick: (Article) -> Unit,
+    onOpenAdminPostDialog: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val preChecklist = PregnancyPlannerEngine.preConceptionChecklist
@@ -360,7 +600,7 @@ private fun PreConceptionStageContent(
 
     LazyColumn(
         modifier = modifier,
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(bottom = 84.dp, top = 16.dp, start = 16.dp, end = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // 1. Fertile Window & Ovulation Hero Card
@@ -448,6 +688,48 @@ private fun PreConceptionStageContent(
                 isActive = preset.id in activeHabitIds,
                 onToggle = { onToggleReminderPreset(preset) }
             )
+        }
+
+        // 7. Firestore-Synced Pregnancy Posts Section (Admin-Only Post Creation)
+        item(key = "pre_firestore_posts_header") {
+            Spacer(Modifier.height(6.dp))
+            PregnancyPostsHeaderBar(
+                totalCount = pregnancyPosts.size,
+                isAdminMode = isAdminMode,
+                isRefreshing = isRefreshingPosts,
+                onRefresh = onRefreshPosts,
+                onOpenAdminPostDialog = onOpenAdminPostDialog
+            )
+        }
+
+        if (pregnancyPosts.isEmpty()) {
+            item(key = "pre_posts_empty") {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    border = onePxBorder(MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Text(
+                        text = "এখনো কোনো প্রেগন্যান্সি পোস্ট যুক্ত করা হয়নি।",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(18.dp)
+                    )
+                }
+            }
+        } else {
+            items(pregnancyPosts, key = { "pre_post_${it.id}" }) { article ->
+                ArticleCard(
+                    article = article,
+                    isAdminMode = isAdminMode,
+                    onClick = { onArticleClick(article.id) },
+                    onBookmarkToggle = { onBookmarkToggle(article.id, article.isBookmarked) },
+                    onReactionClick = { onReactionClick(article) },
+                    onVerifyClick = { onVerifyClick(article) },
+                    onPinToggle = { onPinToggle(article) },
+                    onDeleteClick = { onDeleteClick(article) }
+                )
+            }
         }
     }
 }
@@ -568,7 +850,7 @@ private fun FertileWindowHeroCard(
 }
 
 /**
- * ── FEMALE MODE 2: গর্ভধারণের পরে (সম্ভাব্য ডেলিভারি তারিখ, আজ কত দিন হলো, লক্ষণ পরামর্শ, বৃদ্ধি, করণীয়-বর্জনীয় ও দোয়া) ──
+ * ── FEMALE MODE 2: গর্ভধারণের পরে (সম্ভাব্য ডেলিভারি তারিখ, আজ কত দিন হলো, লক্ষণ পরামর্শ, বৃদ্ধি, করণীয়-বর্জনীয়, দোয়া ও ফায়ারস্টোর পোস্ট) ──
  */
 @Composable
 private fun PostConceptionStageContent(
@@ -581,6 +863,9 @@ private fun PostConceptionStageContent(
     quote: PregnancyQuote,
     completedChecks: Set<String>,
     activeHabitIds: Set<String>,
+    pregnancyPosts: List<Article>,
+    isAdminMode: Boolean,
+    isRefreshingPosts: Boolean,
     onPickStartDate: () -> Unit,
     onPickEddDate: () -> Unit,
     onToggleSymptom: (String) -> Unit,
@@ -589,14 +874,36 @@ private fun PostConceptionStageContent(
     onToggleCheck: (String) -> Unit,
     onToggleReminderPreset: (PregnancyReminderPreset) -> Unit,
     onOpenHabitPlanner: () -> Unit,
+    onRefreshPosts: () -> Unit,
+    onArticleClick: (Int) -> Unit,
+    onBookmarkToggle: (Int, Boolean) -> Unit,
+    onReactionClick: (Article) -> Unit,
+    onVerifyClick: (Article) -> Unit,
+    onPinToggle: (Article) -> Unit,
+    onDeleteClick: (Article) -> Unit,
+    onOpenAdminPostDialog: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var doDontFilter by remember { mutableStateOf("DO") } // "DO", "DONT", "SUNNAH"
     var duaTrimesterFilter by remember { mutableIntStateOf(0) } // 0=সব, 1=১ম, 2=২য়, 3=৩য়
+    var postStageFilter by remember { mutableStateOf("ALL") } // "ALL", "PRE", "POST", "MALE"
+
+    val filteredPregnancyPosts = remember(pregnancyPosts, postStageFilter) {
+        when (postStageFilter) {
+            "PRE" -> pregnancyPosts.filter { it.categories.contains(PregnancyPlannerViewModel.CAT_PRE_CONCEPTION) }
+            "POST" -> pregnancyPosts.filter {
+                it.categories.contains(PregnancyPlannerViewModel.CAT_POST_CONCEPTION) ||
+                    (!it.categories.contains(PregnancyPlannerViewModel.CAT_PRE_CONCEPTION) &&
+                        !it.categories.contains(PregnancyPlannerViewModel.CAT_MALE_FATHERHOOD))
+            }
+            "MALE" -> pregnancyPosts.filter { it.categories.contains(PregnancyPlannerViewModel.CAT_MALE_FATHERHOOD) }
+            else -> pregnancyPosts
+        }
+    }
 
     LazyColumn(
         modifier = modifier,
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(bottom = 84.dp, top = 16.dp, start = 16.dp, end = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // 1. Expected Delivery Date & "Today How Many Days" Hero Card
@@ -626,7 +933,7 @@ private fun PostConceptionStageContent(
             )
         }
 
-        // 4. 4 Sub-Tab Pills: 👶 বৃদ্ধি | ✓ করণীয় | 🤲 দোয়া | 🔔 অ্যালার্ম
+        // 4. 5 Sub-Tab Pills: 👶 বৃদ্ধি | ✓ করণীয় | 🤲 দোয়া | 🔔 অ্যালার্ম | 📝 পোস্ট
         item(key = "post_sub_tabs") {
             Row(
                 modifier = Modifier
@@ -638,7 +945,8 @@ private fun PostConceptionStageContent(
                     0 to "👶 বৃদ্ধি",
                     1 to "✓ করণীয়",
                     2 to "🤲 দোয়া",
-                    3 to "🔔 অ্যালার্ম"
+                    3 to "🔔 অ্যালার্ম",
+                    4 to "📝 পোস্ট (${HabitScheduleCalculator.toBengaliDigits(pregnancyPosts.size.toString())})"
                 ).forEach { (idx, label) ->
                     FilterChip(
                         selected = postSubTab == idx,
@@ -695,6 +1003,33 @@ private fun PostConceptionStageContent(
                         isDontItem = true,
                         onToggle = { onToggleCheck(item.id) }
                     )
+                }
+
+                // Also show latest Firestore Pregnancy Posts preview at bottom of Growth tab
+                if (pregnancyPosts.isNotEmpty() || isAdminMode) {
+                    item(key = "growth_tab_posts_preview_header") {
+                        Spacer(Modifier.height(4.dp))
+                        PregnancyPostsHeaderBar(
+                            totalCount = pregnancyPosts.size,
+                            isAdminMode = isAdminMode,
+                            isRefreshing = isRefreshingPosts,
+                            onRefresh = onRefreshPosts,
+                            onOpenAdminPostDialog = onOpenAdminPostDialog
+                        )
+                    }
+
+                    items(pregnancyPosts.take(5), key = { "growth_post_preview_${it.id}" }) { article ->
+                        ArticleCard(
+                            article = article,
+                            isAdminMode = isAdminMode,
+                            onClick = { onArticleClick(article.id) },
+                            onBookmarkToggle = { onBookmarkToggle(article.id, article.isBookmarked) },
+                            onReactionClick = { onReactionClick(article) },
+                            onVerifyClick = { onVerifyClick(article) },
+                            onPinToggle = { onPinToggle(article) },
+                            onDeleteClick = { onDeleteClick(article) }
+                        )
+                    }
                 }
             }
 
@@ -810,6 +1145,396 @@ private fun PostConceptionStageContent(
                         isActive = preset.id in activeHabitIds,
                         onToggle = { onToggleReminderPreset(preset) }
                     )
+                }
+            }
+
+            4 -> {
+                // Dedicated Firestore Pregnancy Posts Tab (Admin-Only Post Creation)
+                item(key = "posts_tab_header") {
+                    PregnancyPostsHeaderBar(
+                        totalCount = filteredPregnancyPosts.size,
+                        isAdminMode = isAdminMode,
+                        isRefreshing = isRefreshingPosts,
+                        onRefresh = onRefreshPosts,
+                        onOpenAdminPostDialog = onOpenAdminPostDialog
+                    )
+                }
+
+                item(key = "posts_stage_filter_row") {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(
+                            "ALL" to "সব পোস্ট",
+                            "PRE" to "🌱 সন্তান নেওয়ার আগে",
+                            "POST" to "🤰 গর্ভকালীন ও প্রসব",
+                            "MALE" to "👨 পিতৃত্ব গাইড"
+                        ).forEach { (key, label) ->
+                            FilterChip(
+                                selected = postStageFilter == key,
+                                onClick = { postStageFilter = key },
+                                label = { Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
+                            )
+                        }
+                    }
+                }
+
+                if (filteredPregnancyPosts.isEmpty()) {
+                    item(key = "posts_tab_empty") {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            border = onePxBorder(MaterialTheme.colorScheme.outlineVariant)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text("📝", fontSize = 32.sp)
+                                Text(
+                                    text = "এই বিভাগে এখনো কোনো পোস্ট যুক্ত করা হয়নি।",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center
+                                )
+                                if (isAdminMode) {
+                                    Button(
+                                        onClick = onOpenAdminPostDialog,
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("প্রথম পোস্ট প্রকাশ করুন")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    items(filteredPregnancyPosts, key = { "preg_post_${it.id}" }) { article ->
+                        ArticleCard(
+                            article = article,
+                            isAdminMode = isAdminMode,
+                            onClick = { onArticleClick(article.id) },
+                            onBookmarkToggle = { onBookmarkToggle(article.id, article.isBookmarked) },
+                            onReactionClick = { onReactionClick(article) },
+                            onVerifyClick = { onVerifyClick(article) },
+                            onPinToggle = { onPinToggle(article) },
+                            onDeleteClick = { onDeleteClick(article) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun PregnancyPostsHeaderBar(
+    totalCount: Int,
+    isAdminMode: Boolean,
+    isRefreshing: Boolean,
+    onRefresh: () -> Unit,
+    onOpenAdminPostDialog: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.28f).solidOverSurface()
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.38f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "📝 মাতৃত্ব ও প্রেগন্যান্সি পোস্ট (${HabitScheduleCalculator.toBengaliDigits(totalCount.toString())}টি)",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = if (isAdminMode) {
+                        "🔓 অ্যাডমিন মোড চালু • নতুন পোস্ট সরাসরি Firestore-এ যুক্ত করুন"
+                    } else {
+                        "☁️ Firestore-সিঙ্কড যাচাইকৃত পোস্ট (শুধুমাত্র অ্যাডমিন পোস্ট করতে পারবেন)"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                FilledTonalIconButton(
+                    onClick = onRefresh,
+                    enabled = !isRefreshing,
+                    modifier = Modifier.size(34.dp)
+                ) {
+                    if (isRefreshing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(
+                            Icons.Default.Sync,
+                            contentDescription = "Firestore সিঙ্ক",
+                            modifier = Modifier.size(17.dp)
+                        )
+                    }
+                }
+
+                if (isAdminMode) {
+                    Button(
+                        onClick = onOpenAdminPostDialog,
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("পোস্ট", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Admin-Only Dialog to create & publish a new Pregnancy post directly to Firestore.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun PregnancyAdminPostDialog(
+    defaultStageTag: String,
+    onDismiss: () -> Unit,
+    onSubmit: (
+        title: String,
+        content: String,
+        medicines: String,
+        stageTag: String,
+        photoUrl: String,
+        source: String,
+        isPinned: Boolean
+    ) -> Unit
+) {
+    var title by remember { mutableStateOf("") }
+    var content by remember { mutableStateOf("") }
+    var medicines by remember { mutableStateOf("") }
+    var source by remember { mutableStateOf("") }
+    var photoUrl by remember { mutableStateOf("") }
+    var selectedStageTag by remember { mutableStateOf(defaultStageTag) }
+    var isPinned by remember { mutableStateOf(false) }
+    var isSubmitting by remember { mutableStateOf(false) }
+
+    val stageOptions = listOf(
+        PregnancyPlannerViewModel.CAT_PRE_CONCEPTION to "🌱 সন্তান নেওয়ার আগে",
+        PregnancyPlannerViewModel.CAT_POST_CONCEPTION to "🤰 গর্ভকালীন ও প্রসব",
+        PregnancyPlannerViewModel.CAT_MALE_FATHERHOOD to "👨 পুরুষ ও পিতৃত্ব গাইড",
+        PregnancyPlannerViewModel.CAT_PREGNANCY_ROOT to "🌸 সকল পর্যায়ে"
+    )
+
+    Dialog(
+        onDismissRequest = { if (!isSubmitting) onDismiss() },
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            border = onePxBorder(),
+            modifier = Modifier
+                .fillMaxWidth(0.94f)
+                .fillMaxHeight(0.9f)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(20.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("🤰", fontSize = 22.sp)
+                        Spacer(Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                "প্রেগন্যান্সি পোস্ট যোগ করুন (অ্যাডমিন)",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "শুধুমাত্র অ্যাডমিন • সরাসরি Firestore-এ পাবলিশ হবে",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                    IconButton(onClick = onDismiss, enabled = !isSubmitting) {
+                        Icon(Icons.Default.Close, null)
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
+
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    item {
+                        Text(
+                            "কোন পর্যায়ের জন্য পোস্টটি প্রযোজ্য?",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            stageOptions.forEach { (tag, label) ->
+                                FilterChip(
+                                    selected = selectedStageTag == tag,
+                                    onClick = { selectedStageTag = tag },
+                                    label = { Text(label, fontSize = 12.sp) }
+                                )
+                            }
+                        }
+                    }
+
+                    item {
+                        OutlinedTextField(
+                            value = title,
+                            onValueChange = { title = it },
+                            label = { Text("শিরোনাম *") },
+                            placeholder = { Text("যেমন: গর্ভকালীন প্রথম ৩ মাসে খাবার ও সতর্কতা") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true
+                        )
+                    }
+
+                    item {
+                        OutlinedTextField(
+                            value = content,
+                            onValueChange = { content = it },
+                            label = { Text("বিস্তারিত বিবরণ ও পরামর্শ *") },
+                            placeholder = { Text("গর্ভবতী মা বা দম্পতির করণীয়, পুষ্টি ও সমাধান বিস্তারিত লিখুন...") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            minLines = 4,
+                            maxLines = 9
+                        )
+                    }
+
+                    item {
+                        OutlinedTextField(
+                            value = medicines,
+                            onValueChange = { medicines = it },
+                            label = { Text("পুষ্টিকর খাবার / ভেষজ উপাদান (ঐচ্ছিক)") },
+                            placeholder = { Text("কমা দিয়ে লিখুন, যেমন: খেজুর, দুধ, ডালিম, ফলিক অ্যাসিড") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true
+                        )
+                    }
+
+                    item {
+                        OutlinedTextField(
+                            value = source,
+                            onValueChange = { source = it },
+                            label = { Text("📚 তথ্যসূত্র / সোর্স (ঐচ্ছিক)") },
+                            placeholder = { Text("যেমন: স্ত্রীরোগ বিশেষজ্ঞ / বিশ্ব স্বাস্থ্য সংস্থা / কুরআন-হাদিস") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true
+                        )
+                    }
+
+                    item {
+                        OutlinedTextField(
+                            value = photoUrl,
+                            onValueChange = { photoUrl = it },
+                            label = { Text("🖼️ কভার ফটো CDN লিংক (ঐচ্ছিক)") },
+                            placeholder = { Text("https://example.com/pregnancy-care.jpg") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true
+                        )
+                    }
+
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(12.dp),
+                            border = onePxBorder(MaterialTheme.colorScheme.outlineVariant),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("📌 সবার উপরে পিন করে রাখুন", fontWeight = FontWeight.SemiBold)
+                                    Text(
+                                        "পিন করলে প্রেগন্যান্সি মডিউলে সবার উপরে দেখাবে",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Switch(checked = isPinned, onCheckedChange = { isPinned = it })
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
+
+                Button(
+                    onClick = {
+                        isSubmitting = true
+                        onSubmit(title, content, medicines, selectedStageTag, photoUrl, source, isPinned)
+                    },
+                    enabled = title.isNotBlank() && content.isNotBlank() && !isSubmitting,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    if (isSubmitting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Firestore-এ আপলোড হচ্ছে...")
+                    } else {
+                        Icon(Icons.Default.CloudUpload, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Firestore-এ প্রকাশ করুন", fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
