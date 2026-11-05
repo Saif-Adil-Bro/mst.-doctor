@@ -1,15 +1,20 @@
-name: Build Android APK
+name: Build Android APK & Push to Appetize
 
 on:
   push:
     branches: [ "main", "master" ]
   pull_request:
     branches: [ "main", "master" ]
-  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
+  workflow_dispatch:
+    inputs:
+      appetize_public_key:
+        description: "Optional Appetize Public Key to update an existing app (overrides secret)"
+        required: false
+        default: ""
 
 jobs:
   build:
-    name: Build & Package APK
+    name: Build APK & Deploy to Appetize
     runs-on: ubuntu-latest
 
     steps:
@@ -59,3 +64,87 @@ jobs:
           name: HealthKnowledge-Debug-APK
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 30
+
+      # Step 8: Push APK to Appetize.io (Create new or Update existing publicKey)
+      - name: Push APK to Appetize.io
+        id: appetize_deploy
+        env:
+          APPETIZE_API_TOKEN: ${{ secrets.APPETIZE_API_TOKEN }}
+          SECRET_PUBLIC_KEY: ${{ secrets.APPETIZE_PUBLIC_KEY }}
+          INPUT_PUBLIC_KEY: ${{ github.event.inputs.appetize_public_key }}
+        run: |
+          APK_PATH=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
+
+          if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
+            echo "❌ Error: Built APK file not found in app/build/outputs/apk/debug/"
+            exit 1
+          fi
+
+          echo "✅ Found APK: $APK_PATH"
+
+          if [ -z "$APPETIZE_API_TOKEN" ]; then
+            echo "⚠️ APPETIZE_API_TOKEN secret is not set. Skipping Appetize upload."
+            {
+              echo "### ⚠️ Appetize.io Upload Skipped"
+              echo "To automatically push the built APK to **Appetize.io**, add the following repository secrets in **Settings → Secrets and variables → Actions**:"
+              echo "- \`APPETIZE_API_TOKEN\` *(Required)*: Your Appetize API Token"
+              echo "- \`APPETIZE_PUBLIC_KEY\` *(Optional)*: Existing Appetize \`publicKey\` if you want to update the same app link on every push"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # Determine target Public Key (manual dispatch input takes priority over secret)
+          TARGET_PUBLIC_KEY="$INPUT_PUBLIC_KEY"
+          if [ -z "$TARGET_PUBLIC_KEY" ]; then
+            TARGET_PUBLIC_KEY="$SECRET_PUBLIC_KEY"
+          fi
+
+          if [ -n "$TARGET_PUBLIC_KEY" ]; then
+            echo "🔄 Updating existing Appetize app (publicKey: $TARGET_PUBLIC_KEY)..."
+            API_URL="https://api.appetize.io/v1/apps/$TARGET_PUBLIC_KEY"
+            DEPLOY_MODE="Updated Existing App"
+          else
+            echo "🚀 Uploading new Android app to Appetize.io..."
+            API_URL="https://api.appetize.io/v1/apps"
+            DEPLOY_MODE="Created New App"
+          fi
+
+          HTTP_RESPONSE=$(curl -sS -w "\n%{http_code}" -X POST "$API_URL" \
+            -H "X-API-KEY: $APPETIZE_API_TOKEN" \
+            -u "$APPETIZE_API_TOKEN:" \
+            -F "file=@$APK_PATH" \
+            -F "platform=android" \
+            -F "note=GitHub Actions build ${GITHUB_SHA::7}")
+
+          HTTP_BODY=$(echo "$HTTP_RESPONSE" | sed '$d')
+          HTTP_STATUS=$(echo "$HTTP_RESPONSE" | tail -n 1)
+
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+            echo "❌ Appetize API upload failed with HTTP status $HTTP_STATUS"
+            echo "Response: $HTTP_BODY"
+            exit 1
+          fi
+
+          PUBLIC_KEY=$(echo "$HTTP_BODY" | jq -r '.publicKey // empty')
+          PUBLIC_URL=$(echo "$HTTP_BODY" | jq -r '.publicURL // .appURL // empty')
+
+          if [ -z "$PUBLIC_URL" ] && [ -n "$PUBLIC_KEY" ]; then
+            PUBLIC_URL="https://appetize.io/app/$PUBLIC_KEY"
+          fi
+
+          echo "✅ Successfully pushed APK to Appetize.io!"
+          echo "Public Key: $PUBLIC_KEY"
+          echo "Live Preview URL: $PUBLIC_URL"
+
+          echo "public_key=$PUBLIC_KEY" >> "$GITHUB_OUTPUT"
+          echo "public_url=$PUBLIC_URL" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## 📱 Appetize.io Live Preview Ready!"
+            echo "| Property | Value |"
+            echo "| :--- | :--- |"
+            echo "| **Status** | ✅ $DEPLOY_MODE |"
+            echo "| **Public Key** | \`$PUBLIC_KEY\` |"
+            echo "| **Live Emulator Link** | [🔗 Open App on Appetize.io]($PUBLIC_URL) |"
+            echo "| **Commit** | \`${GITHUB_SHA::7}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
