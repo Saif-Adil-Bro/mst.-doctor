@@ -211,7 +211,7 @@ class PregnancyPlannerViewModel @Inject constructor(
 
     fun reactToArticle(article: Article) {
         viewModelScope.launch {
-            repository.toggleReactionForIp(article)
+            repository.toggleReaction(article)
         }
     }
 

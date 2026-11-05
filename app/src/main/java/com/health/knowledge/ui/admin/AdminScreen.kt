@@ -379,7 +379,15 @@ private fun AddPostTab(
         item {
             Text("বিভাগ নির্বাচন করুন:", style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(8.dp))
-            val chunkedCategories = categories.chunked(2)
+            val adminCategories = remember {
+                categories + listOf(
+                    "প্রেগন্যান্সি" to "🤰",
+                    "প্রেগন্যান্সি_পূর্ব" to "🌱",
+                    "প্রেগন্যান্সি_গর্ভকালীন" to "👶",
+                    "প্রেগন্যান্সি_পুরুষ" to "👨"
+                )
+            }
+            val chunkedCategories = adminCategories.chunked(2)
             chunkedCategories.forEach { row ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
