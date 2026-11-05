@@ -360,6 +360,48 @@ class UserPreferencesManager @Inject constructor(
             .apply()
     }
 
+    // ── PREGNANCY PLANNER ("প্রেগন্যান্সি — আগে ও পরে") ──────────────────────
+    private val defaultPregnancyStartMillis: Long by lazy {
+        System.currentTimeMillis() - (84L * 86_400_000L) // Default 12 weeks (84 days)
+    }
+
+    private val _pregnancyStageMode = MutableStateFlow(
+        prefs.getString(KEY_PREGNANCY_STAGE_MODE, STAGE_POST_CONCEPTION) ?: STAGE_POST_CONCEPTION
+    )
+    val pregnancyStageMode: StateFlow<String> = _pregnancyStageMode.asStateFlow()
+
+    private val _pregnancyStartMillis = MutableStateFlow(
+        prefs.getLong(KEY_PREGNANCY_START_MILLIS, defaultPregnancyStartMillis)
+    )
+    val pregnancyStartMillis: StateFlow<Long> = _pregnancyStartMillis.asStateFlow()
+
+    private val _pregnancyCompletedChecks = MutableStateFlow<Set<String>>(
+        prefs.getStringSet(KEY_PREGNANCY_CHECKS, emptySet())?.toSet() ?: emptySet()
+    )
+    val pregnancyCompletedChecks: StateFlow<Set<String>> = _pregnancyCompletedChecks.asStateFlow()
+
+    fun setPregnancyStageMode(mode: String) {
+        _pregnancyStageMode.value = mode
+        prefs.edit().putString(KEY_PREGNANCY_STAGE_MODE, mode).apply()
+    }
+
+    fun setPregnancyStartMillis(startMillis: Long) {
+        _pregnancyStartMillis.value = startMillis
+        prefs.edit().putLong(KEY_PREGNANCY_START_MILLIS, startMillis).apply()
+    }
+
+    fun togglePregnancyCheckItem(itemKey: String) {
+        val current = _pregnancyCompletedChecks.value.toMutableSet()
+        if (itemKey in current) {
+            current.remove(itemKey)
+        } else {
+            current.add(itemKey)
+        }
+        val immutable = current.toSet()
+        _pregnancyCompletedChecks.value = immutable
+        prefs.edit().putStringSet(KEY_PREGNANCY_CHECKS, immutable).apply()
+    }
+
     private fun sha256(input: String): String {
         val bytes = MessageDigest.getInstance("SHA-256").digest(input.toByteArray())
         return bytes.joinToString("") { "%02x".format(it) }
@@ -405,5 +447,11 @@ class UserPreferencesManager @Inject constructor(
         private const val KEY_HABIT_SLEEP_START_M = "habit_sleep_start_minute"
         private const val KEY_HABIT_SLEEP_END_H = "habit_sleep_end_hour"
         private const val KEY_HABIT_SLEEP_END_M = "habit_sleep_end_minute"
+
+        private const val KEY_PREGNANCY_STAGE_MODE = "pregnancy_stage_mode"
+        private const val KEY_PREGNANCY_START_MILLIS = "pregnancy_start_millis"
+        private const val KEY_PREGNANCY_CHECKS = "pregnancy_completed_checks"
+        const val STAGE_PRE_CONCEPTION = "PRE"
+        const val STAGE_POST_CONCEPTION = "POST"
     }
 }

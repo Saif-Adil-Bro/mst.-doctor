@@ -221,4 +221,36 @@ class HabitScheduleCalculatorTest {
         assertEquals(12, yearlyReport.bars.size)
         assertEquals(2, yearlyReport.completedCount)
     }
+
+    @Test
+    fun `pregnancy planner engine calculates edd elapsed days trimester and weekly growth accurately`() {
+        val refCal = Calendar.getInstance().apply {
+            set(2026, Calendar.NOVEMBER, 4, 10, 0, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val refMillis = HabitDateAndReportEngine.startOfDayMillis(refCal.timeInMillis)
+        val startMillis = HabitDateAndReportEngine.addDays(refMillis, -100) // 100 days ago
+
+        val status = com.health.knowledge.pregnancy.PregnancyPlannerEngine.calculateTimelineStatus(
+            startMillis = startMillis,
+            referenceDateMillis = refMillis
+        )
+
+        assertEquals(100, status.elapsedDays)
+        assertEquals(180, status.remainingDays)
+        assertEquals(15, status.currentWeek) // 100 days = week 15 (days 99..105)
+        assertEquals(2, status.trimester)
+        assertEquals("২য় ত্রৈমাসিক", status.trimesterLabelBn)
+
+        // Round-trip from EDD back to startMillis
+        val computedStart = com.health.knowledge.pregnancy.PregnancyPlannerEngine.startMillisFromEdd(status.eddMillis)
+        assertEquals(startMillis, computedStart)
+
+        // Verify all 40 weeks of baby growth exist
+        for (week in 1..40) {
+            val growth = com.health.knowledge.pregnancy.PregnancyPlannerEngine.getGrowthForWeek(week)
+            assertEquals(week, growth.week)
+            assertTrue(growth.sizeComparisonBn.isNotBlank())
+        }
+    }
 }

@@ -107,119 +107,172 @@ private val quickHabitTemplates = listOf(
 )
 
 /**
- * Clean, Scannable Icon Menu Card placed directly below the Hero / Daily Tip section on HomeScreen.
- * Uses pure icon button on the right (no text next to common arrow icon).
+ * 2-Column Side-by-Side Quick Menu Row placed directly below the Hero / Daily Tip section on HomeScreen:
+ * - Left Card: হ্যাবিট প্ল্যানার
+ * - Right Card: প্রেগন্যান্সি — আগে ও পরে
+ * Uses pure icon buttons on the right (no text next to common arrow icons).
  */
 @Composable
 fun HomeHabitQuickMenuCard(
     activeHabitCount: Int,
     nextPostCountdownText: String?,
     onOpenHabitModule: () -> Unit,
+    onOpenPregnancyModule: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val cardBg = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.36f).solidOverSurface()
     val borderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.38f)
 
-    Card(
+    Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp)
-            .testTag("habit_reminder_menu_card")
-            .clickable { onOpenHabitModule() },
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = cardBg),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        border = onePxBorder(borderColor)
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Row(
+        // Left Column Card: হ্যাবিট প্ল্যানার
+        Card(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+                .weight(1f)
+                .testTag("habit_reminder_menu_card")
+                .clickable { onOpenHabitModule() },
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = cardBg),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+            border = onePxBorder(borderColor)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Surface(
-                    color = MaterialTheme.colorScheme.primary,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.size(44.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.AlarmOn,
-                            contentDescription = "হ্যাবিট প্ল্যানার",
-                            tint = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                }
-
-                Spacer(Modifier.width(12.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    Surface(
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.size(38.dp)
                     ) {
-                        Text(
-                            text = "হ্যাবিট প্ল্যানার",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Surface(
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-                            shape = RoundedCornerShape(50),
-                            border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
-                        ) {
-                            Text(
-                                text = "${HabitScheduleCalculator.toBengaliDigits(activeHabitCount.toString())}টি চালু",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.AlarmOn,
+                                contentDescription = "হ্যাবিট প্ল্যানার",
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                     }
 
-                    Spacer(Modifier.height(2.dp))
+                    // Pure Icon Button without text
+                    Surface(
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                        shape = CircleShape,
+                        modifier = Modifier.size(30.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = "খুলুন",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
 
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = "হ্যাবিট প্ল্যানার",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                     Text(
                         text = if (!nextPostCountdownText.isNullOrBlank()) {
                             "⏱️ $nextPostCountdownText"
                         } else {
-                            "খাবার, পানি ও ওষুধের সময়সূচি"
+                            "${HabitScheduleCalculator.toBengaliDigits(activeHabitCount.toString())}টি চালু রুটিন"
                         },
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = if (!nextPostCountdownText.isNullOrBlank()) FontWeight.SemiBold else FontWeight.Normal,
-                        color = if (!nextPostCountdownText.isNullOrBlank()) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.primary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
             }
+        }
 
-            Spacer(Modifier.width(8.dp))
-
-            // Pure Icon Button without text
-            Surface(
-                color = MaterialTheme.colorScheme.primary,
-                shape = CircleShape,
-                modifier = Modifier.size(38.dp)
+        // Right Column Card: প্রেগন্যান্সি — আগে ও পরে
+        Card(
+            modifier = Modifier
+                .weight(1f)
+                .testTag("pregnancy_planner_menu_card")
+                .clickable { onOpenPregnancyModule() },
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = cardBg),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+            border = onePxBorder(borderColor)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                        contentDescription = "খুলুন",
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(18.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.size(38.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text("🤰", fontSize = 18.sp)
+                        }
+                    }
+
+                    // Pure Icon Button without text
+                    Surface(
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                        shape = CircleShape,
+                        modifier = Modifier.size(30.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = "খুলুন",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = "প্রেগন্যান্সি",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "আগে ও পরে",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }

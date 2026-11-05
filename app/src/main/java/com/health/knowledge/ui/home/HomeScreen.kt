@@ -75,6 +75,7 @@ fun HomeScreen(
     onArticleClick: (Int) -> Unit,
     onAdminClick: () -> Unit,
     onHabitReminderClick: () -> Unit = {},
+    onPregnancyPlannerClick: () -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val searchQuery by viewModel.searchQuery.collectAsState()
@@ -579,7 +580,8 @@ fun HomeScreen(
                                             HomeHabitQuickMenuCard(
                                                 activeHabitCount = activeHabitCount,
                                                 nextPostCountdownText = nextPostCountdownText,
-                                                onOpenHabitModule = onHabitReminderClick
+                                                onOpenHabitModule = onHabitReminderClick,
+                                                onOpenPregnancyModule = onPregnancyPlannerClick
                                             )
                                         }
                                     }

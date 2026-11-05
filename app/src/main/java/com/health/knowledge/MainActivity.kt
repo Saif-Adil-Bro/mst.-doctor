@@ -21,6 +21,7 @@ import com.health.knowledge.ui.admin.AdminScreen
 import com.health.knowledge.ui.detail.DetailScreen
 import com.health.knowledge.ui.habit.HabitReminderScreen
 import com.health.knowledge.ui.home.HomeScreen
+import com.health.knowledge.ui.pregnancy.PregnancyPlannerScreen
 import com.health.knowledge.ui.theme.HealthKnowledgeTheme
 import com.health.knowledge.util.HealthNotificationHelper
 import com.health.knowledge.util.UserPreferencesManager
@@ -104,6 +105,9 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onHabitReminderClick = {
                                     navController.navigate("habit_reminder")
+                                },
+                                onPregnancyPlannerClick = {
+                                    navController.navigate("pregnancy_planner")
                                 }
                             )
                         }
@@ -111,6 +115,15 @@ class MainActivity : ComponentActivity() {
                         composable("habit_reminder") {
                             HabitReminderScreen(
                                 onBack = { navController.popBackStack() }
+                            )
+                        }
+
+                        composable("pregnancy_planner") {
+                            PregnancyPlannerScreen(
+                                onBack = { navController.popBackStack() },
+                                onOpenHabitPlanner = {
+                                    navController.navigate("habit_reminder")
+                                }
                             )
                         }
 
