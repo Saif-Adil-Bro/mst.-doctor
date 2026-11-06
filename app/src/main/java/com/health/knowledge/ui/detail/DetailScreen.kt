@@ -425,15 +425,15 @@ fun DetailScreen(
                                         .clickable { viewModel.toggleReaction(art) }
                                 ) {
                                     Row(
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(if (art.isReacted) "❤️" else "🤍", fontSize = 15.sp)
-                                        Spacer(Modifier.width(6.dp))
+                                        Spacer(Modifier.width(5.dp))
                                         Text(
-                                            text = if (art.isReacted) "পছন্দ (${art.reactions})" else "পছন্দ করুন (${art.reactions})",
+                                            text = art.reactions.toString(),
                                             style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.SemiBold,
+                                            fontWeight = if (art.isReacted) FontWeight.Bold else FontWeight.SemiBold,
                                             color = if (art.isReacted) Color(0xFFD32F2F) else MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
@@ -769,7 +769,7 @@ fun DetailScreen(
                                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
                                     ) {
                                         Text(
-                                            text = if (art.isReacted) "❤️ ${art.reactions}" else "🤍 রিঅ্যাক্ট দিন (${art.reactions})"
+                                            text = "${if (art.isReacted) "❤️" else "🤍"} ${art.reactions}"
                                         )
                                     }
                                 }
