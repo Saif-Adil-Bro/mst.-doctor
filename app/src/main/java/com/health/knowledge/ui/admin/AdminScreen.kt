@@ -41,11 +41,18 @@ fun AdminScreen(
     onBack: () -> Unit,
     viewModel: AdminViewModel = hiltViewModel()
 ) {
+    val isAdminMode by viewModel.isAdminMode.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
     val managedArticles by viewModel.managedArticles.collectAsState()
     val manageQuery by viewModel.manageQuery.collectAsState()
     val manageFilter by viewModel.manageFilter.collectAsState()
     val analytics by viewModel.analyticsState.collectAsState()
+
+    LaunchedEffect(isAdminMode) {
+        if (!isAdminMode) {
+            onBack()
+        }
+    }
 
     var selectedTab by remember { mutableIntStateOf(0) }
     var editingArticle by remember { mutableStateOf<Article?>(null) }
@@ -970,6 +977,42 @@ private fun EditArticleDialog(
                     label = { Text("বিভাগ (কমা দিয়ে)") },
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                val availableCats = remember {
+                    categories.map { it.first } + listOf(
+                        "প্রেগন্যান্সি",
+                        "প্রেগন্যান্সি_পূর্ব",
+                        "প্রেগন্যান্সি_গর্ভকালীন",
+                        "প্রেগন্যান্সি_পুরুষ"
+                    )
+                }
+                val selectedCatSet = cats.split(",").map { it.trim() }.filter { it.isNotBlank() }.toSet()
+
+                Text("দ্রুত বিভাগ যোগ/বাদ দিন:", style = MaterialTheme.typography.labelSmall)
+                val chunkedChips = remember(availableCats) { availableCats.chunked(3) }
+                chunkedChips.forEach { rowCats ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        rowCats.forEach { cat ->
+                            val isSelected = selectedCatSet.contains(cat)
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = {
+                                    val updated = if (isSelected) {
+                                        selectedCatSet - cat
+                                    } else {
+                                        selectedCatSet + cat
+                                    }
+                                    cats = updated.joinToString(",")
+                                },
+                                label = { Text(cat.replace("_", " "), fontSize = 11.sp, maxLines = 1) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
             }
         },
         confirmButton = {

@@ -185,15 +185,20 @@ class ArticleRepository @Inject constructor(
                 articleDao.normalizeBundledTimestamps()
                 articleDao.deduplicateCloudArticles()
 
+                val syncPrefs = context.getSharedPreferences("sync_prefs", Context.MODE_PRIVATE)
+                val hadInitialCloudSync = syncPrefs.getBoolean("has_completed_initial_cloud_sync", false)
+                val lastSync = syncPrefs.getLong("last_sync_timestamp", 0L)
+
                 val remoteArticles = withTimeoutOrNull(6000L) {
-                    firestoreDataSource.fetchAllArticles()
+                    if (lastSync == 0L || !hadInitialCloudSync) {
+                        firestoreDataSource.fetchAllArticles()
+                    } else {
+                        firestoreDataSource.fetchNewArticlesSince(lastSync)
+                    }
                 } ?: emptyList()
 
                 val myDeviceId = prefsManager.getDeviceAuthorId()
                 val myDocIds = prefsManager.getMySubmittedDocIds()
-
-                val syncPrefs = context.getSharedPreferences("sync_prefs", Context.MODE_PRIVATE)
-                val hadInitialCloudSync = syncPrefs.getBoolean("has_completed_initial_cloud_sync", false)
 
                 if (remoteArticles.isNotEmpty()) {
                     val newEntities = mutableListOf<ArticleEntity>()
@@ -313,6 +318,11 @@ class ArticleRepository @Inject constructor(
                         }
                     }
                 }
+
+                syncPrefs.edit()
+                    .putBoolean("has_completed_initial_cloud_sync", true)
+                    .putLong("last_sync_timestamp", System.currentTimeMillis())
+                    .apply()
             } catch (_: Exception) {
                 // Keep existing local data intact on offline/timeout
             }

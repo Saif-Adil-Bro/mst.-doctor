@@ -247,19 +247,19 @@ class UserPreferencesManager @Inject constructor(
         val lastIpFetch = prefs.getLong(KEY_IP_FETCH_TIME, 0L)
         val now = System.currentTimeMillis()
 
-        val rawIdentifier = if (cachedIp != null && (now - lastIpFetch) < 30 * 60 * 1000L) {
-            cachedIp
+        if (!cachedIp.isNullOrBlank() && (now - lastIpFetch) < 30 * 60 * 1000L) {
+            return@withContext sha256("ip_$cachedIp").take(24)
+        }
+
+        val fetchedIp = fetchPublicIp()
+        val rawIdentifier = if (!fetchedIp.isNullOrBlank()) {
+            prefs.edit()
+                .putString(KEY_CACHED_IP, fetchedIp)
+                .putLong(KEY_IP_FETCH_TIME, now)
+                .apply()
+            fetchedIp
         } else {
-            val fetchedIp = fetchPublicIp()
-            if (!fetchedIp.isNullOrBlank()) {
-                prefs.edit()
-                    .putString(KEY_CACHED_IP, fetchedIp)
-                    .putLong(KEY_IP_FETCH_TIME, now)
-                    .apply()
-                fetchedIp
-            } else {
-                cachedIp ?: getFallbackDeviceId()
-            }
+            cachedIp ?: getFallbackDeviceId()
         }
         sha256("ip_$rawIdentifier").take(24)
     }
@@ -272,8 +272,8 @@ class UserPreferencesManager @Inject constructor(
         for (endpoint in endpoints) {
             try {
                 val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 3000
-                    readTimeout = 3000
+                    connectTimeout = 1500
+                    readTimeout = 1500
                     requestMethod = "GET"
                 }
                 if (conn.responseCode == 200) {

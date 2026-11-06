@@ -40,6 +40,8 @@ class AdminViewModel @Inject constructor(
     private val prefsManager: UserPreferencesManager
 ) : ViewModel() {
 
+    val isAdminMode: StateFlow<Boolean> = prefsManager.isAdminMode
+
     private val _uiState = MutableStateFlow(AdminUiState())
     val uiState: StateFlow<AdminUiState> = _uiState.asStateFlow()
 
