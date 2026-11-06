@@ -44,7 +44,7 @@ import coil.request.ImageRequest
 import com.health.knowledge.domain.model.Article
 import com.health.knowledge.ui.home.TagChip
 import com.health.knowledge.ui.theme.onePxBorder
-import com.health.knowledge.ui.theme.solidOverSurface
+import com.health.knowledge.util.ArticleTextFormatter
 import com.health.knowledge.util.ShareCardGenerator
 import com.health.knowledge.util.UserPreferencesManager
 import kotlinx.coroutines.launch
@@ -162,8 +162,9 @@ fun DetailScreen(
                     OutlinedButton(
                         onClick = {
                             showShareDialog = false
+                            val formatted = ArticleTextFormatter.formatBengaliParagraphs(art.content)
                             val sourceFooter = if (art.source.isNotBlank()) "\n\n📚 সূত্র: ${art.source}" else ""
-                            val shareText = "${art.title}\n\n${art.content}$sourceFooter"
+                            val shareText = "${art.title}\n\n$formatted$sourceFooter"
                             val intent = Intent(Intent.ACTION_SEND).apply {
                                 type = "text/plain"
                                 putExtra(Intent.EXTRA_TEXT, shareText)
@@ -240,8 +241,9 @@ fun DetailScreen(
                         }
                         // Copy
                         IconButton(onClick = {
+                            val formatted = ArticleTextFormatter.formatBengaliParagraphs(art.content)
                             val sourceFooter = if (art.source.isNotBlank()) "\n\n📚 সূত্র: ${art.source}" else ""
-                            clipboardManager.setText(AnnotatedString("${art.title}\n\n${art.content}$sourceFooter"))
+                            clipboardManager.setText(AnnotatedString("${art.title}\n\n$formatted$sourceFooter"))
                             showCopied = true
                         }) {
                             Icon(Icons.Default.ContentCopy, "কপি")
@@ -576,10 +578,13 @@ fun DetailScreen(
                                 color = MaterialTheme.colorScheme.outlineVariant
                             )
                             SelectionContainer {
+                                val formattedContent = remember(art.content) {
+                                    ArticleTextFormatter.formatBengaliParagraphs(art.content)
+                                }
                                 Text(
-                                    text = art.content,
+                                    text = formattedContent,
                                     fontSize = fontSizeSp.sp,
-                                    lineHeight = (fontSizeSp * 1.65f).sp,
+                                    lineHeight = (fontSizeSp * 1.7f).sp,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                             }

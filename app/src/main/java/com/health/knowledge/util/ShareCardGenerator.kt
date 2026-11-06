@@ -62,10 +62,11 @@ object ShareCardGenerator {
                 typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             }
 
-            val cleanBody = if (article.content.length > 620) {
-                article.content.take(620).trimEnd() + "...\n\n(বিস্তারিত পড়ুন 'স্বাস্থ্য জ্ঞান' অ্যাপে)"
+            val formatted = ArticleTextFormatter.formatBengaliParagraphs(article.content)
+            val cleanBody = if (formatted.length > 620) {
+                formatted.take(620).trimEnd() + "...\n\n(বিস্তারিত পড়ুন 'স্বাস্থ্য জ্ঞান' অ্যাপে)"
             } else {
-                article.content
+                formatted
             }
 
             val titleLayout = StaticLayout.Builder

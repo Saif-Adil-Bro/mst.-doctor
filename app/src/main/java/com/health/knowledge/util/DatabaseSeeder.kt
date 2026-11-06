@@ -38,6 +38,42 @@ class DatabaseSeeder @Inject constructor(
             // Normalize existing bundled articles' timestamps and clean up any duplicate cloud posts
             articleDao.normalizeBundledTimestamps()
             articleDao.deduplicateCloudArticles()
+            upgradeBundledArticlesParagraphsIfNeeded()
+        }
+    }
+
+    private suspend fun upgradeBundledArticlesParagraphsIfNeeded() {
+        val prefs = context.getSharedPreferences("sync_prefs", Context.MODE_PRIVATE)
+        val hasUpgraded = prefs.getBoolean("has_upgraded_article_paragraphs_v2", false)
+        if (!hasUpgraded) {
+            try {
+                val freshArticles = loadBundledArticles()
+                val existingActive = articleDao.getAllActiveSnapshot()
+                val bundledExisting = existingActive.filter { !it.syncedFromFirebase && !it.isMine }
+                val freshMap = freshArticles.associateBy { it.messageId.ifBlank { it.title.trim() } }
+
+                for (art in bundledExisting) {
+                    val key = art.messageId.ifBlank { art.title.trim() }
+                    val fresh = freshMap[key]
+                    if (fresh != null && (fresh.content != art.content || !art.content.contains("\n"))) {
+                        articleDao.updateArticleContent(
+                            id = art.id,
+                            title = art.title,
+                            content = fresh.content,
+                            medicines = art.medicines,
+                            categories = art.categories,
+                            photoPath = art.photoPath,
+                            hasPhoto = art.hasPhoto,
+                            searchKeywords = fresh.searchKeywords,
+                            isReviewed = art.isReviewed,
+                            source = art.source
+                        )
+                    }
+                }
+                prefs.edit().putBoolean("has_upgraded_article_paragraphs_v2", true).apply()
+            } catch (_: Exception) {
+                // Ignore fallback
+            }
         }
     }
 
@@ -73,25 +109,28 @@ class DatabaseSeeder @Inject constructor(
         val syncedFromFirebase: Boolean = false,
         val firebaseDocId: String = ""
     ) {
-        fun toEntity(index: Int) = ArticleEntity(
-            messageId = messageId,
-            title = title,
-            content = content,
-            date = date,
-            reactions = reactions,
-            medicines = medicines,
-            categories = categories,
-            hasPhoto = hasPhoto,
-            photoPath = photoPath,
-            searchKeywords = buildKeywords(),
-            syncedFromFirebase = false,
-            firebaseDocId = "",
-            // Historical base timestamp (Nov 2023) + index so newly added posts are always newest
-            createdAt = 1700000000000L + (id.takeIf { it > 0 } ?: index).toLong()
-        )
+        fun toEntity(index: Int): ArticleEntity {
+            val formatted = ArticleTextFormatter.formatBengaliParagraphs(content)
+            return ArticleEntity(
+                messageId = messageId,
+                title = title,
+                content = formatted,
+                date = date,
+                reactions = reactions,
+                medicines = medicines,
+                categories = categories,
+                hasPhoto = hasPhoto,
+                photoPath = photoPath,
+                searchKeywords = buildKeywords(formatted),
+                syncedFromFirebase = false,
+                firebaseDocId = "",
+                // Historical base timestamp (Nov 2023) + index so newly added posts are always newest
+                createdAt = 1700000000000L + (id.takeIf { it > 0 } ?: index).toLong()
+            )
+        }
 
-        private fun buildKeywords(): String {
-            return "$title $content $medicines $categories"
+        private fun buildKeywords(cleanContent: String): String {
+            return "$title $cleanContent $medicines $categories"
                 .lowercase()
                 .split("\\s+".toRegex())
                 .filter { it.length > 1 }
