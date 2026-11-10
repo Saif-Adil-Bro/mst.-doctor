@@ -44,6 +44,7 @@ import coil.request.ImageRequest
 import com.health.knowledge.domain.model.Article
 import com.health.knowledge.ui.home.TagChip
 import com.health.knowledge.ui.theme.onePxBorder
+import com.health.knowledge.ui.theme.solidOverSurface
 import com.health.knowledge.util.ArticleTextFormatter
 import com.health.knowledge.util.ShareCardGenerator
 import com.health.knowledge.util.UserPreferencesManager
