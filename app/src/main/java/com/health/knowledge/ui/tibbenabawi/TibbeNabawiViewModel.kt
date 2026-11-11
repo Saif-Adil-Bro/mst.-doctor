@@ -83,21 +83,35 @@ class TibbeNabawiViewModel @Inject constructor(
             .sortedWith(compareByDescending<Pair<String, Int>> { it.second }.thenBy { it.first })
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // High performance reactive filtered posts
-    val filteredPosts: StateFlow<List<TibbeNabawiEntity>> = combine(
-        allPosts,
+    private data class FilterParams(
+        val query: String,
+        val category: String,
+        val onlyBookmarked: Boolean,
+        val selectedHerb: String?,
+        val selectedDisease: String?
+    )
+
+    private val filterParams = combine(
         _searchQuery,
         _selectedCategory,
         _onlyBookmarked,
         _selectedHerb,
         _selectedDisease
-    ) { posts, query, category, bookmarkedOnly, selHerb, selDisease ->
-        val q = query.trim().lowercase()
+    ) { query, category, bookmarkedOnly, selHerb, selDisease ->
+        FilterParams(query, category, bookmarkedOnly, selHerb, selDisease)
+    }
+
+    // High performance reactive filtered posts
+    val filteredPosts: StateFlow<List<TibbeNabawiEntity>> = combine(
+        allPosts,
+        filterParams
+    ) { posts, filters ->
+        val q = filters.query.trim().lowercase()
         posts.filter { post ->
-            val matchesCategory = (category == "সকল" || post.category == category)
-            val matchesBookmark = (!bookmarkedOnly || post.isBookmarked)
-            val matchesHerb = selHerb == null || post.foodName.contains(selHerb, ignoreCase = true)
-            val matchesDisease = selDisease == null || post.diseases.contains(selDisease, ignoreCase = true)
+            val matchesCategory = (filters.category == "সকল" || post.category == filters.category)
+            val matchesBookmark = (!filters.onlyBookmarked || post.isBookmarked)
+            val matchesHerb = filters.selectedHerb == null || post.foodName.contains(filters.selectedHerb, ignoreCase = true)
+            val matchesDisease = filters.selectedDisease == null || post.diseases.contains(filters.selectedDisease, ignoreCase = true)
             val matchesSearch = if (q.isBlank()) true else {
                 post.title.lowercase().contains(q) ||
                 post.foodName.lowercase().contains(q) ||
@@ -109,12 +123,13 @@ class TibbeNabawiViewModel @Inject constructor(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val totalCount: StateFlow<Int> = combine(allPosts) { it.first().size }
+    val totalCount: StateFlow<Int> = allPosts
+        .map { it.size }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
-    val bookmarkedCount: StateFlow<Int> = combine(allPosts) { postsList ->
-        postsList.first().count { it.isBookmarked }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    val bookmarkedCount: StateFlow<Int> = allPosts
+        .map { postsList -> postsList.count { it.isBookmarked } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     fun onSearchQueryChange(query: String) {
         _searchQuery.value = query
