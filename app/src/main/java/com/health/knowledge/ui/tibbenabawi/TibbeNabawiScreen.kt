@@ -45,7 +45,13 @@ fun TibbeNabawiScreen(
     val searchQuery by viewModel.searchQuery.collectAsState()
     val selectedCategory by viewModel.selectedCategory.collectAsState()
     val onlyBookmarked by viewModel.onlyBookmarked.collectAsState()
+    val indexMode by viewModel.indexMode.collectAsState()
+    val selectedHerb by viewModel.selectedHerb.collectAsState()
+    val selectedDisease by viewModel.selectedDisease.collectAsState()
+
     val categories by viewModel.categories.collectAsState()
+    val herbIndexList by viewModel.herbIndexList.collectAsState()
+    val diseaseIndexList by viewModel.diseaseIndexList.collectAsState()
     val posts by viewModel.filteredPosts.collectAsState()
     val totalCount by viewModel.totalCount.collectAsState()
     val bookmarkedCount by viewModel.bookmarkedCount.collectAsState()
@@ -53,9 +59,7 @@ fun TibbeNabawiScreen(
     val focusManager = LocalFocusManager.current
     val listState = rememberLazyListState()
 
-    // Emerald theme accent for Tibbe Nabawi
     val emeraldPrimary = Color(0xFF1B6B46)
-    val emeraldContainer = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
 
     Scaffold(
         topBar = {
@@ -66,7 +70,7 @@ fun TibbeNabawiScreen(
                             Text(
                                 text = "তিব্বে নববী",
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 20.sp
+                                fontSize = 19.sp
                             )
                             Spacer(Modifier.width(6.dp))
                             Surface(
@@ -83,7 +87,7 @@ fun TibbeNabawiScreen(
                             }
                         }
                         Text(
-                            text = "ইবনুল কাইয়্যিম (রহ:) • মোট $totalCount টি চিকিৎসা ও পথ্য",
+                            text = "ইবনুল কাইয়্যিম (রহ:) • মোট $totalCount টি পথ্য ও নির্দেশনা",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -95,7 +99,6 @@ fun TibbeNabawiScreen(
                     }
                 },
                 actions = {
-                    // Bookmark filter quick toggle
                     FilledTonalIconToggleButton(
                         checked = onlyBookmarked,
                         onCheckedChange = { viewModel.toggleOnlyBookmarked() },
@@ -105,7 +108,7 @@ fun TibbeNabawiScreen(
                         )
                     ) {
                         if (onlyBookmarked) {
-                            Icon(Icons.Filled.Bookmark, contentDescription = "বুকমার্ক ফিল্টার সক্রিয়")
+                            Icon(Icons.Filled.Bookmark, contentDescription = "বুকমার্ক সক্রিয়")
                         } else {
                             BadgedBox(
                                 badge = {
@@ -136,11 +139,11 @@ fun TibbeNabawiScreen(
                 onValueChange = viewModel::onSearchQueryChange,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                    .padding(horizontal = 14.dp, vertical = 4.dp),
                 placeholder = {
                     Text(
-                        "রোগ, উপাদান বা আরবি নাম দিয়ে খুঁজুন...",
-                        fontSize = 14.sp,
+                        "রোগ, ভেষজ বা আরবি নাম দিয়ে খুঁজুন...",
+                        fontSize = 13.5.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 },
@@ -148,7 +151,8 @@ fun TibbeNabawiScreen(
                     Icon(
                         Icons.Default.Search,
                         contentDescription = "খুঁজুন",
-                        tint = emeraldPrimary
+                        tint = emeraldPrimary,
+                        modifier = Modifier.size(20.dp)
                     )
                 },
                 trailingIcon = {
@@ -158,12 +162,12 @@ fun TibbeNabawiScreen(
                         exit = fadeOut()
                     ) {
                         IconButton(onClick = { viewModel.onSearchQueryChange("") }) {
-                            Icon(Icons.Default.Clear, contentDescription = "মুছুন")
+                            Icon(Icons.Default.Clear, contentDescription = "মুছুন", modifier = Modifier.size(18.dp))
                         }
                     }
                 },
                 singleLine = true,
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(12.dp),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
                 colors = OutlinedTextFieldDefaults.colors(
@@ -172,79 +176,215 @@ fun TibbeNabawiScreen(
                 )
             )
 
-            // ── Category Chips ───────────────────────────────────────
-            LazyRow(
-                modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                item(key = "cat_all") {
-                    val isSelected = selectedCategory == "সকল"
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { viewModel.onCategorySelect("সকল") },
-                        label = {
-                            Text(
-                                text = "সকল (${totalCount})",
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                            )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = emeraldPrimary,
-                            selectedLabelColor = Color.White
-                        )
-                    )
-                }
-
-                items(categories, key = { "cat_$it" }) { category ->
-                    val isSelected = selectedCategory == category
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { viewModel.onCategorySelect(category) },
-                        label = {
-                            Text(
-                                text = category,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                            )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = emeraldPrimary,
-                            selectedLabelColor = Color.White
-                        )
-                    )
-                }
-            }
-
-            // ── Active Results Count Bar ──────────────────────────────
+            // ── Index Mode Selector (সকল / ভেষজ সূচিপত্র / রোগের সূচিপত্র) ──
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                    .padding(horizontal = 14.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // Tab 1: All Posts
+                FilterChip(
+                    selected = indexMode == TibbeIndexMode.ALL,
+                    onClick = { viewModel.setIndexMode(TibbeIndexMode.ALL) },
+                    label = { Text("📋 সকল পোস্ট", fontSize = 12.sp) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = emeraldPrimary,
+                        selectedLabelColor = Color.White
+                    ),
+                    modifier = Modifier.weight(1f)
+                )
+
+                // Tab 2: Herb Index
+                FilterChip(
+                    selected = indexMode == TibbeIndexMode.HERBS,
+                    onClick = { viewModel.setIndexMode(TibbeIndexMode.HERBS) },
+                    label = { Text("🌿 ভেষজ", fontSize = 12.sp) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = emeraldPrimary,
+                        selectedLabelColor = Color.White
+                    ),
+                    modifier = Modifier.weight(0.9f)
+                )
+
+                // Tab 3: Disease Index
+                FilterChip(
+                    selected = indexMode == TibbeIndexMode.DISEASES,
+                    onClick = { viewModel.setIndexMode(TibbeIndexMode.DISEASES) },
+                    label = { Text("🩺 রোগ সূচি", fontSize = 12.sp) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = emeraldPrimary,
+                        selectedLabelColor = Color.White
+                    ),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            // ── Secondary Horizontal Chips based on Selected Mode ────
+            when (indexMode) {
+                TibbeIndexMode.ALL -> {
+                    // Category Filter Row
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        item(key = "cat_all") {
+                            val isSelected = selectedCategory == "সকল"
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { viewModel.onCategorySelect("সকল") },
+                                label = { Text("সকল (${totalCount})", fontSize = 12.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = emeraldPrimary,
+                                    selectedLabelColor = Color.White
+                                )
+                            )
+                        }
+
+                        items(categories, key = { "cat_$it" }) { category ->
+                            val isSelected = selectedCategory == category
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { viewModel.onCategorySelect(category) },
+                                label = {
+                                    Text(
+                                        "${getCategoryIcon(category)} $category",
+                                        fontSize = 12.sp
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = emeraldPrimary,
+                                    selectedLabelColor = Color.White
+                                )
+                            )
+                        }
+                    }
+                }
+
+                TibbeIndexMode.HERBS -> {
+                    // Herb Index Filter Row
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(herbIndexList, key = { "herb_${it.first}" }) { (herb, count) ->
+                            val isSelected = selectedHerb == herb
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { viewModel.selectHerb(herb) },
+                                label = {
+                                    Text(
+                                        text = "🌿 $herb ($count)",
+                                        fontSize = 12.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = emeraldPrimary,
+                                    selectedLabelColor = Color.White
+                                )
+                            )
+                        }
+                    }
+                }
+
+                TibbeIndexMode.DISEASES -> {
+                    // Disease Index Filter Row
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(diseaseIndexList, key = { "disease_${it.first}" }) { (disease, count) ->
+                            val isSelected = selectedDisease == disease
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { viewModel.selectDisease(disease) },
+                                label = {
+                                    Text(
+                                        text = "🩺 $disease ($count)",
+                                        fontSize = 12.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = emeraldPrimary,
+                                    selectedLabelColor = Color.White
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+
+            // ── Active Filter Bar / Result Counter ───────────────────
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 3.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = if (onlyBookmarked) "সংরক্ষিত পোস্ট (${posts.size})" else "${posts.size} টি পথ্য ও নির্দেশনা পাওয়া গেছে",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.Medium
-                )
-                if (searchQuery.isNotBlank() || selectedCategory != "সকল" || onlyBookmarked) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = "${posts.size}টি ফলাফল",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    if (selectedHerb != null) {
+                        Surface(
+                            color = emeraldPrimary.copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = "ভেষজ: $selectedHerb ✕",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = emeraldPrimary,
+                                modifier = Modifier
+                                    .clickable { viewModel.selectHerb(null) }
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    if (selectedDisease != null) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = "রোগ: $selectedDisease ✕",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier
+                                    .clickable { viewModel.selectDisease(null) }
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+
+                if (searchQuery.isNotBlank() || selectedCategory != "সকল" || selectedHerb != null || selectedDisease != null || onlyBookmarked) {
                     Text(
                         text = "ফিল্টার রিসেট",
-                        fontSize = 12.sp,
+                        fontSize = 11.5.sp,
                         color = emeraldPrimary,
                         fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.clickable {
-                            viewModel.onSearchQueryChange("")
-                            viewModel.onCategorySelect("সকল")
-                            if (onlyBookmarked) viewModel.toggleOnlyBookmarked()
-                        }
+                        modifier = Modifier.clickable { viewModel.clearAllFilters() }
                     )
                 }
             }
 
-            // ── List of Posts (Smooth Scrolling with Key & ContentType) ────────
+            // ── List of Posts (Compact Height, Sleek Cards with Icons) ──
             if (posts.isEmpty()) {
                 Box(
                     modifier = Modifier
@@ -257,27 +397,22 @@ fun TibbeNabawiScreen(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Surface(
-                            modifier = Modifier.size(64.dp),
+                            modifier = Modifier.size(56.dp),
                             shape = CircleShape,
                             color = emeraldPrimary.copy(alpha = 0.1f)
                         ) {
-                            Icon(
-                                Icons.Default.MenuBook,
-                                contentDescription = null,
-                                tint = emeraldPrimary,
-                                modifier = Modifier
-                                    .padding(16.dp)
-                                    .fillMaxSize()
-                            )
+                            Box(contentAlignment = Alignment.Center) {
+                                Text("🌿", fontSize = 26.sp)
+                            }
                         }
                         Text(
                             text = "কোনো ফলাফল পাওয়া যায়নি",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp
+                            fontSize = 15.sp
                         )
                         Text(
                             text = "অন্য কোনো রোগ, উপাদান বা আরবি নাম দিয়ে চেষ্টা করুন।",
-                            fontSize = 13.sp,
+                            fontSize = 12.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
                         )
@@ -287,15 +422,15 @@ fun TibbeNabawiScreen(
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     items(
                         items = posts,
                         key = { it.id },
-                        contentType = { "tibbe_card" }
+                        contentType = { "tibbe_compact_card" }
                     ) { post ->
-                        TibbeNabawiCard(
+                        TibbeNabawiCompactCard(
                             post = post,
                             emeraldPrimary = emeraldPrimary,
                             onClick = { onPostClick(post.id) },
@@ -308,188 +443,167 @@ fun TibbeNabawiScreen(
     }
 }
 
+/**
+ * Compact, sleek card design (height ~75dp) with leading icon,
+ * category/Arabic pill, single-line title, and subtitle metadata.
+ */
 @Composable
-private fun TibbeNabawiCard(
+private fun TibbeNabawiCompactCard(
     post: TibbeNabawiEntity,
     emeraldPrimary: Color,
     onClick: () -> Unit,
     onToggleBookmark: () -> Unit
 ) {
-    val diseaseList = remember(post.diseases) {
-        if (post.diseases.isBlank()) emptyList()
-        else post.diseases.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+    val categoryIcon = remember(post.category) { getCategoryIcon(post.category) }
+    val diseasesText = remember(post.diseases) {
+        if (post.diseases.isBlank()) ""
+        else post.diseases.split(",").take(2).joinToString(", ")
     }
 
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
         border = onePxBorder()
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp)
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // ── Top Header Row (Category, Arabic Name, Bookmark) ──
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+            // ── 1. Leading Category Icon Avatar ───────────────────
+            Surface(
+                modifier = Modifier.size(42.dp),
+                shape = RoundedCornerShape(10.dp),
+                color = emeraldPrimary.copy(alpha = 0.12f)
             ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = categoryIcon,
+                        fontSize = 20.sp
+                    )
+                }
+            }
+
+            // ── 2. Middle Content (Pills, Title, Metadata) ────────
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                // Top Tag Line (Category + Arabic Name)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.weight(1f, fill = false)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    // Category Badge
-                    Surface(
-                        color = emeraldPrimary.copy(alpha = 0.12f),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text(
-                            text = post.category,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = emeraldPrimary,
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
-                        )
-                    }
+                    Text(
+                        text = post.category,
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = emeraldPrimary
+                    )
 
-                    // Arabic Name Badge if available
                     if (!post.arabicName.isNullOrBlank()) {
                         Surface(
                             color = MaterialTheme.colorScheme.surfaceVariant,
-                            shape = RoundedCornerShape(8.dp)
+                            shape = RoundedCornerShape(4.dp)
                         ) {
                             Text(
                                 text = post.arabicName,
-                                fontSize = 13.sp,
+                                fontSize = 11.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = FontFamily.Serif,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
                             )
                         }
                     }
                 }
 
-                // Bookmark icon button
+                // Title (Single or max 2 line, compact)
+                Text(
+                    text = post.title,
+                    fontSize = 13.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                // Subtitle Line: Food & Disease
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    val food = post.foodName.ifBlank { "পথ্য" }
+                    Text(
+                        text = "🌱 $food",
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+
+                    if (diseasesText.isNotBlank()) {
+                        Text(
+                            text = " • 🩺 $diseasesText",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.outline,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                    }
+                }
+            }
+
+            // ── 3. Trailing Bookmark & Chevron ────────────────────
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
                 IconButton(
                     onClick = onToggleBookmark,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(30.dp)
                 ) {
                     Icon(
                         imageVector = if (post.isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
                         contentDescription = "বুকমার্ক",
-                        tint = if (post.isBookmarked) emeraldPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp)
+                        tint = if (post.isBookmarked) emeraldPrimary else MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.size(19.dp)
                     )
                 }
-            }
 
-            Spacer(Modifier.height(8.dp))
-
-            // ── Title ──
-            Text(
-                text = post.title,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                lineHeight = 22.sp,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            // ── Food / Herb Highlight if present ──
-            if (post.foodName.isNotBlank() && post.foodName != post.title) {
-                Spacer(Modifier.height(6.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "🌿 উপাদান: ",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = emeraldPrimary
-                    )
-                    Text(
-                        text = post.foodName,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-
-                    if (!post.taste.isNullOrBlank()) {
-                        Text(
-                            text = " • স্বাদ: ${post.taste}",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-
-            // ── Benefits Snippet ──
-            val previewText = post.benefits ?: post.details
-            if (previewText.isNotBlank()) {
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = previewText,
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    lineHeight = 18.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.outlineVariant,
+                    modifier = Modifier.size(18.dp)
                 )
             }
-
-            // ── Diseases Chips ──
-            if (diseaseList.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    diseaseList.take(3).forEach { disease ->
-                        Surface(
-                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f),
-                            shape = RoundedCornerShape(6.dp)
-                        ) {
-                            Text(
-                                text = disease,
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-
-                    if (diseaseList.size > 3) {
-                        Text(
-                            text = "+${diseaseList.size - 3} টি",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-
-                    Spacer(Modifier.weight(1f))
-
-                    // Read more indicator
-                    Text(
-                        text = "বিস্তারিত →",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = emeraldPrimary
-                    )
-                }
-            }
         }
+    }
+}
+
+private fun getCategoryIcon(category: String): String {
+    return when {
+        category.contains("শাকসবজি") || category.contains("ভেষজ") -> "🌿"
+        category.contains("ফলমূল") -> "🍎"
+        category.contains("খাদ্য") || category.contains("পানীয়") -> "🍯"
+        category.contains("তরল") || category.contains("পথ্য") -> "🥣"
+        category.contains("মাংস") || category.contains("প্রাণিজ") -> "🥩"
+        category.contains("তেল") || category.contains("সুগন্ধি") -> "🧴"
+        category.contains("রোগভিত্তিক") -> "🩺"
+        category.contains("চিকিৎসা") -> "🩹"
+        category.contains("স্বাস্থ্যবিধি") -> "🏃"
+        category.contains("আধ্যাত্মিক") || category.contains("দোয়া") || category.contains("রুকিয়াহ") -> "🤲"
+        else -> "📖"
     }
 }

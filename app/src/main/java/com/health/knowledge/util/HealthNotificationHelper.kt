@@ -149,11 +149,15 @@ object HealthNotificationHelper {
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra("open_article_id", articleId)
+            if (articleId < 0) {
+                putExtra("open_tibbe_id", -articleId)
+            }
         }
 
+        val requestCode = kotlin.math.abs(articleId).coerceAtLeast(1)
         val pendingIntent = PendingIntent.getActivity(
             context,
-            articleId.coerceAtLeast(1),
+            requestCode,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )

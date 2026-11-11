@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import com.health.knowledge.data.local.dao.ArticleDao
+import com.health.knowledge.data.local.dao.TibbeNabawiDao
 import com.health.knowledge.util.UserPreferencesManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -20,6 +21,9 @@ class DailyTipAlarmReceiver : BroadcastReceiver() {
     lateinit var articleDao: ArticleDao
 
     @Inject
+    lateinit var tibbeNabawiDao: TibbeNabawiDao
+
+    @Inject
     lateinit var prefsManager: UserPreferencesManager
 
     override fun onReceive(context: Context, intent: Intent?) {
@@ -32,18 +36,33 @@ class DailyTipAlarmReceiver : BroadcastReceiver() {
                     try {
                         if (prefsManager.dailyReminderEnabled.value) {
                             val activeArticles = articleDao.getAllActiveSnapshot()
-                            if (activeArticles.isNotEmpty()) {
+                            val tibbePosts = tibbeNabawiDao.searchGlobal("", limit = 200)
+                            val totalPool = activeArticles.size + tibbePosts.size
+
+                            if (totalPool > 0) {
                                 val dayOfYear = Calendar.getInstance().get(Calendar.DAY_OF_YEAR)
                                 val offset = prefsManager.dailyTipOffset.value
-                                val featured = activeArticles[(dayOfYear + offset).mod(activeArticles.size)]
+                                val selectedIndex = (dayOfYear + offset).mod(totalPool)
 
                                 DailyTipNotificationWorker.markFiredToday(context)
-                                DailyTipNotificationWorker.showTipNotification(
-                                    context = context,
-                                    articleId = featured.id,
-                                    title = featured.title,
-                                    content = featured.content
-                                )
+
+                                if (selectedIndex < activeArticles.size) {
+                                    val featured = activeArticles[selectedIndex]
+                                    DailyTipNotificationWorker.showTipNotification(
+                                        context = context,
+                                        articleId = featured.id,
+                                        title = featured.title,
+                                        content = featured.content
+                                    )
+                                } else {
+                                    val tibbeItem = tibbePosts[selectedIndex - activeArticles.size]
+                                    DailyTipNotificationWorker.showTipNotification(
+                                        context = context,
+                                        articleId = -tibbeItem.id,
+                                        title = "🌿 " + tibbeItem.title,
+                                        content = tibbeItem.benefits ?: tibbeItem.details
+                                    )
+                                }
                             }
                             // Schedule next day's exact alarm
                             DailyTipNotificationWorker.scheduleExactAlarm(

@@ -8,6 +8,7 @@ import android.os.Build
 import androidx.hilt.work.HiltWorker
 import androidx.work.*
 import com.health.knowledge.data.local.dao.ArticleDao
+import com.health.knowledge.data.local.dao.TibbeNabawiDao
 import com.health.knowledge.util.HealthNotificationHelper
 import com.health.knowledge.util.UserPreferencesManager
 import dagger.assisted.Assisted
@@ -20,6 +21,7 @@ class DailyTipNotificationWorker @AssistedInject constructor(
     @Assisted private val appContext: Context,
     @Assisted workerParams: WorkerParameters,
     private val articleDao: ArticleDao,
+    private val tibbeNabawiDao: TibbeNabawiDao,
     private val prefsManager: UserPreferencesManager
 ) : CoroutineWorker(appContext, workerParams) {
 
@@ -34,19 +36,33 @@ class DailyTipNotificationWorker @AssistedInject constructor(
         }
 
         val activeArticles = articleDao.getAllActiveSnapshot()
-        if (activeArticles.isEmpty()) return Result.success()
+        val tibbePosts = tibbeNabawiDao.searchGlobal("", limit = 200)
+        val totalPool = activeArticles.size + tibbePosts.size
+        if (totalPool == 0) return Result.success()
 
         val dayOfYear = Calendar.getInstance().get(Calendar.DAY_OF_YEAR)
         val offset = prefsManager.dailyTipOffset.value
-        val featured = activeArticles[(dayOfYear + offset).mod(activeArticles.size)]
+        val selectedIndex = (dayOfYear + offset).mod(totalPool)
 
         markFiredToday(appContext)
-        showTipNotification(
-            context = appContext,
-            articleId = featured.id,
-            title = featured.title,
-            content = featured.content
-        )
+
+        if (selectedIndex < activeArticles.size) {
+            val featured = activeArticles[selectedIndex]
+            showTipNotification(
+                context = appContext,
+                articleId = featured.id,
+                title = featured.title,
+                content = featured.content
+            )
+        } else {
+            val tibbeItem = tibbePosts[selectedIndex - activeArticles.size]
+            showTipNotification(
+                context = appContext,
+                articleId = -tibbeItem.id,
+                title = "🌿 " + tibbeItem.title,
+                content = tibbeItem.benefits ?: tibbeItem.details
+            )
+        }
         return Result.success()
     }
 

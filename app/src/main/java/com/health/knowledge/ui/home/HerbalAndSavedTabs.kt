@@ -65,8 +65,12 @@ fun DailyHealthTipCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                val isTibbe = article.id < 0 || article.categories.contains("তিব্বে নববী")
+                val badgeColor = if (isTibbe) Color(0xFF1B6B46) else MaterialTheme.colorScheme.primary
+                val badgeText = if (isTibbe) "🌿 আজকের তিব্বে নববী টিপস" else "💡 আজকের স্বাস্থ্য টিপস"
+
                 Surface(
-                    color = MaterialTheme.colorScheme.primary,
+                    color = badgeColor,
                     shape = RoundedCornerShape(20.dp)
                 ) {
                     Row(
@@ -74,8 +78,8 @@ fun DailyHealthTipCard(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            "💡 আজকের স্বাস্থ্য টিপস",
-                            color = MaterialTheme.colorScheme.onPrimary,
+                            badgeText,
+                            color = Color.White,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
                         )

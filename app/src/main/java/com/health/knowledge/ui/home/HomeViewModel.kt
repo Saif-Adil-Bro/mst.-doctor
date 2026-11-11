@@ -4,7 +4,9 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.health.knowledge.data.local.dao.HabitDao
+import com.health.knowledge.data.local.entity.toArticleDomain
 import com.health.knowledge.data.repository.ArticleRepository
+import com.health.knowledge.data.repository.TibbeNabawiRepository
 import com.health.knowledge.domain.model.Article
 import com.health.knowledge.domain.model.toDomain
 import com.health.knowledge.habit.HabitScheduleCalculator
@@ -33,6 +35,7 @@ data class HerbalIngredientStat(
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val repository: ArticleRepository,
+    private val tibbeNabawiRepository: TibbeNabawiRepository,
     private val prefsManager: UserPreferencesManager,
     private val databaseSeeder: DatabaseSeeder,
     private val habitDao: HabitDao,
@@ -139,6 +142,19 @@ class HomeViewModel @Inject constructor(
         .map { entities -> entities.map { it.toDomain() } }
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
+    // All Tibbe Nabawi articles converted to Article domain model
+    private val allTibbeDomainArticles: StateFlow<List<Article>> = tibbeNabawiRepository.getAll()
+        .map { list -> list.map { it.toArticleDomain() } }
+        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    // Combined pool of articles (general + Tibbe Nabawi) for daily tip and herbal index/search
+    val allCombinedDomainArticles: StateFlow<List<Article>> = combine(
+        allActiveDomainArticles,
+        allTibbeDomainArticles
+    ) { regular, tibbe ->
+        regular + tibbe
+    }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
     // Keep articles warm with SharingStarted.Lazily + apply Sort Order (Default: Newest First)
     val articles: StateFlow<List<Article>> = combine(
         _searchQuery.debounce(200),
@@ -193,9 +209,9 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    // Daily Health Tip of the Day (deterministic per day + rotatable with nextDailyTip)
+    // Daily Health Tip of the Day (deterministic per day + rotatable with nextDailyTip, includes Tibbe Nabawi)
     val dailyTipArticle: StateFlow<Article?> = combine(
-        allActiveDomainArticles,
+        allCombinedDomainArticles,
         prefsManager.dailyTipOffset
     ) { list, offset ->
         if (list.isEmpty()) null
@@ -206,9 +222,9 @@ class HomeViewModel @Inject constructor(
         }
     }.stateIn(viewModelScope, SharingStarted.Lazily, null)
 
-    // Herbal / Ingredient Index aggregated across all active articles
+    // Herbal / Ingredient Index aggregated across all active articles AND Tibbe Nabawi
     val herbalIndex: StateFlow<List<HerbalIngredientStat>> = combine(
-        allActiveDomainArticles,
+        allCombinedDomainArticles,
         _herbSearchQuery
     ) { list, herbQuery ->
         val counts = mutableMapOf<String, Int>()
@@ -228,9 +244,9 @@ class HomeViewModel @Inject constructor(
             .sortedWith(compareByDescending<HerbalIngredientStat> { it.count }.thenBy { it.name })
     }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
-    // Advanced Search & Herbal Filtered Articles for the "search" tab
+    // Advanced Search & Herbal Filtered Articles for the "search" tab (includes Tibbe Nabawi)
     val advancedFilteredArticles: StateFlow<List<Article>> = combine(
-        allActiveDomainArticles,
+        allCombinedDomainArticles,
         _herbSearchQuery,
         _selectedHerb,
         _selectedMultiCategories,

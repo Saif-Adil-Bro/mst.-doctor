@@ -37,6 +37,7 @@ class MainActivity : ComponentActivity() {
     lateinit var prefsManager: UserPreferencesManager
 
     private val targetArticleIdState = mutableStateOf<Int?>(null)
+    private val targetTibbeIdState = mutableStateOf<Int?>(null)
     private val openHabitModuleState = mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -61,7 +62,12 @@ class MainActivity : ComponentActivity() {
         )
 
         val initialId = intent?.getIntExtra("open_article_id", -1) ?: -1
-        if (initialId > 0) {
+        val initialTibbeId = intent?.getIntExtra("open_tibbe_id", -1) ?: -1
+        if (initialTibbeId > 0) {
+            targetTibbeIdState.value = initialTibbeId
+        } else if (initialId < -1) {
+            targetTibbeIdState.value = -initialId
+        } else if (initialId > 0) {
             targetArticleIdState.value = initialId
         }
         if (intent?.getBooleanExtra("open_habit_module", false) == true) {
@@ -75,6 +81,7 @@ class MainActivity : ComponentActivity() {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     val navController = rememberNavController()
                     val targetId by targetArticleIdState
+                    val targetTibbeId by targetTibbeIdState
                     val openHabitModule by openHabitModuleState
 
                     LaunchedEffect(targetId) {
@@ -82,6 +89,15 @@ class MainActivity : ComponentActivity() {
                             if (id > 0) {
                                 navController.navigate("detail/$id")
                                 targetArticleIdState.value = null
+                            }
+                        }
+                    }
+
+                    LaunchedEffect(targetTibbeId) {
+                        targetTibbeId?.let { id ->
+                            if (id > 0) {
+                                navController.navigate("tibbe_nabawi_detail/$id")
+                                targetTibbeIdState.value = null
                             }
                         }
                     }
@@ -100,7 +116,11 @@ class MainActivity : ComponentActivity() {
                         composable("home") {
                             HomeScreen(
                                 onArticleClick = { id ->
-                                    navController.navigate("detail/$id")
+                                    if (id < 0) {
+                                        navController.navigate("tibbe_nabawi_detail/${-id}")
+                                    } else {
+                                        navController.navigate("detail/$id")
+                                    }
                                 },
                                 onAdminClick = {
                                     navController.navigate("admin")
@@ -188,7 +208,12 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         val id = intent.getIntExtra("open_article_id", -1)
-        if (id > 0) {
+        val tibbeId = intent.getIntExtra("open_tibbe_id", -1)
+        if (tibbeId > 0) {
+            targetTibbeIdState.value = tibbeId
+        } else if (id < -1) {
+            targetTibbeIdState.value = -id
+        } else if (id > 0) {
             targetArticleIdState.value = id
         }
         if (intent.getBooleanExtra("open_habit_module", false)) {
