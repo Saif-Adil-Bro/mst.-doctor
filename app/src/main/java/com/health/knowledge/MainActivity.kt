@@ -22,6 +22,8 @@ import com.health.knowledge.ui.detail.DetailScreen
 import com.health.knowledge.ui.habit.HabitReminderScreen
 import com.health.knowledge.ui.home.HomeScreen
 import com.health.knowledge.ui.pregnancy.PregnancyPlannerScreen
+import com.health.knowledge.ui.tibbenabawi.TibbeNabawiDetailScreen
+import com.health.knowledge.ui.tibbenabawi.TibbeNabawiScreen
 import com.health.knowledge.ui.theme.HealthKnowledgeTheme
 import com.health.knowledge.util.HealthNotificationHelper
 import com.health.knowledge.util.UserPreferencesManager
@@ -108,6 +110,32 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onPregnancyPlannerClick = {
                                     navController.navigate("pregnancy_planner")
+                                },
+                                onTibbeNabawiClick = {
+                                    navController.navigate("tibbe_nabawi")
+                                }
+                            )
+                        }
+
+                        composable("tibbe_nabawi") {
+                            TibbeNabawiScreen(
+                                onBack = { navController.popBackStack() },
+                                onPostClick = { id ->
+                                    navController.navigate("tibbe_nabawi_detail/$id")
+                                }
+                            )
+                        }
+
+                        composable(
+                            route = "tibbe_nabawi_detail/{id}",
+                            arguments = listOf(navArgument("id") { type = NavType.IntType })
+                        ) { backStackEntry ->
+                            val id = backStackEntry.arguments?.getInt("id") ?: 1
+                            TibbeNabawiDetailScreen(
+                                postId = id,
+                                onBack = { navController.popBackStack() },
+                                onRelatedPostClick = { relatedId ->
+                                    navController.navigate("tibbe_nabawi_detail/$relatedId")
                                 }
                             )
                         }

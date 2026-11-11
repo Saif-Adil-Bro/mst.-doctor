@@ -8,25 +8,29 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.health.knowledge.data.local.dao.ArticleDao
 import com.health.knowledge.data.local.dao.HabitDao
+import com.health.knowledge.data.local.dao.TibbeNabawiDao
 import com.health.knowledge.data.local.entity.ArticleEntity
 import com.health.knowledge.data.local.entity.HabitEntity
 import com.health.knowledge.data.local.entity.HabitExecutionLogEntity
 import com.health.knowledge.data.local.entity.ReminderConfigEntity
+import com.health.knowledge.data.local.entity.TibbeNabawiEntity
 
 @Database(
     entities = [
         ArticleEntity::class,
         HabitEntity::class,
         ReminderConfigEntity::class,
-        HabitExecutionLogEntity::class
+        HabitExecutionLogEntity::class,
+        TibbeNabawiEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class HealthDatabase : RoomDatabase() {
 
     abstract fun articleDao(): ArticleDao
     abstract fun habitDao(): HabitDao
+    abstract fun tibbeNabawiDao(): TibbeNabawiDao
 
     companion object {
         const val DATABASE_NAME = "health_knowledge.db"
@@ -119,13 +123,40 @@ abstract class HealthDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `tibbe_nabawi_posts` (
+                        `id` INTEGER NOT NULL,
+                        `title` TEXT NOT NULL,
+                        `food_name` TEXT NOT NULL DEFAULT '',
+                        `arabic_name` TEXT,
+                        `category` TEXT NOT NULL DEFAULT '',
+                        `diseases` TEXT NOT NULL DEFAULT '',
+                        `benefits` TEXT,
+                        `nature` TEXT,
+                        `taste` TEXT,
+                        `usage_instructions` TEXT,
+                        `details` TEXT NOT NULL DEFAULT '',
+                        `source_pages` TEXT NOT NULL DEFAULT '',
+                        `is_bookmarked` INTEGER NOT NULL DEFAULT 0,
+                        `search_keywords` TEXT NOT NULL DEFAULT '',
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_tibbe_nabawi_category` ON `tibbe_nabawi_posts` (`category`)")
+            }
+        }
+
         fun create(context: Context): HealthDatabase {
             return Room.databaseBuilder(
                 context.applicationContext,
                 HealthDatabase::class.java,
                 DATABASE_NAME
             )
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
             .fallbackToDestructiveMigration()
             .build()
         }

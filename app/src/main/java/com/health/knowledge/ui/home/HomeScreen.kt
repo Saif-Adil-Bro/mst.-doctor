@@ -76,6 +76,7 @@ fun HomeScreen(
     onAdminClick: () -> Unit,
     onHabitReminderClick: () -> Unit = {},
     onPregnancyPlannerClick: () -> Unit = {},
+    onTibbeNabawiClick: () -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val searchQuery by viewModel.searchQuery.collectAsState()
@@ -584,6 +585,12 @@ fun HomeScreen(
                                                 onOpenPregnancyModule = onPregnancyPlannerClick
                                             )
                                         }
+
+                                        item(key = "tibbe_nabawi_banner", contentType = "tibbe_banner") {
+                                            HomeTibbeNabawiBanner(
+                                                onOpenTibbeNabawi = onTibbeNabawiClick
+                                            )
+                                        }
                                     }
                                 }
 
@@ -644,6 +651,48 @@ fun HomeScreen(
                                         sortOrder = sortOrder,
                                         onSortChange = viewModel::onSortOrderChange
                                     )
+                                }
+
+                                if (searchQuery.isNotBlank()) {
+                                    item(key = "search_tibbe_nabawi_suggestion") {
+                                        Surface(
+                                            color = Color(0xFF1B6B46).copy(alpha = 0.08f),
+                                            shape = RoundedCornerShape(12.dp),
+                                            border = onePxBorder(Color(0xFF1B6B46).copy(alpha = 0.35f)),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp, vertical = 4.dp)
+                                                .clickable { onTibbeNabawiClick() }
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    modifier = Modifier.weight(1f)
+                                                ) {
+                                                    Text("🌿", fontSize = 18.sp)
+                                                    Spacer(Modifier.width(8.dp))
+                                                    Column {
+                                                        Text(
+                                                            text = "তিব্বে নববীতে \"$searchQuery\" এর ফলাফল দেখুন",
+                                                            fontSize = 13.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = Color(0xFF1B6B46)
+                                                        )
+                                                        Text(
+                                                            text = "হাদিস ও সুন্নাহভিত্তিক ২০০টি পথ্য কালেকশন",
+                                                            fontSize = 11.sp,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                        )
+                                                    }
+                                                }
+                                                Text("→", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1B6B46))
+                                            }
+                                        }
+                                    }
                                 }
 
                                 if (articles.isEmpty() && searchQuery.isNotBlank()) {
@@ -1627,6 +1676,100 @@ fun UserSubmitPostDialog(
                         Spacer(Modifier.width(8.dp))
                         Text("পোস্ট জমা দিন (Submit)")
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun HomeTibbeNabawiBanner(
+    onOpenTibbeNabawi: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val emeraldPrimary = Color(0xFF1B6B46)
+    val cardBg = emeraldPrimary.copy(alpha = 0.08f).solidOverSurface()
+    val borderColor = emeraldPrimary.copy(alpha = 0.35f)
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .clickable { onOpenTibbeNabawi() },
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = cardBg),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = onePxBorder(borderColor)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Surface(
+                    color = emeraldPrimary.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.size(46.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(text = "🌿", fontSize = 22.sp)
+                    }
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "তিব্বে নববী",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Surface(
+                            color = emeraldPrimary,
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = "২০০টি পথ্য",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "হাদিস ও সুন্নাহভিত্তিক স্বাস্থ্য, ভেষজ ও রোগের চিকিৎসা",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            Surface(
+                color = emeraldPrimary.copy(alpha = 0.12f),
+                shape = CircleShape,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "→",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = emeraldPrimary
+                    )
                 }
             }
         }

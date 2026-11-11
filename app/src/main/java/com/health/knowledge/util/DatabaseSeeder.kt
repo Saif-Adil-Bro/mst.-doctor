@@ -4,7 +4,9 @@ import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.health.knowledge.data.local.dao.ArticleDao
+import com.health.knowledge.data.local.dao.TibbeNabawiDao
 import com.health.knowledge.data.local.entity.ArticleEntity
+import com.health.knowledge.data.local.entity.TibbeNabawiEntity
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,7 +21,8 @@ import javax.inject.Singleton
 @Singleton
 class DatabaseSeeder @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val articleDao: ArticleDao
+    private val articleDao: ArticleDao,
+    private val tibbeNabawiDao: TibbeNabawiDao
 ) {
     private val _isSeeding = MutableStateFlow(false)
     val isSeeding: StateFlow<Boolean> = _isSeeding.asStateFlow()
@@ -39,6 +42,22 @@ class DatabaseSeeder @Inject constructor(
             articleDao.normalizeBundledTimestamps()
             articleDao.deduplicateCloudArticles()
             upgradeBundledArticlesParagraphsIfNeeded()
+        }
+
+        seedTibbeNabawiIfEmpty()
+    }
+
+    private suspend fun seedTibbeNabawiIfEmpty() {
+        try {
+            val tibbeCount = tibbeNabawiDao.getCount()
+            if (tibbeCount == 0) {
+                val tibbePosts = loadBundledTibbeNabawiPosts()
+                if (tibbePosts.isNotEmpty()) {
+                    tibbeNabawiDao.insertAll(tibbePosts)
+                }
+            }
+        } catch (_: Exception) {
+            // Ignore fallback
         }
     }
 
@@ -136,6 +155,79 @@ class DatabaseSeeder @Inject constructor(
                 .filter { it.length > 1 }
                 .distinct()
                 .joinToString(" ")
+        }
+    }
+
+    private fun loadBundledTibbeNabawiPosts(): List<TibbeNabawiEntity> {
+        return try {
+            val json = context.assets
+                .open("tibbe_nabawi_posts.json")
+                .bufferedReader()
+                .use { it.readText() }
+                .removePrefix("\uFEFF")
+
+            val type = object : TypeToken<List<BundledTibbeNabawiPost>>() {}.type
+            val bundled: List<BundledTibbeNabawiPost> = Gson().fromJson(json, type)
+
+            bundled.map { it.toEntity() }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    data class BundledTibbeNabawiPost(
+        val id: Int = 0,
+        val title: String = "",
+        val food_name: String? = null,
+        val arabic_name: String? = null,
+        val category: String = "",
+        val diseases: List<String>? = null,
+        val properties: BundledProperties? = null,
+        val usage_instructions: String? = null,
+        val details: String = "",
+        val source_pages: List<Int>? = null
+    ) {
+        data class BundledProperties(
+            val benefits: String? = null,
+            val nature: String? = null,
+            val taste: String? = null
+        )
+
+        fun toEntity(): TibbeNabawiEntity {
+            val formattedDetails = ArticleTextFormatter.formatBengaliParagraphs(details)
+            val diseasesList = diseases ?: emptyList()
+            val diseasesStr = diseasesList.joinToString(",")
+            val sourcePagesStr = (source_pages ?: emptyList()).joinToString(", ")
+            val food = food_name.orEmpty().trim()
+            val arabic = arabic_name?.trim()?.takeIf { it.isNotBlank() }
+            val benefitsText = properties?.benefits?.let { ArticleTextFormatter.formatBengaliParagraphs(it) }
+            val natureText = properties?.nature?.trim()?.takeIf { it.isNotBlank() }
+            val tasteText = properties?.taste?.trim()?.takeIf { it.isNotBlank() }
+            val usageText = usage_instructions?.let { ArticleTextFormatter.formatBengaliParagraphs(it) }
+
+            val searchKeywords = "$title $food ${arabic.orEmpty()} $category $diseasesStr ${benefitsText.orEmpty()} $formattedDetails"
+                .lowercase()
+                .split("\\s+".toRegex())
+                .filter { it.length > 1 }
+                .distinct()
+                .joinToString(" ")
+
+            return TibbeNabawiEntity(
+                id = id,
+                title = title.trim(),
+                foodName = food,
+                arabicName = arabic,
+                category = category.trim(),
+                diseases = diseasesStr,
+                benefits = benefitsText,
+                nature = natureText,
+                taste = tasteText,
+                usageInstructions = usageText,
+                details = formattedDetails,
+                sourcePages = sourcePagesStr,
+                isBookmarked = false,
+                searchKeywords = searchKeywords
+            )
         }
     }
 }
