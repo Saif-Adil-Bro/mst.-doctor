@@ -626,7 +626,7 @@ fun HomeScreen(
                                                             color = Color(0xFF1B6B46)
                                                         )
                                                         Text(
-                                                            text = "হাদিস ও সুন্নাহভিত্তিক ২০০টি পথ্য কালেকশন",
+                                                            text = "হাদিস ও সুন্নাহভিত্তিক নির্ভরযোগ্য পথ্য কালেকশন",
                                                             fontSize = 11.sp,
                                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                                         )
@@ -1171,6 +1171,7 @@ fun ArticleCard(
             // Title with comfortable typography & reading line-height
             Text(
                 text = article.title,
+                fontFamily = com.health.knowledge.ui.theme.SolaimanLipi,
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -1184,6 +1185,7 @@ fun ArticleCard(
             // Content preview with generous readability line-height
             Text(
                 text = article.content,
+                fontFamily = com.health.knowledge.ui.theme.SolaimanLipi,
                 fontSize = 14.sp,
                 lineHeight = 22.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f),
@@ -1682,29 +1684,13 @@ fun HomeTibbeNabawiBanner(
                 }
 
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            text = "তিব্বে নববী",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Surface(
-                            color = emeraldPrimary,
-                            shape = RoundedCornerShape(6.dp)
-                        ) {
-                            Text(
-                                text = "২০০টি পথ্য",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
+                    Text(
+                        text = "তিব্বে নববী",
+                        fontFamily = com.health.knowledge.ui.theme.SolaimanLipi,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
 
                     Text(
                         text = "হাদিস ও সুন্নাহভিত্তিক স্বাস্থ্য, ভেষজ ও রোগের চিকিৎসা",

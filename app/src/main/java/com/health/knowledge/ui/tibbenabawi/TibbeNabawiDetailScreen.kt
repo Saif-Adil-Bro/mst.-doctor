@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.health.knowledge.data.local.entity.TibbeNabawiEntity
+import com.health.knowledge.ui.theme.SolaimanLipi
 import com.health.knowledge.ui.theme.onePxBorder
 import com.health.knowledge.ui.theme.solidOverSurface
 import com.health.knowledge.util.ArabicStandaloneBlock
@@ -137,7 +138,10 @@ fun TibbeNabawiDetailScreen(
             )
         }
     ) { innerPadding ->
-        val currentPost = post
+        CompositionLocalProvider(
+            LocalTextStyle provides MaterialTheme.typography.bodyLarge.copy(fontFamily = SolaimanLipi)
+        ) {
+            val currentPost = post
 
         if (currentPost == null) {
             Box(
@@ -211,6 +215,7 @@ fun TibbeNabawiDetailScreen(
                         // Title
                         Text(
                             text = currentPost.title,
+                            fontFamily = SolaimanLipi,
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface,
@@ -490,6 +495,7 @@ fun TibbeNabawiDetailScreen(
 
                 Spacer(Modifier.height(16.dp))
             }
+        }
         }
     }
 }

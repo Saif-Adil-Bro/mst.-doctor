@@ -18,6 +18,7 @@ import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.health.knowledge.ui.theme.SolaimanLipi
 import com.health.knowledge.ui.theme.onePxBorder
 
 /**
@@ -100,6 +101,7 @@ fun ArabicStandaloneBlock(
                 color = textColor,
                 textAlign = TextAlign.Center,
                 style = TextStyle(
+                    fontFamily = FontFamily.Serif,
                     textDirection = TextDirection.Rtl
                 )
             )
@@ -137,11 +139,13 @@ fun SmartMultilingualBody(
                 Text(
                     text = ArticleTextFormatter.formatBengaliParagraphs(paragraph),
                     modifier = Modifier.fillMaxWidth(),
+                    fontFamily = SolaimanLipi,
                     fontSize = fontSizeSp.sp,
                     lineHeight = (fontSizeSp * 1.68f).sp,
                     color = textColor,
                     textAlign = TextAlign.Start,
                     style = TextStyle(
+                        fontFamily = SolaimanLipi,
                         textDirection = TextDirection.Ltr
                     )
                 )

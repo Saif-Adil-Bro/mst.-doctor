@@ -49,11 +49,14 @@ class DatabaseSeeder @Inject constructor(
 
     private suspend fun seedTibbeNabawiIfEmpty() {
         try {
+            val prefs = context.getSharedPreferences("sync_prefs", Context.MODE_PRIVATE)
+            val hasUpgradedTibbe = prefs.getBoolean("has_upgraded_tibbe_v3", false)
             val tibbeCount = tibbeNabawiDao.getCount()
-            if (tibbeCount == 0) {
+            if (tibbeCount == 0 || !hasUpgradedTibbe) {
                 val tibbePosts = loadBundledTibbeNabawiPosts()
                 if (tibbePosts.isNotEmpty()) {
                     tibbeNabawiDao.insertAll(tibbePosts)
+                    prefs.edit().putBoolean("has_upgraded_tibbe_v3", true).apply()
                 }
             }
         } catch (_: Exception) {
@@ -180,6 +183,9 @@ class DatabaseSeeder @Inject constructor(
         val title: String = "",
         val food_name: String? = null,
         val arabic_name: String? = null,
+        val arabic_text: String? = null,
+        val hadith_arabic: String? = null,
+        val arabic_hadith: String? = null,
         val category: String = "",
         val diseases: List<String>? = null,
         val properties: BundledProperties? = null,
@@ -195,6 +201,12 @@ class DatabaseSeeder @Inject constructor(
 
         fun toEntity(): TibbeNabawiEntity {
             val formattedDetails = ArticleTextFormatter.formatBengaliParagraphs(details)
+            val extraArabic = (arabic_text ?: hadith_arabic ?: arabic_hadith)?.trim()?.takeIf { it.isNotBlank() }
+            val finalDetails = if (!extraArabic.isNullOrBlank() && !formattedDetails.contains(extraArabic)) {
+                "$extraArabic\n\n$formattedDetails"
+            } else {
+                formattedDetails
+            }
             val diseasesList = diseases ?: emptyList()
             val diseasesStr = diseasesList.joinToString(",")
             val sourcePagesStr = (source_pages ?: emptyList()).joinToString(", ")
@@ -205,7 +217,7 @@ class DatabaseSeeder @Inject constructor(
             val tasteText = properties?.taste?.trim()?.takeIf { it.isNotBlank() }
             val usageText = usage_instructions?.let { ArticleTextFormatter.formatBengaliParagraphs(it) }
 
-            val searchKeywords = "$title $food ${arabic.orEmpty()} $category $diseasesStr ${benefitsText.orEmpty()} $formattedDetails"
+            val searchKeywords = "$title $food ${arabic.orEmpty()} ${extraArabic.orEmpty()} $category $diseasesStr ${benefitsText.orEmpty()} $finalDetails"
                 .lowercase()
                 .split("\\s+".toRegex())
                 .filter { it.length > 1 }
@@ -223,7 +235,7 @@ class DatabaseSeeder @Inject constructor(
                 nature = natureText,
                 taste = tasteText,
                 usageInstructions = usageText,
-                details = formattedDetails,
+                details = finalDetails,
                 sourcePages = sourcePagesStr,
                 isBookmarked = false,
                 searchKeywords = searchKeywords

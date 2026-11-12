@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.health.knowledge.data.local.entity.TibbeNabawiEntity
+import com.health.knowledge.ui.theme.SolaimanLipi
 import com.health.knowledge.ui.theme.onePxBorder
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -128,11 +129,14 @@ fun TibbeNabawiScreen(
             )
         }
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
+        CompositionLocalProvider(
+            LocalTextStyle provides MaterialTheme.typography.bodyLarge.copy(fontFamily = SolaimanLipi)
         ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+            ) {
             // ── Search Bar ───────────────────────────────────────────
             OutlinedTextField(
                 value = searchQuery,
@@ -528,6 +532,7 @@ fun TibbeNabawiScreen(
                 }
             }
         }
+        }
     }
 }
 
@@ -626,6 +631,7 @@ private fun TibbeNabawiCompactCard(
                     val headingText = if (displayHerbAsHeading) "🌿 $canonicalHerb" else post.category
                     Text(
                         text = headingText,
+                        fontFamily = SolaimanLipi,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = emeraldPrimary
@@ -651,6 +657,7 @@ private fun TibbeNabawiCompactCard(
                 // Title (Single line, compact)
                 Text(
                     text = post.title,
+                    fontFamily = SolaimanLipi,
                     fontSize = 13.5.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -667,6 +674,7 @@ private fun TibbeNabawiCompactCard(
                     val subPrefix = if (displayHerbAsHeading) "📁" else "🌱"
                     Text(
                         text = "$subPrefix $subLabel",
+                        fontFamily = SolaimanLipi,
                         fontSize = 11.5.sp,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -678,6 +686,7 @@ private fun TibbeNabawiCompactCard(
                     if (diseasesText.isNotBlank()) {
                         Text(
                             text = " • 🩺 $diseasesText",
+                            fontFamily = SolaimanLipi,
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.outline,
                             maxLines = 1,

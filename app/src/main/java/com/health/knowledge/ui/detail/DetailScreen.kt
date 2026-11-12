@@ -43,6 +43,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.health.knowledge.domain.model.Article
 import com.health.knowledge.ui.home.TagChip
+import com.health.knowledge.ui.theme.SolaimanLipi
 import com.health.knowledge.ui.theme.onePxBorder
 import com.health.knowledge.ui.theme.solidOverSurface
 import com.health.knowledge.util.ArticleTextFormatter
@@ -280,7 +281,10 @@ fun DetailScreen(
             }
         }
     ) { paddingValues ->
-        article?.let { art ->
+        CompositionLocalProvider(
+            LocalTextStyle provides MaterialTheme.typography.bodyLarge.copy(fontFamily = SolaimanLipi)
+        ) {
+            article?.let { art ->
             val hasCdnImage = remember(art.photoPath) {
                 art.photoPath.startsWith("http://") || art.photoPath.startsWith("https://")
             }
@@ -363,6 +367,7 @@ fun DetailScreen(
                         SelectionContainer {
                             Text(
                                 text = art.title,
+                                fontFamily = SolaimanLipi,
                                 fontSize = (fontSizeSp + 4f).sp,
                                 lineHeight = ((fontSizeSp + 4f) * 1.35f).sp,
                                 fontWeight = FontWeight.Bold,
@@ -915,9 +920,10 @@ fun DetailScreen(
                     }
                 }
             }
-        } ?: run {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+            } ?: run {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
             }
         }
     }
