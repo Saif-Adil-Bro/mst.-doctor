@@ -51,13 +51,13 @@ class DatabaseSeeder @Inject constructor(
     private suspend fun seedTibbeNabawiIfEmpty() {
         try {
             val prefs = context.getSharedPreferences("sync_prefs", Context.MODE_PRIVATE)
-            val hasUpgradedTibbe = prefs.getBoolean("has_upgraded_tibbe_v4", false)
+            val hasUpgradedTibbe = prefs.getBoolean("has_upgraded_tibbe_v6", false)
             val tibbeCount = tibbeNabawiDao.getCount()
             if (tibbeCount == 0 || !hasUpgradedTibbe) {
                 val tibbePosts = loadBundledTibbeNabawiPosts()
                 if (tibbePosts.isNotEmpty()) {
                     tibbeNabawiDao.insertAll(tibbePosts)
-                    prefs.edit().putBoolean("has_upgraded_tibbe_v4", true).apply()
+                    prefs.edit().putBoolean("has_upgraded_tibbe_v6", true).apply()
                 }
             }
         } catch (_: Exception) {

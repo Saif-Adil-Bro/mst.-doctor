@@ -93,21 +93,18 @@ jobs:
             exit 0
           fi
 
-          # Determine target Public Key (manual dispatch input takes priority over secret)
+          # Determine target Public Key (manual dispatch input takes priority over secret, fallback to known app key)
           TARGET_PUBLIC_KEY="$INPUT_PUBLIC_KEY"
           if [ -z "$TARGET_PUBLIC_KEY" ]; then
             TARGET_PUBLIC_KEY="$SECRET_PUBLIC_KEY"
           fi
-
-          if [ -n "$TARGET_PUBLIC_KEY" ]; then
-            echo "🔄 Updating existing Appetize app (publicKey: $TARGET_PUBLIC_KEY)..."
-            API_URL="https://api.appetize.io/v1/apps/$TARGET_PUBLIC_KEY"
-            DEPLOY_MODE="Updated Existing App"
-          else
-            echo "🚀 Uploading new Android app to Appetize.io..."
-            API_URL="https://api.appetize.io/v1/apps"
-            DEPLOY_MODE="Created New App"
+          if [ -z "$TARGET_PUBLIC_KEY" ]; then
+            TARGET_PUBLIC_KEY="sqt2y3poimoycz63735yd7pg4i"
           fi
+
+          DEPLOY_MODE="Updated Existing App"
+          API_URL="https://api.appetize.io/v1/apps/$TARGET_PUBLIC_KEY"
+          echo "🔄 Updating Appetize app (publicKey: $TARGET_PUBLIC_KEY)..."
 
           HTTP_RESPONSE=$(curl -sS -w "\n%{http_code}" -X POST "$API_URL" \
             -H "X-API-KEY: $APPETIZE_API_TOKEN" \
@@ -118,6 +115,20 @@ jobs:
 
           HTTP_BODY=$(echo "$HTTP_RESPONSE" | sed '$d')
           HTTP_STATUS=$(echo "$HTTP_RESPONSE" | tail -n 1)
+
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+            echo "⚠️ Update target key failed (HTTP $HTTP_STATUS). Uploading as new app..."
+            API_URL="https://api.appetize.io/v1/apps"
+            DEPLOY_MODE="Created New App"
+            HTTP_RESPONSE=$(curl -sS -w "\n%{http_code}" -X POST "$API_URL" \
+              -H "X-API-KEY: $APPETIZE_API_TOKEN" \
+              -u "$APPETIZE_API_TOKEN:" \
+              -F "file=@$APK_PATH" \
+              -F "platform=android" \
+              -F "note=GitHub Actions build ${GITHUB_SHA::7}")
+            HTTP_BODY=$(echo "$HTTP_RESPONSE" | sed '$d')
+            HTTP_STATUS=$(echo "$HTTP_RESPONSE" | tail -n 1)
+          fi
 
           if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
             echo "❌ Appetize API upload failed with HTTP status $HTTP_STATUS"

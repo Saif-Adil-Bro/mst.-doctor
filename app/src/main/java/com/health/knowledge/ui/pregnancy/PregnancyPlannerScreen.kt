@@ -660,9 +660,11 @@ fun PregnancyPlannerScreen(
                     quote = currentQuote,
                     completedChecks = completedChecks,
                     activeHabitIds = activeHabitIds,
+                    allHabits = allHabits,
                     pregnancyPosts = pregnancyArticles,
                     isAdminMode = isAdminMode,
                     onNextQuote = viewModel::nextQuote,
+                    isSpeaking = isSpeaking,
                     onSpeakText = viewModel::speakBengaliPrompt,
                     onToggleCheck = viewModel::toggleCheckItem,
                     onToggleReminderPreset = { preset ->
@@ -671,7 +673,8 @@ fun PregnancyPlannerScreen(
                             Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                         }
                     },
-                    onEditProfile = viewModel::reopenOnboarding,
+                    onEditReminderTime = ::openReminderTimePicker,
+                    onEditProfile = viewModel::startEditingSettings,
                     onArticleClick = onArticleClick,
                     onBookmarkToggle = viewModel::toggleBookmark,
                     onReactionClick = viewModel::reactToArticle,
@@ -698,6 +701,7 @@ fun PregnancyPlannerScreen(
                     onEditDeliveryDate = { showDeliveryDialog = true },
                     onToggleSymptom = viewModel::toggleSymptom,
                     onNextQuote = viewModel::nextQuote,
+                    isSpeaking = isSpeaking,
                     onSpeakText = viewModel::speakBengaliPrompt,
                     onToggleCheck = viewModel::toggleCheckItem,
                     onToggleReminderPreset = { preset ->
@@ -739,6 +743,7 @@ fun PregnancyPlannerScreen(
                     onOpenPeriodUpdateDialog = { showPeriodUpdateDialog = true },
                     onToggleSymptom = viewModel::toggleSymptom,
                     onNextQuote = viewModel::nextQuote,
+                    isSpeaking = isSpeaking,
                     onSpeakText = viewModel::speakBengaliPrompt,
                     onToggleCheck = viewModel::toggleCheckItem,
                     onToggleReminderPreset = { preset ->
@@ -783,6 +788,7 @@ fun PregnancyPlannerScreen(
                     onConfirmDeliveryClick = { showDeliveryDialog = true },
                     onToggleSymptom = viewModel::toggleSymptom,
                     onNextQuote = viewModel::nextQuote,
+                    isSpeaking = isSpeaking,
                     onSpeakText = viewModel::speakBengaliPrompt,
                     onToggleCheck = viewModel::toggleCheckItem,
                     onToggleReminderPreset = { preset ->
@@ -829,6 +835,7 @@ private fun PreConceptionStageContent(
     onOpenPeriodUpdateDialog: () -> Unit,
     onToggleSymptom: (String) -> Unit,
     onNextQuote: () -> Unit,
+    isSpeaking: Boolean = false,
     onSpeakText: (String) -> Unit,
     onToggleCheck: (String) -> Unit,
     onToggleReminderPreset: (PregnancyReminderPreset) -> Unit,
@@ -958,6 +965,7 @@ private fun PreConceptionStageContent(
         item(key = "pre_quote_card") {
             PregnancyQuoteCard(
                 quote = quote,
+                isSpeaking = isSpeaking,
                 onNextQuote = onNextQuote,
                 onSpeakQuote = { onSpeakText(quote.quoteBn) }
             )
@@ -1236,6 +1244,7 @@ private fun PostConceptionStageContent(
     onConfirmDeliveryClick: () -> Unit,
     onToggleSymptom: (String) -> Unit,
     onNextQuote: () -> Unit,
+    isSpeaking: Boolean = false,
     onSpeakText: (String) -> Unit,
     onToggleCheck: (String) -> Unit,
     onToggleReminderPreset: (PregnancyReminderPreset) -> Unit,
@@ -1320,6 +1329,7 @@ private fun PostConceptionStageContent(
         item(key = "post_quote_card") {
             PregnancyQuoteCard(
                 quote = quote,
+                isSpeaking = isSpeaking,
                 onNextQuote = onNextQuote,
                 onSpeakQuote = { onSpeakText(quote.quoteBn) }
             )
@@ -1648,6 +1658,7 @@ private fun PostpartumBabyCareStageContent(
     onEditDeliveryDate: () -> Unit,
     onToggleSymptom: (String) -> Unit,
     onNextQuote: () -> Unit,
+    isSpeaking: Boolean = false,
     onSpeakText: (String) -> Unit,
     onToggleCheck: (String) -> Unit,
     onToggleReminderPreset: (PregnancyReminderPreset) -> Unit,
@@ -1843,6 +1854,7 @@ private fun PostpartumBabyCareStageContent(
         item(key = "postpartum_quote_card") {
             PregnancyQuoteCard(
                 quote = quote,
+                isSpeaking = isSpeaking,
                 onNextQuote = onNextQuote,
                 onSpeakQuote = { onSpeakText(quote.quoteBn) }
             )
@@ -3658,6 +3670,7 @@ private fun WeeklyBabyGrowthSectionCard(
 @Composable
 internal fun PregnancyQuoteCard(
     quote: PregnancyQuote,
+    isSpeaking: Boolean = false,
     onNextQuote: () -> Unit,
     onSpeakQuote: () -> Unit
 ) {
@@ -3700,11 +3713,15 @@ internal fun PregnancyQuoteCard(
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     FilledTonalIconButton(
                         onClick = onSpeakQuote,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(32.dp),
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = if (isSpeaking) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                            contentColor = if (isSpeaking) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                        )
                     ) {
                         Icon(
-                            Icons.Default.VolumeUp,
-                            contentDescription = "শুনুন",
+                            imageVector = if (isSpeaking) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
+                            contentDescription = if (isSpeaking) "পজ / বন্ধ করুন" else "শুনুন",
                             modifier = Modifier.size(16.dp)
                         )
                     }

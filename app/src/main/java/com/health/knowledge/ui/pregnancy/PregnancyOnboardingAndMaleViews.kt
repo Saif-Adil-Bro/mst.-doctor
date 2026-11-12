@@ -1325,12 +1325,15 @@ fun MaleHealthAndFatherhoodDashboard(
     quote: PregnancyQuote,
     completedChecks: Set<String>,
     activeHabitIds: Set<String>,
+    allHabits: List<com.health.knowledge.data.local.entity.HabitEntity> = emptyList(),
     pregnancyPosts: List<Article> = emptyList(),
     isAdminMode: Boolean = false,
     onNextQuote: () -> Unit,
+    isSpeaking: Boolean = false,
     onSpeakText: (String) -> Unit,
     onToggleCheck: (String) -> Unit,
     onToggleReminderPreset: (PregnancyReminderPreset) -> Unit,
+    onEditReminderTime: ((PregnancyReminderPreset, String) -> Unit)? = null,
     onEditProfile: () -> Unit,
     onArticleClick: (Int) -> Unit = {},
     onBookmarkToggle: (Int, Boolean) -> Unit = { _, _ -> },
@@ -1470,6 +1473,7 @@ fun MaleHealthAndFatherhoodDashboard(
         item(key = "male_quote_card") {
             PregnancyQuoteCard(
                 quote = quote,
+                isSpeaking = isSpeaking,
                 onNextQuote = onNextQuote,
                 onSpeakQuote = { onSpeakText(quote.quoteBn) }
             )
@@ -1586,10 +1590,14 @@ fun MaleHealthAndFatherhoodDashboard(
                     it.id == "preg_milk_dates" || it.id == "preg_dua_tilawat"
                 }
                 items(maleReminders, key = { "male_rem_${it.id}" }) { preset ->
+                    val habit = allHabits.firstOrNull { it.id == preset.id }
+                    val currentTime = habit?.anchorTime ?: preset.anchorTime
                     PregnancyReminderPresetCard(
                         preset = preset,
                         isActive = preset.id in activeHabitIds,
-                        onToggle = { onToggleReminderPreset(preset) }
+                        currentTime = currentTime,
+                        onToggle = { onToggleReminderPreset(preset) },
+                        onEditTime = { onEditReminderTime?.invoke(preset, currentTime) }
                     )
                 }
             }
