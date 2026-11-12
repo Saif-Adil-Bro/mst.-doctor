@@ -1627,6 +1627,22 @@ private fun PostpartumBabyCareStageContent(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
+                        val genderLabelBn = when (babyAgeStatus.babyGender) {
+                            UserPreferencesManager.BABY_GENDER_BOY -> "👦 পুত্র সন্তান"
+                            UserPreferencesManager.BABY_GENDER_GIRL -> "👧 কন্যা সন্তান"
+                            else -> "👶 রাজপুত্র/রাজকন্যা"
+                        }
+                        val deliveryTypeLabelBn = if (babyAgeStatus.deliveryType == UserPreferencesManager.DELIVERY_TYPE_C_SECTION) {
+                            "🩺 সি-সেকশন (অস্ত্রোপচার)"
+                        } else {
+                            "🌿 স্বাভাবিক প্রসব (নরমাল)"
+                        }
+                        val genderEmoji = when (babyAgeStatus.babyGender) {
+                            UserPreferencesManager.BABY_GENDER_GIRL -> "👧"
+                            UserPreferencesManager.BABY_GENDER_BOY -> "👦"
+                            else -> "👶"
+                        }
+
                         Surface(
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
@@ -1634,7 +1650,7 @@ private fun PostpartumBabyCareStageContent(
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Text(
-                                    text = if (babyAgeStatus.babyGenderTextBn.contains("কন্যা")) "👧" else if (babyAgeStatus.babyGenderTextBn.contains("পুত্র")) "👦" else "👶",
+                                    text = genderEmoji,
                                     fontSize = 28.sp
                                 )
                             }
@@ -1650,7 +1666,7 @@ private fun PostpartumBabyCareStageContent(
                                     shape = RoundedCornerShape(50)
                                 ) {
                                     Text(
-                                        text = babyAgeStatus.stageLabelBn,
+                                        text = "প্রসব পরবর্তী মোড",
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.primary,
@@ -1662,7 +1678,7 @@ private fun PostpartumBabyCareStageContent(
                                     shape = RoundedCornerShape(50)
                                 ) {
                                     Text(
-                                        text = babyAgeStatus.babyGenderTextBn,
+                                        text = genderLabelBn,
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -1672,13 +1688,13 @@ private fun PostpartumBabyCareStageContent(
                             }
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                text = "বাবুর বয়স: ${babyAgeStatus.ageTextBn}",
+                                text = "বাবুর বয়স: ${babyAgeStatus.ageDisplayBn}",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "প্রসব পদ্ধতি: ${babyAgeStatus.deliveryTypeTextBn}",
+                                text = "প্রসব পদ্ধতি: $deliveryTypeLabelBn",
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -1842,7 +1858,7 @@ private fun PostpartumBabyCareStageContent(
                                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                                     modifier = Modifier.weight(1f)
                                 ) {
-                                    Text(item.icon, fontSize = 20.sp)
+                                    Text(item.emoji, fontSize = 20.sp)
                                     Text(
                                         text = item.titleBn,
                                         style = MaterialTheme.typography.titleSmall,
@@ -1851,14 +1867,14 @@ private fun PostpartumBabyCareStageContent(
                                     )
                                 }
                                 IconButton(
-                                    onClick = { onSpeakText("${item.titleBn}। ${item.descBn}। টিপস: ${item.tipBn}") },
+                                    onClick = { onSpeakText("${item.titleBn}। ${item.detailBn}। টিপস: ${item.highlightBn}") },
                                     modifier = Modifier.size(32.dp)
                                 ) {
                                     Icon(Icons.Default.VolumeUp, contentDescription = "শুনুন", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                                 }
                             }
                             Text(
-                                text = item.descBn,
+                                text = item.detailBn,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 lineHeight = 18.sp
@@ -1876,7 +1892,7 @@ private fun PostpartumBabyCareStageContent(
                                 ) {
                                     Text("💡", fontSize = 13.sp)
                                     Text(
-                                        text = item.tipBn,
+                                        text = item.highlightBn,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Medium,
                                         color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -1924,7 +1940,7 @@ private fun PostpartumBabyCareStageContent(
                                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                                     modifier = Modifier.weight(1f)
                                 ) {
-                                    Text(item.icon, fontSize = 20.sp)
+                                    Text(item.emoji, fontSize = 20.sp)
                                     Text(
                                         text = item.titleBn,
                                         style = MaterialTheme.typography.titleSmall,
@@ -1933,14 +1949,14 @@ private fun PostpartumBabyCareStageContent(
                                     )
                                 }
                                 IconButton(
-                                    onClick = { onSpeakText("${item.titleBn}। ${item.descBn}। নির্দেশিকা: ${item.foodsOrGuidanceBn}") },
+                                    onClick = { onSpeakText("${item.titleBn}। ${item.detailBn}। নির্দেশিকা: ${item.highlightBn}") },
                                     modifier = Modifier.size(32.dp)
                                 ) {
                                     Icon(Icons.Default.VolumeUp, contentDescription = "শুনুন", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                                 }
                             }
                             Text(
-                                text = item.descBn,
+                                text = item.detailBn,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 lineHeight = 18.sp
@@ -1958,7 +1974,7 @@ private fun PostpartumBabyCareStageContent(
                                 ) {
                                     Text("🌿", fontSize = 13.sp)
                                     Text(
-                                        text = item.foodsOrGuidanceBn,
+                                        text = item.highlightBn,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Medium,
                                         color = MaterialTheme.colorScheme.onSecondaryContainer
@@ -2402,7 +2418,7 @@ private fun InstantHomeRemediesCard(
             emptyList()
         } else {
             PregnancyPlannerEngine.instantHomeRemediesCatalog.filter { remedy ->
-                remedy.symptomKey in selectedSymptoms
+                remedy.symptomId in selectedSymptoms
             }
         }
     }
@@ -2461,14 +2477,21 @@ private fun InstantHomeRemediesCard(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(
-                                text = remedy.remedyTitleBn,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(remedy.emoji, fontSize = 18.sp)
+                                Text(
+                                    text = remedy.titleBn,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
                             IconButton(
-                                onClick = { onSpeakRemedy("${remedy.remedyTitleBn}। ${remedy.remedyBn}। সতর্কতা: ${remedy.cautionBn}") },
+                                onClick = { onSpeakRemedy("${remedy.titleBn}। ${remedy.remedyListBn.joinToString("। ")}। সতর্কতা: ${remedy.cautionBn}") },
                                 modifier = Modifier.size(28.dp)
                             ) {
                                 Icon(
@@ -2480,12 +2503,14 @@ private fun InstantHomeRemediesCard(
                             }
                         }
 
-                        Text(
-                            text = remedy.remedyBn,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            lineHeight = 18.sp
-                        )
+                        remedy.remedyListBn.forEach { itemText ->
+                            Text(
+                                text = "• $itemText",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                lineHeight = 18.sp
+                            )
+                        }
 
                         Surface(
                             color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f),
@@ -2573,7 +2598,7 @@ private fun HusbandsCornerCard(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text(tip.icon, fontSize = 22.sp)
+                        Text(tip.emoji, fontSize = 22.sp)
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = tip.titleBn,
@@ -2583,14 +2608,23 @@ private fun HusbandsCornerCard(
                             )
                             Spacer(Modifier.height(2.dp))
                             Text(
-                                text = tip.descBn,
+                                text = tip.detailBn,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 lineHeight = 17.sp
                             )
+                            if (tip.actionBn.isNotBlank()) {
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = "👉 ${tip.actionBn}",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
                         }
                         IconButton(
-                            onClick = { onSpeakTip("${tip.titleBn}। ${tip.descBn}") },
+                            onClick = { onSpeakTip("${tip.titleBn}। ${tip.detailBn}। ${tip.actionBn}") },
                             modifier = Modifier.size(28.dp)
                         ) {
                             Icon(
@@ -2672,8 +2706,10 @@ private fun SafetyAndRedFlagsCard(
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.weight(1f)
                             ) {
+                                Text(item.emoji, fontSize = 18.sp)
                                 Surface(
                                     color = if (item.isRedFlag) Color(0xFFFFEBEE) else Color(0xFFFFF8E1),
                                     shape = RoundedCornerShape(4.dp)
@@ -2694,7 +2730,7 @@ private fun SafetyAndRedFlagsCard(
                                 )
                             }
                             IconButton(
-                                onClick = { onSpeakWarning("${item.titleBn}। ${item.descBn}। নির্দেশিকা: ${item.actionBn}") },
+                                onClick = { onSpeakWarning("${item.titleBn}। ${item.detailBn}") },
                                 modifier = Modifier.size(28.dp)
                             ) {
                                 Icon(
@@ -2707,17 +2743,10 @@ private fun SafetyAndRedFlagsCard(
                         }
 
                         Text(
-                            text = item.descBn,
+                            text = item.detailBn,
                             style = MaterialTheme.typography.bodySmall,
                             color = Color(0xFF424242),
                             lineHeight = 17.sp
-                        )
-
-                        Text(
-                            text = "👉 ${item.actionBn}",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFFC62828)
                         )
                     }
                 }
