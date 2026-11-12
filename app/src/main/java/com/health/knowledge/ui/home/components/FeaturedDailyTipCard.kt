@@ -209,9 +209,9 @@ fun PremiumDailyTipCard(
                         .border(onePxBorder(Color(0xFFB8DEC5)), RoundedCornerShape(20.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (article.photoUrl.isNotBlank()) {
+                    if (article.photoPath.isNotBlank()) {
                         AsyncImage(
-                            model = article.photoUrl,
+                            model = article.photoPath,
                             contentDescription = article.title,
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop
