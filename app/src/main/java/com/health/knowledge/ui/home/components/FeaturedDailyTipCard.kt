@@ -72,21 +72,21 @@ fun PremiumDailyTipCard(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 6.dp)
+            .padding(horizontal = 20.dp, vertical = 4.dp)
             .shadow(
-                elevation = 4.dp,
-                shape = RoundedCornerShape(26.dp),
-                spotColor = Color(0x1A004D2C)
+                elevation = 2.dp,
+                shape = RoundedCornerShape(20.dp),
+                spotColor = Color(0x14004D2C)
             )
             .clickable(onClick = onReadClick),
-        shape = RoundedCornerShape(26.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = cardBg),
         border = onePxBorder(borderColor)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(18.dp)
+                .padding(12.dp)
         ) {
             // Badges Row
             Row(
@@ -97,116 +97,110 @@ fun PremiumDailyTipCard(
                 // Left Badge: তিব্বে নববী টিপস
                 Surface(
                     color = Color(0xFF006B3C),
-                    shape = RoundedCornerShape(20.dp)
+                    shape = RoundedCornerShape(16.dp)
                 ) {
                     Text(
                         text = badgeTitle,
                         color = Color.White,
-                        fontSize = 11.sp,
+                        fontSize = 10.5.sp,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                     )
                 }
 
                 // Right Badge: সময় (e.g. সকাল ০৮:০০ (AM))
                 Surface(
                     color = Color(0xFFE0F2E9),
-                    shape = RoundedCornerShape(20.dp),
+                    shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.clickable(onClick = onToggleReminder)
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
                         Icon(
                             imageVector = if (reminderEnabled) Icons.Default.NotificationsActive else Icons.Default.CalendarToday,
                             contentDescription = null,
                             tint = Color(0xFF006B3C),
-                            modifier = Modifier.size(12.dp)
+                            modifier = Modifier.size(11.dp)
                         )
                         Text(
                             text = formattedTime,
                             color = Color(0xFF006B3C),
-                            fontSize = 11.sp,
+                            fontSize = 10.5.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
                 }
             }
 
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(8.dp))
 
             // Content + Image Split Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Left Column: Headline, Ingredient, Snippet, and CTA button
+                // Left Column: Headline & Herb + CTA Row
                 Column(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     // Headline
                     Text(
                         text = article.title,
                         color = Color(0xFF004D2C),
-                        fontSize = 16.sp,
+                        fontSize = 13.5.sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        lineHeight = 22.sp
+                        lineHeight = 18.sp
                     )
 
-                    // Herb / Ingredient tag
-                    Text(
-                        text = "🌱 ভেষজ/উপাদান: $ingredientText",
-                        color = Color(0xFF2E8B57),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-
-                    // Short snippet
-                    Text(
-                        text = article.content.replace("\n", " ").trim(),
-                        color = Color(0xFF4B5563),
-                        fontSize = 12.sp,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        lineHeight = 16.sp
-                    )
-
-                    Spacer(Modifier.height(4.dp))
-
-                    // Bottom CTA Pill
-                    Surface(
-                        color = Color(0xFFE0F2E9),
-                        shape = RoundedCornerShape(20.dp),
-                        border = onePxBorder(Color(0xFFB8DEC5)),
-                        modifier = Modifier.clickable(onClick = onReadClick)
+                    // Compact Herb Tag + CTA in one row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = ctaText,
-                            color = Color(0xFF006B3C),
+                            text = "🌱 $ingredientText",
+                            color = Color(0xFF2E8B57),
                             fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            modifier = Modifier.weight(1f, fill = false)
                         )
+
+                        Spacer(Modifier.width(6.dp))
+
+                        Surface(
+                            color = Color(0xFFE0F2E9),
+                            shape = RoundedCornerShape(12.dp),
+                            border = onePxBorder(Color(0xFFB8DEC5)),
+                            modifier = Modifier.clickable(onClick = onReadClick)
+                        ) {
+                            Text(
+                                text = "বিস্তারিত →",
+                                color = Color(0xFF006B3C),
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
                     }
                 }
 
-                // Right: Botanical / Herb Product Image
+                // Right: Botanical / Herb Product Image (Compact 68dp)
                 Box(
                     modifier = Modifier
-                        .size(width = 100.dp, height = 100.dp)
-                        .clip(RoundedCornerShape(20.dp))
+                        .size(width = 68.dp, height = 68.dp)
+                        .clip(RoundedCornerShape(14.dp))
                         .background(Color.White)
-                        .border(onePxBorder(Color(0xFFB8DEC5)), RoundedCornerShape(20.dp)),
+                        .border(onePxBorder(Color(0xFFB8DEC5)), RoundedCornerShape(14.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     if (article.photoPath.isNotBlank()) {
@@ -217,7 +211,6 @@ fun PremiumDailyTipCard(
                             contentScale = ContentScale.Crop
                         )
                     } else {
-                        // High quality authentic Kohl Surma herbal jar asset
                         Image(
                             painter = painterResource(id = R.drawable.tip_kohl_surma),
                             contentDescription = "ভেষজ পথ্য",
@@ -231,14 +224,14 @@ fun PremiumDailyTipCard(
                         onClick = onNextTipClick,
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
-                            .size(28.dp)
-                            .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(topStart = 10.dp))
+                            .size(22.dp)
+                            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(topStart = 8.dp))
                     ) {
                         Icon(
                             imageVector = Icons.Default.Refresh,
                             contentDescription = "পরবর্তী টিপস",
                             tint = Color.White,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(13.dp)
                         )
                     }
                 }

@@ -551,23 +551,6 @@ fun HerbalIndexTabContent(
                         }
                     }
 
-                    OutlinedTextField(
-                        value = herbSearchQuery,
-                        onValueChange = onHerbQueryChange,
-                        placeholder = { Text("ভেষজ উপাদান বা রোগ খুঁজুন (যেমন: হলুদ, আদা, মধু)...") },
-                        leadingIcon = { Icon(Icons.Default.Eco, null, tint = MaterialTheme.colorScheme.primary) },
-                        trailingIcon = {
-                            if (herbSearchQuery.isNotBlank()) {
-                                IconButton(onClick = { onHerbQueryChange("") }) {
-                                    Icon(Icons.Default.Clear, null)
-                                }
-                            }
-                        },
-                        singleLine = true,
-                        shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
                     // Multi-select category chips
                     Text("বিভাগ ফিল্টার (একাধিক নির্বাচন করা যাবে):", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

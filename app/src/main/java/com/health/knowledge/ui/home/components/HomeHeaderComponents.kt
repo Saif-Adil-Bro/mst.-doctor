@@ -47,6 +47,7 @@ import com.health.knowledge.ui.theme.onePxBorder
 fun HomePremiumHeader(
     totalCount: Int,
     searchQuery: String,
+    searchPlaceholder: String = "রোগ, উপাদান বা বিষয় লিখুন...",
     onSearchQueryChange: (String) -> Unit,
     onClearSearch: () -> Unit,
     onFilterClick: () -> Unit,
@@ -219,6 +220,7 @@ fun HomePremiumHeader(
                 // Modern Rounded Search Bar
                 ModernHomeSearchBar(
                     query = searchQuery,
+                    placeholder = searchPlaceholder,
                     onQueryChange = onSearchQueryChange,
                     onClear = onClearSearch,
                     onFilterClick = onFilterClick,
@@ -238,6 +240,7 @@ fun HomePremiumHeader(
 @Composable
 fun ModernHomeSearchBar(
     query: String,
+    placeholder: String = "রোগ, উপাদান বা বিষয় লিখুন...",
     onQueryChange: (String) -> Unit,
     onClear: () -> Unit,
     onFilterClick: () -> Unit,
@@ -273,7 +276,7 @@ fun ModernHomeSearchBar(
             ) {
                 if (query.isEmpty()) {
                     Text(
-                        text = "রোগ, উপাদান বা বিষয় লিখুন...",
+                        text = placeholder,
                         color = Color(0xFF757575),
                         fontSize = 14.sp
                     )

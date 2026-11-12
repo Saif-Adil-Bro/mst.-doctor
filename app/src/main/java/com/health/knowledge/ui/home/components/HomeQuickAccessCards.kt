@@ -44,21 +44,21 @@ fun HomeQuickAccessCards(
             .padding(horizontal = 20.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // Left Card: হাদীস প্ল্যানার
+        // Left Card: হ্যাবিট প্ল্যানার
         Card(
             modifier = Modifier
                 .weight(1f)
-                .height(130.dp)
-                .shadow(elevation = 2.dp, shape = RoundedCornerShape(22.dp), spotColor = Color(0x14004D2C))
+                .height(92.dp)
+                .shadow(elevation = 2.dp, shape = RoundedCornerShape(18.dp), spotColor = Color(0x14004D2C))
                 .clickable(onClick = onOpenHabitPlanner),
-            shape = RoundedCornerShape(22.dp),
+            shape = RoundedCornerShape(18.dp),
             colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F8F3)),
             border = onePxBorder(Color(0xFFC8E6C9))
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(14.dp),
+                    .padding(10.dp),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 // Top Row: Clock icon + Forward Arrow button
@@ -70,14 +70,14 @@ fun HomeQuickAccessCards(
                     Surface(
                         color = Color(0xFF006B3C),
                         shape = CircleShape,
-                        modifier = Modifier.size(38.dp)
+                        modifier = Modifier.size(30.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = Icons.Default.AlarmOn,
-                                contentDescription = "হাদীস প্ল্যানার",
+                                contentDescription = "হ্যাবিট প্ল্যানার",
                                 tint = Color.White,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(16.dp)
                             )
                         }
                     }
@@ -85,14 +85,14 @@ fun HomeQuickAccessCards(
                     Surface(
                         color = Color(0xFFE0F2E9),
                         shape = CircleShape,
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.size(24.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                                 contentDescription = "যান",
                                 tint = Color(0xFF006B3C),
-                                modifier = Modifier.size(15.dp)
+                                modifier = Modifier.size(13.dp)
                             )
                         }
                     }
@@ -100,9 +100,9 @@ fun HomeQuickAccessCards(
 
                 // Middle: Title
                 Text(
-                    text = "হাদীস প্ল্যানার",
+                    text = "হ্যাবিট প্ল্যানার",
                     color = Color(0xFF1F2937),
-                    fontSize = 15.sp,
+                    fontSize = 13.5.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -111,41 +111,27 @@ fun HomeQuickAccessCards(
                 // Bottom: Subtitle with Alarm status
                 val alarmSubtitle = when {
                     !nextPostCountdownText.isNullOrBlank() -> nextPostCountdownText
-                    else -> "পরের অ্যালার্ম:\nসকাল ০৮:০০"
+                    else -> "পরের অ্যালার্ম: সকাল ০৮:০০"
                 }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Schedule,
-                            contentDescription = null,
-                            tint = Color(0xFF006B3C),
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Text(
-                            text = alarmSubtitle,
-                            color = Color(0xFF006B3C),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            lineHeight = 14.sp
-                        )
-                    }
-
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        imageVector = Icons.Default.Schedule,
                         contentDescription = null,
                         tint = Color(0xFF006B3C),
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(11.dp)
+                    )
+                    Text(
+                        text = alarmSubtitle,
+                        color = Color(0xFF006B3C),
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
@@ -155,10 +141,10 @@ fun HomeQuickAccessCards(
         Card(
             modifier = Modifier
                 .weight(1f)
-                .height(130.dp)
-                .shadow(elevation = 2.dp, shape = RoundedCornerShape(22.dp), spotColor = Color(0x14FF7043))
+                .height(92.dp)
+                .shadow(elevation = 2.dp, shape = RoundedCornerShape(18.dp), spotColor = Color(0x14FF7043))
                 .clickable(onClick = onOpenPregnancyPlanner),
-            shape = RoundedCornerShape(22.dp),
+            shape = RoundedCornerShape(18.dp),
             colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF2ED)),
             border = onePxBorder(Color(0xFFFFD9CC))
         ) {
@@ -167,13 +153,13 @@ fun HomeQuickAccessCards(
                 MotherChildWatermark(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .size(width = 65.dp, height = 65.dp)
+                        .size(width = 38.dp, height = 38.dp)
                 )
 
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(14.dp),
+                        .padding(10.dp),
                     verticalArrangement = Arrangement.SpaceBetween
                 ) {
                     // Top Row: Pregnancy icon + Forward Arrow button
@@ -185,24 +171,24 @@ fun HomeQuickAccessCards(
                         Surface(
                             color = Color(0xFF004D2C),
                             shape = CircleShape,
-                            modifier = Modifier.size(38.dp)
+                            modifier = Modifier.size(30.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
-                                Text("🤰", fontSize = 19.sp)
+                                Text("🤰", fontSize = 16.sp)
                             }
                         }
 
                         Surface(
                             color = Color(0xFFFFE0D6),
                             shape = CircleShape,
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(24.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                                     contentDescription = "যান",
                                     tint = Color(0xFFD84315),
-                                    modifier = Modifier.size(15.dp)
+                                    modifier = Modifier.size(13.dp)
                                 )
                             }
                         }
@@ -212,7 +198,7 @@ fun HomeQuickAccessCards(
                     Text(
                         text = "প্রেগন্যান্সি",
                         color = Color(0xFF1F2937),
-                        fontSize = 15.sp,
+                        fontSize = 13.5.sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -222,7 +208,7 @@ fun HomeQuickAccessCards(
                     Text(
                         text = "আগে ও পরে",
                         color = Color(0xFF6B7280),
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis

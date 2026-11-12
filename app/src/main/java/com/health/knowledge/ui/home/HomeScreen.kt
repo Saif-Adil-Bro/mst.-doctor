@@ -305,12 +305,32 @@ fun HomeScreen(
 
     Scaffold(
         topBar = {
+            val isSearchTab = activeTab == "search"
             HomePremiumHeader(
                 totalCount = totalCount,
-                searchQuery = searchQuery,
-                onSearchQueryChange = viewModel::onSearchQueryChange,
-                onClearSearch = viewModel::clearSearch,
-                onFilterClick = { viewModel.onTabSelected("search") },
+                searchQuery = if (isSearchTab) herbSearchQuery else searchQuery,
+                searchPlaceholder = if (isSearchTab) "ভেষজ উপাদান বা রোগ খুঁজুন (যেমন: মধু, আদা)..." else "রোগ, উপাদান বা বিষয় লিখুন...",
+                onSearchQueryChange = { q ->
+                    if (isSearchTab) {
+                        viewModel.onHerbSearchQueryChange(q)
+                    } else {
+                        viewModel.onSearchQueryChange(q)
+                    }
+                },
+                onClearSearch = {
+                    if (isSearchTab) {
+                        viewModel.onHerbSearchQueryChange("")
+                    } else {
+                        viewModel.clearSearch()
+                    }
+                },
+                onFilterClick = {
+                    if (isSearchTab) {
+                        viewModel.clearAdvancedFilters()
+                    } else {
+                        viewModel.onTabSelected("search")
+                    }
+                },
                 onNotificationClick = { showThemeDialog = true },
                 isAdminMode = isAdminMode,
                 onAdminManageClick = onAdminClick,
@@ -335,7 +355,7 @@ fun HomeScreen(
                         }
                     }
                 },
-                showSearchBar = (activeTab == "home")
+                showSearchBar = (activeTab == "home" || activeTab == "search")
             )
         },
         bottomBar = {

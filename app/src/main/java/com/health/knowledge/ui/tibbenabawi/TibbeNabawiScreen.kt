@@ -419,23 +419,111 @@ fun TibbeNabawiScreen(
                     }
                 }
             } else {
+                val isHerbMode = indexMode == TibbeIndexMode.HERBS || selectedHerb != null
+
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    items(
-                        items = posts,
-                        key = { it.id },
-                        contentType = { "tibbe_compact_card" }
-                    ) { post ->
-                        TibbeNabawiCompactCard(
-                            post = post,
-                            emeraldPrimary = emeraldPrimary,
-                            onClick = { onPostClick(post.id) },
-                            onToggleBookmark = { viewModel.toggleBookmark(post) }
-                        )
+                    if (isHerbMode && selectedHerb == null) {
+                        // Group by canonical herb (e.g. মধু, দুধ, মাংস, খেজুর, etc.)
+                        val groupedPosts = posts.groupBy { extractCanonicalHerb(it) }
+                        groupedPosts.forEach { (herbGroup, groupPosts) ->
+                            item(key = "group_header_$herbGroup") {
+                                Surface(
+                                    color = emeraldPrimary.copy(alpha = 0.08f),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 8.dp, bottom = 2.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = "🌿 $herbGroup",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.5.sp,
+                                            color = emeraldPrimary
+                                        )
+                                        Text(
+                                            text = "${groupPosts.size}টি নির্দেশনা",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = emeraldPrimary.copy(alpha = 0.85f)
+                                        )
+                                    }
+                                }
+                            }
+                            items(
+                                items = groupPosts,
+                                key = { it.id },
+                                contentType = { "tibbe_compact_card" }
+                            ) { post ->
+                                TibbeNabawiCompactCard(
+                                    post = post,
+                                    emeraldPrimary = emeraldPrimary,
+                                    displayHerbAsHeading = true,
+                                    onClick = { onPostClick(post.id) },
+                                    onToggleBookmark = { viewModel.toggleBookmark(post) }
+                                )
+                            }
+                        }
+                    } else {
+                        if (selectedHerb != null) {
+                            item(key = "selected_herb_banner") {
+                                Surface(
+                                    color = emeraldPrimary.copy(alpha = 0.12f),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Text("🌿", fontSize = 16.sp)
+                                            Text(
+                                                text = selectedHerb ?: "",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 14.sp,
+                                                color = emeraldPrimary
+                                            )
+                                        }
+                                        Text(
+                                            text = "${posts.size}টি হাদিস ও সুন্নাহ নির্দেশনা",
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = emeraldPrimary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        items(
+                            items = posts,
+                            key = { it.id },
+                            contentType = { "tibbe_compact_card" }
+                        ) { post ->
+                            TibbeNabawiCompactCard(
+                                post = post,
+                                emeraldPrimary = emeraldPrimary,
+                                displayHerbAsHeading = isHerbMode,
+                                onClick = { onPostClick(post.id) },
+                                onToggleBookmark = { viewModel.toggleBookmark(post) }
+                            )
+                        }
                     }
                 }
             }
@@ -451,10 +539,44 @@ fun TibbeNabawiScreen(
 private fun TibbeNabawiCompactCard(
     post: TibbeNabawiEntity,
     emeraldPrimary: Color,
+    displayHerbAsHeading: Boolean = false,
     onClick: () -> Unit,
     onToggleBookmark: () -> Unit
 ) {
-    val categoryIcon = remember(post.category) { getCategoryIcon(post.category) }
+    val canonicalHerb = remember(post) { extractCanonicalHerb(post) }
+    val cardIcon = remember(post.category, canonicalHerb, displayHerbAsHeading) {
+        if (displayHerbAsHeading) {
+            when (canonicalHerb) {
+                "মধু" -> "🍯"
+                "দুধ" -> "🥛"
+                "মাংস" -> "🥩"
+                "খেজুর" -> "🌴"
+                "কালোজিরা" -> "🌿"
+                "সুরমা (কোহল)" -> "👁️"
+                "জলপাই ও তেল" -> "🫒"
+                "যব ও বার্লি" -> "🌾"
+                "লাউ" -> "🥬"
+                "আঙ্গুর ও কিসমিস" -> "🍇"
+                "ডালিম" -> "🍎"
+                "ডুমুর" -> "🫐"
+                "আদা" -> "🫚"
+                "মেহেদি" -> "🌿"
+                "সোনামুখী" -> "🌱"
+                "সিরকা (ভিনেগার)" -> "🍶"
+                "মাছ" -> "🐟"
+                "ডিম" -> "🥚"
+                "লেবু" -> "🍋"
+                "শসা" -> "🥒"
+                "রসুন" -> "🧄"
+                "পেঁয়াজ" -> "🧅"
+                "মেথি" -> "🌱"
+                "সুগন্ধি ও মিস্ক" -> "🧴"
+                else -> getCategoryIcon(post.category)
+            }
+        } else {
+            getCategoryIcon(post.category)
+        }
+    }
     val diseasesText = remember(post.diseases) {
         if (post.diseases.isBlank()) ""
         else post.diseases.split(",").take(2).joinToString(", ")
@@ -477,7 +599,7 @@ private fun TibbeNabawiCompactCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // ── 1. Leading Category Icon Avatar ───────────────────
+            // ── 1. Leading Category/Herb Icon Avatar ──────────────
             Surface(
                 modifier = Modifier.size(42.dp),
                 shape = RoundedCornerShape(10.dp),
@@ -485,7 +607,7 @@ private fun TibbeNabawiCompactCard(
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Text(
-                        text = categoryIcon,
+                        text = cardIcon,
                         fontSize = 20.sp
                     )
                 }
@@ -496,14 +618,15 @@ private fun TibbeNabawiCompactCard(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                // Top Tag Line (Category + Arabic Name)
+                // Top Tag Line (Herb name or Category + Arabic Name)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
+                    val headingText = if (displayHerbAsHeading) "🌿 $canonicalHerb" else post.category
                     Text(
-                        text = post.category,
-                        fontSize = 10.5.sp,
+                        text = headingText,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = emeraldPrimary
                     )
@@ -525,7 +648,7 @@ private fun TibbeNabawiCompactCard(
                     }
                 }
 
-                // Title (Single or max 2 line, compact)
+                // Title (Single line, compact)
                 Text(
                     text = post.title,
                     fontSize = 13.5.sp,
@@ -535,14 +658,15 @@ private fun TibbeNabawiCompactCard(
                     overflow = TextOverflow.Ellipsis
                 )
 
-                // Subtitle Line: Food & Disease
+                // Subtitle Line: Food / Category & Disease
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    val food = post.foodName.ifBlank { "পথ্য" }
+                    val subLabel = if (displayHerbAsHeading) post.category else post.foodName.ifBlank { "পথ্য" }
+                    val subPrefix = if (displayHerbAsHeading) "📁" else "🌱"
                     Text(
-                        text = "🌱 $food",
+                        text = "$subPrefix $subLabel",
                         fontSize = 11.5.sp,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
