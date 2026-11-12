@@ -499,7 +499,7 @@ fun HomeScreen(
                             LazyColumn(
                                 state = homeListState,
                                 modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(bottom = 24.dp)
+                                contentPadding = PaddingValues(bottom = 88.dp)
                             ) {
                                 if (searchQuery.isBlank()) {
                                     if (selectedCategory == null) {
@@ -554,7 +554,7 @@ fun HomeScreen(
                                             border = onePxBorder(Color(0xFFFFB300).copy(alpha = 0.5f)),
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .padding(horizontal = 20.dp, vertical = 6.dp)
+                                                .padding(horizontal = 16.dp, vertical = 6.dp)
                                                 .clickable {
                                                     viewModel.onTabSelected("bookmarks")
                                                     viewModel.onSavedSubTabChange("my_posts")
@@ -1016,7 +1016,7 @@ fun ArticleCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 6.dp)
+            .padding(horizontal = 16.dp, vertical = 6.dp)
             .clickable(onClick = onClick),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         border = onePxBorder(

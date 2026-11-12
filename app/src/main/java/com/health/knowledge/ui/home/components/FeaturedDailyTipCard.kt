@@ -70,18 +70,14 @@ fun PremiumDailyTipCard(
     val borderColor = Color(0xFFC8E6C9)
 
     Card(
+        onClick = onReadClick,
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 4.dp)
-            .shadow(
-                elevation = 2.dp,
-                shape = RoundedCornerShape(20.dp),
-                spotColor = Color(0x14004D2C)
-            )
-            .clickable(onClick = onReadClick),
+            .padding(horizontal = 16.dp, vertical = 4.dp),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = cardBg),
-        border = onePxBorder(borderColor)
+        border = onePxBorder(borderColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
             modifier = Modifier
@@ -219,19 +215,20 @@ fun PremiumDailyTipCard(
                         )
                     }
 
-                    // Refresh Button in bottom corner to rotate tip
-                    IconButton(
-                        onClick = onNextTipClick,
+                    // Refresh Button in bottom corner to rotate tip (enlarged 28dp touch area)
+                    Box(
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
-                            .size(22.dp)
-                            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(topStart = 8.dp))
+                            .size(28.dp)
+                            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(topStart = 10.dp))
+                            .clickable(onClick = onNextTipClick),
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Refresh,
                             contentDescription = "পরবর্তী টিপস",
                             tint = Color.White,
-                            modifier = Modifier.size(13.dp)
+                            modifier = Modifier.size(15.dp)
                         )
                     }
                 }

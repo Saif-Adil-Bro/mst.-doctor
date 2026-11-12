@@ -89,7 +89,7 @@ fun HomePremiumHeader(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
+                    .padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -191,7 +191,7 @@ fun HomePremiumHeader(
                     // Settings Button
                     Box(
                         modifier = Modifier
-                            .size(42.dp)
+                            .size(44.dp)
                             .background(Color.White.copy(alpha = 0.22f), CircleShape)
                             .clickable(onClick = onNotificationClick),
                         contentAlignment = Alignment.Center
@@ -218,7 +218,7 @@ fun HomePremiumHeader(
                     onFilterClick = onFilterClick,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 20.dp)
+                        .padding(horizontal = 16.dp)
                 )
             }
         }

@@ -2,6 +2,7 @@ package com.health.knowledge.ui.home.components
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -44,23 +45,23 @@ fun ModernHomeBottomNavigation(
     onTabSelected: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isDark = isSystemInDarkTheme()
     val emeraldPrimary = Color(0xFF006B3C)
-    val inactiveColor = Color(0xFF6B7280)
-    val activePillColor = Color(0xFFE0F2E9)
+    val inactiveColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val activePillColor = if (isDark) emeraldPrimary.copy(alpha = 0.3f) else Color(0xFFE0F2E9)
 
     Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .shadow(elevation = 8.dp, spotColor = Color(0x1F000000)),
-        color = Color.White,
-        border = onePxBorder(Color(0xFFEEEEEE))
+        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 3.dp,
+        border = onePxBorder(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .height(68.dp)
-                .padding(horizontal = 16.dp, vertical = 6.dp),
+                .defaultMinSize(minHeight = 64.dp)
+                .padding(horizontal = 16.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically
         ) {

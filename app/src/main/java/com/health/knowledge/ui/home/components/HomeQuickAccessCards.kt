@@ -41,19 +41,19 @@ fun HomeQuickAccessCards(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(14.dp)
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         // Left Card: হ্যাবিট প্ল্যানার
         Card(
+            onClick = onOpenHabitPlanner,
             modifier = Modifier
                 .weight(1f)
-                .height(98.dp)
-                .shadow(elevation = 2.dp, shape = RoundedCornerShape(18.dp), spotColor = Color(0x14004D2C))
-                .clickable(onClick = onOpenHabitPlanner),
+                .height(98.dp),
             shape = RoundedCornerShape(18.dp),
             colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F8F3)),
-            border = onePxBorder(Color(0xFFC8E6C9))
+            border = onePxBorder(Color(0xFFC8E6C9)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
         ) {
             Column(
                 modifier = Modifier
@@ -110,10 +110,11 @@ fun HomeQuickAccessCards(
                         overflow = TextOverflow.Ellipsis
                     )
 
-                    val alarmSubtitle = when {
+                    val rawAlarmSubtitle = when {
                         !nextPostCountdownText.isNullOrBlank() -> nextPostCountdownText
-                        else -> "পরের অ্যালার্ম: সকাল ০৮:০০"
+                        else -> "সকাল ০৮:০০"
                     }
+                    val alarmSubtitle = rawAlarmSubtitle.removePrefix("পরের অ্যালার্ম: ")
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -132,7 +133,8 @@ fun HomeQuickAccessCards(
                             fontSize = 10.sp,
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
                         )
                     }
                 }
@@ -141,14 +143,14 @@ fun HomeQuickAccessCards(
 
         // Right Card: প্রেগন্যান্সি
         Card(
+            onClick = onOpenPregnancyPlanner,
             modifier = Modifier
                 .weight(1f)
-                .height(98.dp)
-                .shadow(elevation = 2.dp, shape = RoundedCornerShape(18.dp), spotColor = Color(0x14FF7043))
-                .clickable(onClick = onOpenPregnancyPlanner),
+                .height(98.dp),
             shape = RoundedCornerShape(18.dp),
             colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF2ED)),
-            border = onePxBorder(Color(0xFFFFD9CC))
+            border = onePxBorder(Color(0xFFFFD9CC)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 // Mother-Child silhouette watermark in bottom right

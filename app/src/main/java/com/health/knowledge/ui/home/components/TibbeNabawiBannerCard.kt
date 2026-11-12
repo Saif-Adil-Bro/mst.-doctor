@@ -35,19 +35,19 @@ fun TibbeNabawiBannerCard(
     val borderColor = Color(0xFFC8E6C9)
 
     Card(
+        onClick = onOpenTibbeNabawi,
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 6.dp)
-            .shadow(elevation = 2.dp, shape = RoundedCornerShape(22.dp), spotColor = Color(0x14004D2C))
-            .clickable(onClick = onOpenTibbeNabawi),
-        shape = RoundedCornerShape(22.dp),
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = cardBg),
-        border = onePxBorder(borderColor)
+        border = onePxBorder(borderColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
+                .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -60,26 +60,30 @@ fun TibbeNabawiBannerCard(
                 Surface(
                     color = Color(0xFFE0F2E9),
                     shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier.size(46.dp)
+                    modifier = Modifier.size(44.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Text(text = "🌿", fontSize = 22.sp)
                     }
                 }
 
-                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
                     Text(
                         text = "তিব্বে নববী",
                         fontWeight = FontWeight.ExtraBold,
-                        fontSize = 16.sp,
+                        fontSize = 15.5.sp,
                         color = Color(0xFF1F2937)
                     )
 
                     Text(
                         text = "হাদীস ও সুন্নাহভিত্তিক স্বাস্থ্য, ভেষজ ও রোগের চিকিৎসা",
-                        fontSize = 12.sp,
+                        fontSize = 11.5.sp,
+                        lineHeight = 15.sp,
                         color = Color(0xFF4B5563),
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
