@@ -30,7 +30,7 @@ fun HealthArticlesSectionHeader(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, top = 6.dp, bottom = 4.dp),
+            .padding(start = 20.dp, top = 6.dp, end = 20.dp, bottom = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
