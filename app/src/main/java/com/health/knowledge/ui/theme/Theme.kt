@@ -143,6 +143,14 @@ fun HealthKnowledgeTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
-        content = content
-    )
+        typography = AppTypography
+    ) {
+        androidx.compose.runtime.CompositionLocalProvider(
+            androidx.compose.material3.LocalTextStyle provides androidx.compose.material3.LocalTextStyle.current.copy(
+                fontFamily = SolaimanLipi
+            )
+        ) {
+            content()
+        }
+    }
 }

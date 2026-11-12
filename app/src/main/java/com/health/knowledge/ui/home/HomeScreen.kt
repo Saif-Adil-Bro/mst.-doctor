@@ -728,6 +728,10 @@ fun AdminPasswordDialog(
 
     AlertDialog(
         onDismissRequest = { if (!isLoading) onDismiss() },
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp),
         icon = {
             Icon(
                 if (isResetMode) Icons.Default.LockReset else Icons.Default.AdminPanelSettings,
@@ -1002,9 +1006,9 @@ fun ArticleCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 6.dp)
+            .padding(horizontal = 14.dp, vertical = 6.dp)
             .clickable(onClick = onClick),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.5.dp),
         border = onePxBorder(
             when {
                 article.isPinned -> MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
@@ -1012,7 +1016,7 @@ fun ArticleCard(
                 else -> Color(0xFFE5E7EB)
             }
         ),
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
             containerColor = when {
                 article.isMine && !article.isReviewed -> Color(0xFFFFFBF0)
@@ -1162,38 +1166,48 @@ fun ArticleCard(
                 }
             }
 
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(8.dp))
 
-            // Title
+            // Title with comfortable typography & reading line-height
             Text(
                 text = article.title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                lineHeight = 25.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
 
             Spacer(Modifier.height(6.dp))
 
-            // Content preview
+            // Content preview with generous readability line-height
             Text(
                 text = article.content,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 14.sp,
+                lineHeight = 22.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f),
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis
             )
 
             if (article.source.isNotBlank()) {
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "📚 সূত্র: ${article.source}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Spacer(Modifier.height(8.dp))
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                    border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+                ) {
+                    Text(
+                        text = "📚 সূত্র: ${article.source}",
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
 
             Spacer(Modifier.height(10.dp))
@@ -1457,8 +1471,9 @@ fun UserSubmitPostDialog(
             shape = RoundedCornerShape(20.dp),
             border = onePxBorder(),
             modifier = Modifier
-                .fillMaxWidth(0.94f)
-                .fillMaxHeight(0.9f)
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp)
+                .fillMaxHeight(0.92f)
         ) {
             Column(
                 modifier = Modifier

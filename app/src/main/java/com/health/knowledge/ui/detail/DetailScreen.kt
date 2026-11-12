@@ -47,6 +47,7 @@ import com.health.knowledge.ui.theme.onePxBorder
 import com.health.knowledge.ui.theme.solidOverSurface
 import com.health.knowledge.util.ArticleTextFormatter
 import com.health.knowledge.util.ShareCardGenerator
+import com.health.knowledge.util.SmartMultilingualBody
 import com.health.knowledge.util.UserPreferencesManager
 import kotlinx.coroutines.launch
 
@@ -109,6 +110,10 @@ fun DetailScreen(
     if (showDeleteConfirm && article != null) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp),
             title = { Text("পোস্ট ডিলিট নিশ্চিত করুন") },
             text = { Text("আপনি কি নিশ্চিত যে এই পোস্টটি গ্লোবালি ডিলিট করতে চান?") },
             confirmButton = {
@@ -137,6 +142,10 @@ fun DetailScreen(
         val art = article!!
         AlertDialog(
             onDismissRequest = { showShareDialog = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp),
             icon = { Icon(Icons.Default.Share, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
             title = { Text("📤 পোস্ট শেয়ার করুন", fontWeight = FontWeight.Bold) },
             text = {
@@ -579,14 +588,10 @@ fun DetailScreen(
                                 color = MaterialTheme.colorScheme.outlineVariant
                             )
                             SelectionContainer {
-                                val formattedContent = remember(art.content) {
-                                    ArticleTextFormatter.formatBengaliParagraphs(art.content)
-                                }
-                                Text(
-                                    text = formattedContent,
-                                    fontSize = fontSizeSp.sp,
-                                    lineHeight = (fontSizeSp * 1.7f).sp,
-                                    color = MaterialTheme.colorScheme.onSurface
+                                SmartMultilingualBody(
+                                    content = art.content,
+                                    fontSizeSp = fontSizeSp,
+                                    textColor = MaterialTheme.colorScheme.onSurface
                                 )
                             }
                         }
@@ -946,7 +951,8 @@ fun VerificationConsentDialog(
             border = onePxBorder(),
             color = MaterialTheme.colorScheme.surface,
             modifier = Modifier
-                .fillMaxWidth(0.93f)
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp)
                 .wrapContentHeight()
         ) {
             Column(

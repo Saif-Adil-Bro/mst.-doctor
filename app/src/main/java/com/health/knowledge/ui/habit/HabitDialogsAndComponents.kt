@@ -659,8 +659,8 @@ fun HabitEditorDialog(
     ) {
         Surface(
             modifier = Modifier
-                .fillMaxWidth(0.95f)
-                .padding(vertical = 12.dp),
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 12.dp),
             shape = RoundedCornerShape(22.dp),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 0.dp,

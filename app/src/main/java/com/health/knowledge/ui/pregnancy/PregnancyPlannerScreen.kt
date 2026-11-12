@@ -45,6 +45,7 @@ import com.health.knowledge.ui.home.AdminPasswordDialog
 import com.health.knowledge.ui.home.ArticleCard
 import com.health.knowledge.ui.theme.onePxBorder
 import com.health.knowledge.ui.theme.solidOverSurface
+import com.health.knowledge.util.ArabicStandaloneBlock
 import com.health.knowledge.util.UserPreferencesManager
 import java.util.Calendar
 
@@ -2144,6 +2145,10 @@ private fun PeriodStartEndUpdateDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp),
         title = {
             Text(
                 text = "🩸 নতুন মাসিক শুরু ও শেষ আপডেট",
@@ -2307,6 +2312,10 @@ private fun DeliveryConfirmationDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp),
         title = {
             Text(
                 text = "👶 মা ও নবজাতক তথ্য হালনাগাদ",
@@ -2878,8 +2887,9 @@ fun PregnancyAdminPostDialog(
             shape = RoundedCornerShape(20.dp),
             border = onePxBorder(),
             modifier = Modifier
-                .fillMaxWidth(0.94f)
-                .fillMaxHeight(0.9f)
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp)
+                .fillMaxHeight(0.92f)
         ) {
             Column(
                 modifier = Modifier
@@ -3788,24 +3798,12 @@ internal fun IslamicPregnancyAmalCard(
                 }
             }
 
-            Surface(
-                color = MaterialTheme.colorScheme.surface,
-                shape = RoundedCornerShape(12.dp),
-                border = onePxBorder(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = amal.arabicText,
-                    fontSize = 19.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    textAlign = TextAlign.Right,
-                    lineHeight = 30.sp,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp)
-                )
-            }
+            ArabicStandaloneBlock(
+                arabicText = amal.arabicText,
+                fontSize = 20.sp,
+                textColor = MaterialTheme.colorScheme.primary,
+                backgroundColor = MaterialTheme.colorScheme.surface
+            )
 
             Text(
                 text = "উচ্চারণ: ${amal.pronunciationBn}",

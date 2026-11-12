@@ -34,6 +34,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.health.knowledge.data.local.entity.TibbeNabawiEntity
 import com.health.knowledge.ui.theme.onePxBorder
 import com.health.knowledge.ui.theme.solidOverSurface
+import com.health.knowledge.util.ArabicStandaloneBlock
+import com.health.knowledge.util.SmartMultilingualBody
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -152,8 +154,8 @@ fun TibbeNabawiDetailScreen(
                     .fillMaxSize()
                     .padding(innerPadding)
                     .verticalScroll(scrollState)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(horizontal = 12.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 // ── 1. Hero Header Card ──────────────────────────────
                 Card(
@@ -215,36 +217,14 @@ fun TibbeNabawiDetailScreen(
                             lineHeight = 26.sp
                         )
 
-                        // Arabic Name Hero Banner if available
+                        // Arabic Name Hero Banner - Standalone Component with Middle-Center Alignment & RTL
                         if (!currentPost.arabicName.isNullOrBlank()) {
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                color = MaterialTheme.colorScheme.surface,
-                                shape = RoundedCornerShape(12.dp),
-                                border = onePxBorder()
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "আরবি পরিভাষা:",
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Text(
-                                        text = currentPost.arabicName,
-                                        fontSize = 20.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        fontFamily = FontFamily.Serif,
-                                        color = emeraldPrimary
-                                    )
-                                }
-                            }
+                            ArabicStandaloneBlock(
+                                arabicText = currentPost.arabicName,
+                                fontSize = 22.sp,
+                                textColor = emeraldPrimary,
+                                backgroundColor = MaterialTheme.colorScheme.surface
+                            )
                         }
                     }
                 }
@@ -373,11 +353,10 @@ fun TibbeNabawiDetailScreen(
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                         SelectionContainer {
-                            Text(
-                                text = currentPost.details,
-                                fontSize = 15.sp,
-                                lineHeight = 25.sp,
-                                color = MaterialTheme.colorScheme.onSurface
+                            SmartMultilingualBody(
+                                content = currentPost.details,
+                                fontSizeSp = 15f,
+                                textColor = MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }
@@ -411,11 +390,10 @@ fun TibbeNabawiDetailScreen(
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
                             SelectionContainer {
-                                Text(
-                                    text = currentPost.usageInstructions,
-                                    fontSize = 14.sp,
-                                    lineHeight = 23.sp,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                SmartMultilingualBody(
+                                    content = currentPost.usageInstructions,
+                                    fontSizeSp = 14f,
+                                    textColor = MaterialTheme.colorScheme.onSecondaryContainer
                                 )
                             }
                         }

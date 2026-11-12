@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -81,6 +82,10 @@ fun AdminScreen(
     deletingArticle?.let { article ->
         AlertDialog(
             onDismissRequest = { deletingArticle = null },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp),
             title = { Text("ডিলিট নিশ্চিত করুন") },
             text = { Text("আপনি কি নিশ্চিত যে \"${article.title.take(60)}...\" পোস্টটি ডিলিট করতে চান?") },
             confirmButton = {
@@ -931,6 +936,10 @@ private fun EditArticleDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp),
         title = { Text("✏️ পোস্ট রিভিউ ও এডিট") },
         text = {
             Column(
