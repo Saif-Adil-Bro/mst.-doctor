@@ -1090,14 +1090,14 @@ private fun FertileWindowHeroCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
-                    if (fertileStatus.periodDurationNoticeBn.isNotEmpty()) {
+                    if (!fertileStatus.periodDurationNoticeBn.isNullOrEmpty()) {
                         Surface(
                             color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.4f),
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                text = fertileStatus.periodDurationNoticeBn,
+                                text = fertileStatus.periodDurationNoticeBn ?: "",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onTertiaryContainer,
                                 modifier = Modifier.padding(8.dp),

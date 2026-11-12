@@ -1102,7 +1102,7 @@ object PregnancyPlannerEngine {
     val postpartumMotherCareCatalog: List<PostpartumMotherCareTip> = listOf(
         PostpartumMotherCareTip(
             id = "mother_recovery_diet",
-            category = "ALL",
+            deliveryTypeTarget = "ALL",
             emoji = "🍲",
             titleBn = "প্রসব-পরবর্তী পুষ্টিকর রিকভারি খাদ্য",
             detailBn = "গরম ভাতের সাথে কালোজিরা ভর্তা, লাউ, কাঁচকলা, দেশি মুরগির পাতলা ঝোল ও পেঁপে খান। প্রতিদিন অন্তত ১ গ্লাস খাঁটি দুধ, ১টি ডিম ও প্রচুর পুষ্টিকর তরল স্যুপ গ্রহণ করুন।",
@@ -1110,7 +1110,7 @@ object PregnancyPlannerEngine {
         ),
         PostpartumMotherCareTip(
             id = "mother_galactagogues",
-            category = "ALL",
+            deliveryTypeTarget = "ALL",
             emoji = "🥛",
             titleBn = "বুকের দুধ বাড়ানোর প্রাকৃতিক গ্যালাক্টাগগ খাবার",
             detailBn = "মেথি ভেজানো কুসুম গরম পানি, মৌরি বা জিরা চা, লাউয়ের তরকারি, রসুন ও মিষ্টি কুমড়া মায়ের বুকের দুধের প্রবাহ (Milk Supply) দ্বিগুণ করতে প্রমাণিত ভূমিকা রাখে।",
@@ -1118,7 +1118,7 @@ object PregnancyPlannerEngine {
         ),
         PostpartumMotherCareTip(
             id = "mother_normal_healing",
-            category = "NORMAL",
+            deliveryTypeTarget = "NORMAL",
             emoji = "🚶‍♀️",
             titleBn = "নরমাল ডেলিভারির রিকভারি ও পেরিনিয়াল কেয়ার",
             detailBn = "প্রতিবার ওয়াশরুম ব্যবহারের পর কুসুম গরম পানি দিয়ে পরিষ্কার করুন। হালকা কুসুম গরম পানিতে লবণ দিয়ে সিটজ বাথ (Sitz bath) নিলে ব্যথা কমে ও জখম দ্রুত শুকায়।",
@@ -1126,7 +1126,7 @@ object PregnancyPlannerEngine {
         ),
         PostpartumMotherCareTip(
             id = "mother_csection_care",
-            category = "C_SECTION",
+            deliveryTypeTarget = "C_SECTION",
             emoji = "🩹",
             titleBn = "সিজারিয়ান কাটার যত্ন ও সতর্কতা",
             detailBn = "সেলাইয়ের জায়গা সম্পূর্ণ শুকনো ও পরিষ্কার রাখুন। ডাক্তার অনুমতি না দেওয়া পর্যন্ত পেটে পানি লাগাবেন না। কাশি বা হাঁচির সময় পেটে বালিশ চেপে ধরুন যাতে টান না লাগে।",
@@ -1134,7 +1134,7 @@ object PregnancyPlannerEngine {
         ),
         PostpartumMotherCareTip(
             id = "mother_mental_blues",
-            category = "ALL",
+            deliveryTypeTarget = "ALL",
             emoji = "🌸",
             titleBn = "মানসিক স্বাস্থ্য ও পোস্টপার্টাম ব্লুজ (Mental Wellbeing)",
             detailBn = "হরমোনের পরিবর্তনের কারণে প্রসবের পর মন খারাপ, কান্না পাওয়া বা ক্লান্তি লাগা স্বাভাবিক। নিজের অনুভূতি স্বামীর সাথে ভাগ করুন এবং একাকী থাকবেন না।",

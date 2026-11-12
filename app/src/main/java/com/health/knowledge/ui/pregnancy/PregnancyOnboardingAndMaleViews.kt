@@ -847,7 +847,7 @@ fun PregnancyProfileOnboardingView(
                                                 verticalArrangement = Arrangement.spacedBy(4.dp)
                                             ) {
                                                 Text(
-                                                    text = "✨ আজ ${HabitScheduleCalculator.toBengaliDigits(liveTimeline.elapsedDays.toString())} দিন হলো (${HabitScheduleCalculator.toBengaliDigits(liveTimeline.currentWeek.toString())} সপ্তাহ • ${liveTimeline.trimesterBn})",
+                                                    text = "✨ আজ ${HabitScheduleCalculator.toBengaliDigits(liveTimeline.elapsedDays.toString())} দিন হলো (${HabitScheduleCalculator.toBengaliDigits(liveTimeline.currentWeek.toString())} সপ্তাহ • ${liveTimeline.trimesterLabelBn})",
                                                     style = MaterialTheme.typography.titleSmall,
                                                     fontWeight = FontWeight.Bold,
                                                     color = MaterialTheme.colorScheme.primary
@@ -986,14 +986,14 @@ fun PregnancyProfileOnboardingView(
                                             }
                                         }
 
-                                        if (liveFertile.periodDurationNoticeBn.isNotEmpty()) {
+                                        if (!liveFertile.periodDurationNoticeBn.isNullOrEmpty()) {
                                             Surface(
                                                 color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.4f),
                                                 shape = RoundedCornerShape(10.dp),
                                                 modifier = Modifier.fillMaxWidth()
                                             ) {
                                                 Text(
-                                                    text = liveFertile.periodDurationNoticeBn,
+                                                    text = liveFertile.periodDurationNoticeBn ?: "",
                                                     style = MaterialTheme.typography.bodySmall,
                                                     color = MaterialTheme.colorScheme.onTertiaryContainer,
                                                     modifier = Modifier.padding(10.dp),
