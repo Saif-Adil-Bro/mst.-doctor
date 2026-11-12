@@ -168,7 +168,7 @@ fun PregnancyPlannerScreen(
         quotes.first()
     }
 
-    val activeHabitIds = remember(allHabits) {
+    val activeHabitIds: Set<String> = remember(allHabits) {
         allHabits.filter { it.isActive == 1 }.map { it.id }.toSet()
     }
 

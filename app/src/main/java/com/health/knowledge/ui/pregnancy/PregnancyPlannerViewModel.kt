@@ -91,9 +91,6 @@ class PregnancyPlannerViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val allHabits: StateFlow<List<HabitEntity>> = habitDao.getAllHabitsFlow()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
     private val _quoteIndex = MutableStateFlow(0)
     val quoteIndex: StateFlow<Int> = _quoteIndex.asStateFlow()
 
