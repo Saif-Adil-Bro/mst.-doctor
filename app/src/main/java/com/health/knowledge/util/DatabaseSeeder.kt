@@ -51,13 +51,13 @@ class DatabaseSeeder @Inject constructor(
     private suspend fun seedTibbeNabawiIfEmpty() {
         try {
             val prefs = context.getSharedPreferences("sync_prefs", Context.MODE_PRIVATE)
-            val hasUpgradedTibbe = prefs.getBoolean("has_upgraded_tibbe_v3", false)
+            val hasUpgradedTibbe = prefs.getBoolean("has_upgraded_tibbe_v4", false)
             val tibbeCount = tibbeNabawiDao.getCount()
             if (tibbeCount == 0 || !hasUpgradedTibbe) {
                 val tibbePosts = loadBundledTibbeNabawiPosts()
                 if (tibbePosts.isNotEmpty()) {
                     tibbeNabawiDao.insertAll(tibbePosts)
-                    prefs.edit().putBoolean("has_upgraded_tibbe_v3", true).apply()
+                    prefs.edit().putBoolean("has_upgraded_tibbe_v4", true).apply()
                 }
             }
         } catch (_: Exception) {
@@ -201,44 +201,46 @@ class DatabaseSeeder @Inject constructor(
             val taste: String? = null
         )
 
-        private fun extractQuotesString(element: JsonElement?): String? {
+        private fun extractQuotesRaw(element: JsonElement?): String? {
             if (element == null || element.isJsonNull) return null
             if (element.isJsonPrimitive) {
-                val str = element.asString.trim()
-                return if (str.isNotBlank()) str else null
+                val s = element.asString.trim()
+                return if (s.isNotBlank()) s else null
             }
+            return element.toString()
+        }
+
+        private fun extractQuotesSearchText(element: JsonElement?): String {
+            if (element == null || element.isJsonNull) return ""
+            if (element.isJsonPrimitive) return element.asString
+            val sb = StringBuilder()
             if (element.isJsonArray) {
-                val list = mutableListOf<String>()
                 for (item in element.asJsonArray) {
                     if (item.isJsonPrimitive) {
-                        val s = item.asString.trim()
-                        if (s.isNotBlank()) list.add(s)
+                        sb.append(" ").append(item.asString)
                     } else if (item.isJsonObject) {
-                        val obj = item.asJsonObject
-                        val ar = obj.get("arabic") ?: obj.get("text") ?: obj.get("quote") ?: obj.get("matn")
-                        if (ar != null && ar.isJsonPrimitive) {
-                            val s = ar.asString.trim()
-                            if (s.isNotBlank()) list.add(s)
+                        for ((_, v) in item.asJsonObject.entrySet()) {
+                            if (v != null && v.isJsonPrimitive) {
+                                sb.append(" ").append(v.asString)
+                            }
                         }
                     }
                 }
-                return if (list.isNotEmpty()) list.joinToString("\n\n") else null
-            }
-            if (element.isJsonObject) {
-                val obj = element.asJsonObject
-                val ar = obj.get("arabic") ?: obj.get("text") ?: obj.get("quote") ?: obj.get("matn")
-                if (ar != null && ar.isJsonPrimitive) {
-                    val s = ar.asString.trim()
-                    return if (s.isNotBlank()) s else null
+            } else if (element.isJsonObject) {
+                for ((_, v) in element.asJsonObject.entrySet()) {
+                    if (v != null && v.isJsonPrimitive) {
+                        sb.append(" ").append(v.asString)
+                    }
                 }
             }
-            return null
+            return sb.toString()
         }
 
         fun toEntity(): TibbeNabawiEntity {
-            val quotesStr = extractQuotesString(quotes)
+            val quotesRaw = extractQuotesRaw(quotes)
+            val quotesSearchText = extractQuotesSearchText(quotes)
             val formattedDetails = ArticleTextFormatter.formatBengaliParagraphs(details)
-            val extraArabic = (quotesStr ?: arabic_text ?: hadith_arabic ?: arabic_hadith)?.trim()?.takeIf { it.isNotBlank() }
+            val extraArabic = (arabic_text ?: hadith_arabic ?: arabic_hadith)?.trim()?.takeIf { it.isNotBlank() }
             val finalDetails = if (!extraArabic.isNullOrBlank() && !formattedDetails.contains(extraArabic)) {
                 "$extraArabic\n\n$formattedDetails"
             } else {
@@ -254,7 +256,7 @@ class DatabaseSeeder @Inject constructor(
             val tasteText = properties?.taste?.trim()?.takeIf { it.isNotBlank() }
             val usageText = usage_instructions?.let { ArticleTextFormatter.formatBengaliParagraphs(it) }
 
-            val searchKeywords = "$title $food ${arabic.orEmpty()} ${quotesStr.orEmpty()} ${extraArabic.orEmpty()} $category $diseasesStr ${benefitsText.orEmpty()} $finalDetails"
+            val searchKeywords = "$title $food ${arabic.orEmpty()} $quotesSearchText ${extraArabic.orEmpty()} $category $diseasesStr ${benefitsText.orEmpty()} $finalDetails"
                 .lowercase()
                 .split("\\s+".toRegex())
                 .filter { it.length > 1 }
@@ -266,7 +268,7 @@ class DatabaseSeeder @Inject constructor(
                 title = title.trim(),
                 foodName = food,
                 arabicName = arabic,
-                quotes = quotesStr,
+                quotes = quotesRaw,
                 category = category.trim(),
                 diseases = diseasesStr,
                 benefits = benefitsText,

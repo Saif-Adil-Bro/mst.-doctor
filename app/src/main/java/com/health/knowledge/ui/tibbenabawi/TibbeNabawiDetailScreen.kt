@@ -26,12 +26,19 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.health.knowledge.data.local.entity.TibbeNabawiEntity
+import com.health.knowledge.data.local.entity.TibbeQuote
+import com.health.knowledge.data.local.entity.parsedQuotes
 import com.health.knowledge.ui.theme.SolaimanLipi
 import com.health.knowledge.ui.theme.onePxBorder
 import com.health.knowledge.ui.theme.solidOverSurface
@@ -72,8 +79,14 @@ fun TibbeNabawiDetailScreen(
         if (item.diseases.isNotBlank()) {
             sb.append("🩺 রোগসমূহ: ${item.diseases}\n")
         }
-        if (!item.quotes.isNullOrBlank()) {
-            sb.append("\n📜 হাদিস/উদ্ধৃতি (আরবি):\n${item.quotes}\n")
+        val quotesList = item.parsedQuotes()
+        if (quotesList.isNotEmpty()) {
+            quotesList.forEach { q ->
+                sb.append("\n📜 ${q.type.ifBlank { "হাদিস" }}:\n")
+                if (q.arabic.isNotBlank()) sb.append("${q.arabic}\n")
+                if (q.translation.isNotBlank()) sb.append("অনুবাদ: ${q.translation}\n")
+                if (q.reference.isNotBlank()) sb.append("সূত্র: ${q.reference}\n")
+            }
         }
         sb.append("\n📖 বিবরণ ও হাদিস:\n${item.details}\n")
         if (!item.usageInstructions.isNullOrBlank()) {
@@ -361,13 +374,11 @@ fun TibbeNabawiDetailScreen(
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                         // ── Dedicated Arabic Hadith / Quote Section ────────────────
-                        if (!currentPost.quotes.isNullOrBlank()) {
-                            ArabicStandaloneBlock(
-                                arabicText = currentPost.quotes,
-                                fontSize = 21.sp,
-                                textColor = emeraldPrimary,
-                                backgroundColor = emeraldPrimary.copy(alpha = 0.08f).solidOverSurface()
-                            )
+                        val quotesList = currentPost.parsedQuotes()
+                        if (quotesList.isNotEmpty()) {
+                            quotesList.forEach { q ->
+                                TibbeQuoteCard(quote = q)
+                            }
                         }
 
                         SelectionContainer {
@@ -509,6 +520,126 @@ fun TibbeNabawiDetailScreen(
                 Spacer(Modifier.height(16.dp))
             }
         }
+        }
+    }
+}
+
+@Composable
+fun TibbeQuoteCard(
+    quote: TibbeQuote,
+    modifier: Modifier = Modifier
+) {
+    val emeraldPrimary = Color(0xFF006B3C)
+    val cardBg = Color(0xFFF4F9F5)
+    val borderCol = emeraldPrimary.copy(alpha = 0.25f)
+
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = cardBg,
+        border = BorderStroke(1.dp, borderCol),
+        tonalElevation = 1.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp)
+        ) {
+            // Header: Type badge and Reference badge
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = emeraldPrimary.copy(alpha = 0.12f)
+                ) {
+                    Text(
+                        text = "📜 ${quote.type.ifBlank { "হাদিস" }}",
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontFamily = SolaimanLipi,
+                            fontWeight = FontWeight.Bold,
+                            color = emeraldPrimary
+                        ),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+
+                if (quote.reference.isNotBlank()) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                    ) {
+                        Text(
+                            text = "📖 ${quote.reference}",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = SolaimanLipi,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            }
+
+            // Arabic Matn (Middle-centered, RTL, Serif font, bold, emerald)
+            if (quote.arabic.isNotBlank()) {
+                Spacer(Modifier.height(12.dp))
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                    Text(
+                        text = quote.arabic,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center,
+                        style = TextStyle(
+                            fontFamily = FontFamily.Serif,
+                            fontSize = 21.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = emeraldPrimary,
+                            lineHeight = 36.sp,
+                            textDirection = TextDirection.Rtl
+                        )
+                    )
+                }
+            }
+
+            // Bengali Translation (Left-to-right, SolaimanLipi font)
+            if (quote.translation.isNotBlank()) {
+                Spacer(Modifier.height(10.dp))
+                HorizontalDivider(
+                    color = emeraldPrimary.copy(alpha = 0.15f),
+                    thickness = 0.8.dp,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Text(
+                            text = "অনুবাদ: ",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontFamily = SolaimanLipi,
+                                fontWeight = FontWeight.Bold,
+                                color = emeraldPrimary,
+                                fontSize = 14.5.sp
+                            )
+                        )
+                        Text(
+                            text = quote.translation,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontFamily = SolaimanLipi,
+                                fontWeight = FontWeight.Normal,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = 14.5.sp,
+                                lineHeight = 22.sp
+                            ),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
         }
     }
 }

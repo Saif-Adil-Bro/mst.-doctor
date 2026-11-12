@@ -31,6 +31,61 @@ data class TibbeNabawiEntity(
     val searchKeywords: String = ""          // Precomputed search index
 )
 
+data class TibbeQuote(
+    val type: String = "হাদিস",
+    val arabic: String = "",
+    val translation: String = "",
+    val reference: String = ""
+)
+
+fun TibbeNabawiEntity.parsedQuotes(): List<TibbeQuote> {
+    val raw = quotes?.trim()
+    if (raw.isNullOrBlank()) return emptyList()
+
+    return try {
+        if (raw.startsWith("[")) {
+            val element = com.google.gson.JsonParser.parseString(raw)
+            if (element.isJsonArray) {
+                val array = element.asJsonArray
+                val list = mutableListOf<TibbeQuote>()
+                for (item in array) {
+                    if (item.isJsonObject) {
+                        val obj = item.asJsonObject
+                        val type = obj.get("type")?.asString?.trim().takeUnless { it.isNullOrBlank() } ?: "হাদিস"
+                        val arabic = (obj.get("arabic") ?: obj.get("text") ?: obj.get("quote") ?: obj.get("matn"))?.asString?.trim().orEmpty()
+                        val translation = (obj.get("translation") ?: obj.get("bangla") ?: obj.get("meaning"))?.asString?.trim().orEmpty()
+                        val reference = (obj.get("reference") ?: obj.get("source") ?: obj.get("book"))?.asString?.trim().orEmpty()
+                        if (arabic.isNotBlank() || translation.isNotBlank()) {
+                            list.add(TibbeQuote(type = type, arabic = arabic, translation = translation, reference = reference))
+                        }
+                    } else if (item.isJsonPrimitive) {
+                        val s = item.asString.trim()
+                        if (s.isNotBlank()) {
+                            list.add(TibbeQuote(type = "হাদিস", arabic = s))
+                        }
+                    }
+                }
+                if (list.isNotEmpty()) return list
+            }
+        } else if (raw.startsWith("{")) {
+            val element = com.google.gson.JsonParser.parseString(raw)
+            if (element.isJsonObject) {
+                val obj = element.asJsonObject
+                val type = obj.get("type")?.asString?.trim().takeUnless { it.isNullOrBlank() } ?: "হাদিস"
+                val arabic = (obj.get("arabic") ?: obj.get("text") ?: obj.get("quote") ?: obj.get("matn"))?.asString?.trim().orEmpty()
+                val translation = (obj.get("translation") ?: obj.get("bangla") ?: obj.get("meaning"))?.asString?.trim().orEmpty()
+                val reference = (obj.get("reference") ?: obj.get("source") ?: obj.get("book"))?.asString?.trim().orEmpty()
+                if (arabic.isNotBlank() || translation.isNotBlank()) {
+                    return listOf(TibbeQuote(type = type, arabic = arabic, translation = translation, reference = reference))
+                }
+            }
+        }
+        listOf(TibbeQuote(type = "হাদিস", arabic = raw))
+    } catch (_: Exception) {
+        listOf(TibbeQuote(type = "হাদিস", arabic = raw))
+    }
+}
+
 fun TibbeNabawiEntity.toArticleDomain(): Article {
     val allCategories = mutableListOf(category, "তিব্বে নববী")
     val allMedicines = mutableListOf<String>()
@@ -52,7 +107,16 @@ fun TibbeNabawiEntity.toArticleDomain(): Article {
 
     val bodyContent = buildString {
         if (!arabicName.isNullOrBlank()) append("📌 আরবি নাম: $arabicName\n\n")
-        if (!quotes.isNullOrBlank()) append("$quotes\n\n")
+        val quotesList = parsedQuotes()
+        if (quotesList.isNotEmpty()) {
+            quotesList.forEach { q ->
+                append("📜 ${q.type.ifBlank { "হাদিস" }}:\n")
+                if (q.arabic.isNotBlank()) append("${q.arabic}\n")
+                if (q.translation.isNotBlank()) append("অনুবাদ: ${q.translation}\n")
+                if (q.reference.isNotBlank()) append("সূত্র: ${q.reference}\n")
+                append("\n")
+            }
+        }
         if (foodName.isNotBlank()) append("🌱 ভেষজ/উপাদান: $foodName\n\n")
         if (!nature.isNullOrBlank()) append("🌡️ প্রকৃতি/মেজাজ: $nature\n\n")
         if (!taste.isNullOrBlank()) append("👅 স্বাদ: $taste\n\n")
