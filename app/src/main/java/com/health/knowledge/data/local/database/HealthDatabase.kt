@@ -23,7 +23,7 @@ import com.health.knowledge.data.local.entity.TibbeNabawiEntity
         HabitExecutionLogEntity::class,
         TibbeNabawiEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class HealthDatabase : RoomDatabase() {
@@ -150,13 +150,19 @@ abstract class HealthDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE tibbe_nabawi_posts ADD COLUMN quotes TEXT")
+            }
+        }
+
         fun create(context: Context): HealthDatabase {
             return Room.databaseBuilder(
                 context.applicationContext,
                 HealthDatabase::class.java,
                 DATABASE_NAME
             )
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
             .fallbackToDestructiveMigration()
             .build()
         }

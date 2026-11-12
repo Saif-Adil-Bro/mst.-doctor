@@ -72,6 +72,9 @@ fun TibbeNabawiDetailScreen(
         if (item.diseases.isNotBlank()) {
             sb.append("🩺 রোগসমূহ: ${item.diseases}\n")
         }
+        if (!item.quotes.isNullOrBlank()) {
+            sb.append("\n📜 হাদিস/উদ্ধৃতি (আরবি):\n${item.quotes}\n")
+        }
         sb.append("\n📖 বিবরণ ও হাদিস:\n${item.details}\n")
         if (!item.usageInstructions.isNullOrBlank()) {
             sb.append("\n🧪 সেবন ও ব্যবহারবিধি:\n${item.usageInstructions}\n")
@@ -356,6 +359,16 @@ fun TibbeNabawiDetailScreen(
                         }
 
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                        // ── Dedicated Arabic Hadith / Quote Section ────────────────
+                        if (!currentPost.quotes.isNullOrBlank()) {
+                            ArabicStandaloneBlock(
+                                arabicText = currentPost.quotes,
+                                fontSize = 21.sp,
+                                textColor = emeraldPrimary,
+                                backgroundColor = emeraldPrimary.copy(alpha = 0.08f).solidOverSurface()
+                            )
+                        }
 
                         SelectionContainer {
                             SmartMultilingualBody(

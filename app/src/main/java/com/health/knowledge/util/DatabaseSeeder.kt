@@ -2,6 +2,7 @@ package com.health.knowledge.util
 
 import android.content.Context
 import com.google.gson.Gson
+import com.google.gson.JsonElement
 import com.google.gson.reflect.TypeToken
 import com.health.knowledge.data.local.dao.ArticleDao
 import com.health.knowledge.data.local.dao.TibbeNabawiDao
@@ -183,6 +184,7 @@ class DatabaseSeeder @Inject constructor(
         val title: String = "",
         val food_name: String? = null,
         val arabic_name: String? = null,
+        val quotes: JsonElement? = null,
         val arabic_text: String? = null,
         val hadith_arabic: String? = null,
         val arabic_hadith: String? = null,
@@ -199,9 +201,44 @@ class DatabaseSeeder @Inject constructor(
             val taste: String? = null
         )
 
+        private fun extractQuotesString(element: JsonElement?): String? {
+            if (element == null || element.isJsonNull) return null
+            if (element.isJsonPrimitive) {
+                val str = element.asString.trim()
+                return if (str.isNotBlank()) str else null
+            }
+            if (element.isJsonArray) {
+                val list = mutableListOf<String>()
+                for (item in element.asJsonArray) {
+                    if (item.isJsonPrimitive) {
+                        val s = item.asString.trim()
+                        if (s.isNotBlank()) list.add(s)
+                    } else if (item.isJsonObject) {
+                        val obj = item.asJsonObject
+                        val ar = obj.get("arabic") ?: obj.get("text") ?: obj.get("quote") ?: obj.get("matn")
+                        if (ar != null && ar.isJsonPrimitive) {
+                            val s = ar.asString.trim()
+                            if (s.isNotBlank()) list.add(s)
+                        }
+                    }
+                }
+                return if (list.isNotEmpty()) list.joinToString("\n\n") else null
+            }
+            if (element.isJsonObject) {
+                val obj = element.asJsonObject
+                val ar = obj.get("arabic") ?: obj.get("text") ?: obj.get("quote") ?: obj.get("matn")
+                if (ar != null && ar.isJsonPrimitive) {
+                    val s = ar.asString.trim()
+                    return if (s.isNotBlank()) s else null
+                }
+            }
+            return null
+        }
+
         fun toEntity(): TibbeNabawiEntity {
+            val quotesStr = extractQuotesString(quotes)
             val formattedDetails = ArticleTextFormatter.formatBengaliParagraphs(details)
-            val extraArabic = (arabic_text ?: hadith_arabic ?: arabic_hadith)?.trim()?.takeIf { it.isNotBlank() }
+            val extraArabic = (quotesStr ?: arabic_text ?: hadith_arabic ?: arabic_hadith)?.trim()?.takeIf { it.isNotBlank() }
             val finalDetails = if (!extraArabic.isNullOrBlank() && !formattedDetails.contains(extraArabic)) {
                 "$extraArabic\n\n$formattedDetails"
             } else {
@@ -217,7 +254,7 @@ class DatabaseSeeder @Inject constructor(
             val tasteText = properties?.taste?.trim()?.takeIf { it.isNotBlank() }
             val usageText = usage_instructions?.let { ArticleTextFormatter.formatBengaliParagraphs(it) }
 
-            val searchKeywords = "$title $food ${arabic.orEmpty()} ${extraArabic.orEmpty()} $category $diseasesStr ${benefitsText.orEmpty()} $finalDetails"
+            val searchKeywords = "$title $food ${arabic.orEmpty()} ${quotesStr.orEmpty()} ${extraArabic.orEmpty()} $category $diseasesStr ${benefitsText.orEmpty()} $finalDetails"
                 .lowercase()
                 .split("\\s+".toRegex())
                 .filter { it.length > 1 }
@@ -229,6 +266,7 @@ class DatabaseSeeder @Inject constructor(
                 title = title.trim(),
                 foodName = food,
                 arabicName = arabic,
+                quotes = quotesStr,
                 category = category.trim(),
                 diseases = diseasesStr,
                 benefits = benefitsText,
