@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.health.knowledge.data.local.entity.TibbeNabawiEntity
 import com.health.knowledge.data.local.entity.TibbeQuote
+import com.health.knowledge.data.local.entity.formatPageRangeBn
 import com.health.knowledge.data.local.entity.parsedQuotes
 import com.health.knowledge.ui.theme.SolaimanLipi
 import com.health.knowledge.ui.theme.onePxBorder
@@ -95,7 +96,7 @@ fun TibbeNabawiDetailScreen(
         }
         sb.append("\n📚 সূত্র: আত-তিব্বুন নববী (ইবনুল কাইয়্যিম রহিমাহুল্লাহ)")
         if (item.sourcePages.isNotBlank()) {
-            sb.append(" • পৃষ্ঠা: ${item.sourcePages}")
+            sb.append(" • পৃষ্ঠা: ${formatPageRangeBn(item.sourcePages)}")
         }
         return sb.toString()
     }
@@ -219,7 +220,7 @@ fun TibbeNabawiDetailScreen(
                                     border = onePxBorder()
                                 ) {
                                     Text(
-                                        text = "📖 পৃষ্ঠা: ${currentPost.sourcePages}",
+                                        text = "📖 পৃষ্ঠা: ${formatPageRangeBn(currentPost.sourcePages)}",
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Medium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -374,14 +375,6 @@ fun TibbeNabawiDetailScreen(
 
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-                        // ── Dedicated Arabic Hadith / Quote Section ────────────────
-                        val quotesList = currentPost.parsedQuotes()
-                        if (quotesList.isNotEmpty()) {
-                            quotesList.forEach { q ->
-                                TibbeQuoteCard(quote = q)
-                            }
-                        }
-
                         SelectionContainer {
                             SmartMultilingualBody(
                                 content = currentPost.details,
@@ -456,7 +449,7 @@ fun TibbeNabawiDetailScreen(
                         )
                         if (currentPost.sourcePages.isNotBlank()) {
                             Text(
-                                text = "মূল কিতাবের পৃষ্ঠা: ${currentPost.sourcePages}",
+                                text = "মূল কিতাবের পৃষ্ঠা: ${formatPageRangeBn(currentPost.sourcePages)}",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface

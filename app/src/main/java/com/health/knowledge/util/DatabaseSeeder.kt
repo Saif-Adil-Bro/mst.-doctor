@@ -51,13 +51,13 @@ class DatabaseSeeder @Inject constructor(
     private suspend fun seedTibbeNabawiIfEmpty() {
         try {
             val prefs = context.getSharedPreferences("sync_prefs", Context.MODE_PRIVATE)
-            val hasUpgradedTibbe = prefs.getBoolean("has_upgraded_tibbe_v6", false)
+            val hasUpgradedTibbe = prefs.getBoolean("has_upgraded_tibbe_v7", false)
             val tibbeCount = tibbeNabawiDao.getCount()
             if (tibbeCount == 0 || !hasUpgradedTibbe) {
                 val tibbePosts = loadBundledTibbeNabawiPosts()
                 if (tibbePosts.isNotEmpty()) {
                     tibbeNabawiDao.insertAll(tibbePosts)
-                    prefs.edit().putBoolean("has_upgraded_tibbe_v6", true).apply()
+                    prefs.edit().putBoolean("has_upgraded_tibbe_v7", true).apply()
                 }
             }
         } catch (_: Exception) {
@@ -240,12 +240,8 @@ class DatabaseSeeder @Inject constructor(
             val quotesRaw = extractQuotesRaw(quotes)
             val quotesSearchText = extractQuotesSearchText(quotes)
             val formattedDetails = ArticleTextFormatter.formatBengaliParagraphs(details)
+            val finalDetails = formattedDetails
             val extraArabic = (arabic_text ?: hadith_arabic ?: arabic_hadith)?.trim()?.takeIf { it.isNotBlank() }
-            val finalDetails = if (!extraArabic.isNullOrBlank() && !formattedDetails.contains(extraArabic)) {
-                "$extraArabic\n\n$formattedDetails"
-            } else {
-                formattedDetails
-            }
             val diseasesList = diseases ?: emptyList()
             val diseasesStr = diseasesList.joinToString(",")
             val sourcePagesStr = (source_pages ?: emptyList()).joinToString(", ")

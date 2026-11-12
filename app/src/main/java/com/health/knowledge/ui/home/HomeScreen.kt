@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
+import kotlinx.coroutines.flow.distinctUntilChanged
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.health.knowledge.domain.model.Article
@@ -153,34 +154,43 @@ fun HomeScreen(
         )
     }
 
-    // Continuously persist scroll offset to ViewModel
+    // Persist scroll offset to ViewModel when scrolling settles to avoid 120Hz main-thread thrashing
     LaunchedEffect(homeListState) {
-        snapshotFlow {
-            homeListState.firstVisibleItemIndex to homeListState.firstVisibleItemScrollOffset
-        }.collect { (index, offset) ->
-            viewModel.saveHomeScrollPosition(index, offset)
-        }
+        snapshotFlow { homeListState.isScrollInProgress }
+            .collect { inProgress ->
+                if (!inProgress) {
+                    viewModel.saveHomeScrollPosition(
+                        homeListState.firstVisibleItemIndex,
+                        homeListState.firstVisibleItemScrollOffset
+                    )
+                }
+            }
     }
 
-    // Instant progressive load when nearing the end of displayed list
+    // Instant progressive load when nearing the end of displayed list (debounced with distinctUntilChanged)
     LaunchedEffect(homeListState, displayedArticles.size) {
         snapshotFlow {
             val lastVisible = homeListState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
             val total = homeListState.layoutInfo.totalItemsCount
-            lastVisible to total
-        }.collect { (lastVisible, total) ->
-            if (total > 0 && lastVisible >= total - 6) {
+            total > 0 && lastVisible >= total - 6
+        }.distinctUntilChanged()
+        .collect { shouldLoadMore ->
+            if (shouldLoadMore) {
                 viewModel.loadMoreArticles()
             }
         }
     }
 
     LaunchedEffect(bookmarkListState) {
-        snapshotFlow {
-            bookmarkListState.firstVisibleItemIndex to bookmarkListState.firstVisibleItemScrollOffset
-        }.collect { (index, offset) ->
-            viewModel.saveBookmarkScrollPosition(index, offset)
-        }
+        snapshotFlow { bookmarkListState.isScrollInProgress }
+            .collect { inProgress ->
+                if (!inProgress) {
+                    viewModel.saveBookmarkScrollPosition(
+                        bookmarkListState.firstVisibleItemIndex,
+                        bookmarkListState.firstVisibleItemScrollOffset
+                    )
+                }
+            }
     }
 
     // 5-click detector on Header Title for Hidden Admin Mode
@@ -968,7 +978,7 @@ fun CategoryChips(
                 )
             )
         }
-        items(categories) { (category, emoji) ->
+        items(categories, key = { it.first }) { (category, emoji) ->
             val isSelected = selectedCategory == category
             FilterChip(
                 selected = isSelected,
@@ -1008,7 +1018,7 @@ fun ArticleCard(
             .fillMaxWidth()
             .padding(horizontal = 14.dp, vertical = 6.dp)
             .clickable(onClick = onClick),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.5.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         border = onePxBorder(
             when {
                 article.isPinned -> MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
@@ -1026,7 +1036,7 @@ fun ArticleCard(
         )
     ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-            // Cover Photo / Thumbnail from CDN URL (auto-fit screen width)
+            // Cover Photo / Thumbnail from CDN URL (stable height to prevent scroll jank)
             if (hasCdnImage) {
                 AsyncImage(
                     model = remember(article.photoPath) {
@@ -1036,11 +1046,10 @@ fun ArticleCard(
                             .build()
                     },
                     contentDescription = article.title,
-                    contentScale = ContentScale.FillWidth,
+                    contentScale = ContentScale.Crop,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .wrapContentHeight()
-                        .heightIn(max = 220.dp)
+                        .height(180.dp)
                         .clip(RoundedCornerShape(12.dp))
                 )
                 Spacer(Modifier.height(8.dp))
@@ -1250,13 +1259,12 @@ fun ArticleCard(
 
             Spacer(Modifier.height(10.dp))
 
-            // Lightweight Row instead of nested LazyRow for 60/120fps smooth scrolling
+            // Non-scrolling Row to eliminate touch slop contention during vertical LazyColumn scroll
             if (article.categories.isNotEmpty() || article.medicines.isNotEmpty()) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     article.categories.take(3).forEach { cat ->
                         TagChip(text = cat.replace("_", " "), color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f))

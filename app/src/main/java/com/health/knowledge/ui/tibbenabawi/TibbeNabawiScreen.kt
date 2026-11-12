@@ -424,6 +424,13 @@ fun TibbeNabawiScreen(
                 }
             } else {
                 val isHerbMode = indexMode == TibbeIndexMode.HERBS || selectedHerb != null
+                val groupedPosts = remember(posts, isHerbMode, selectedHerb) {
+                    if (isHerbMode && selectedHerb == null) {
+                        posts.groupBy { extractCanonicalHerb(it) }
+                    } else {
+                        emptyMap()
+                    }
+                }
 
                 LazyColumn(
                     state = listState,
@@ -433,7 +440,6 @@ fun TibbeNabawiScreen(
                 ) {
                     if (isHerbMode && selectedHerb == null) {
                         // Group by canonical herb (e.g. মধু, দুধ, মাংস, খেজুর, etc.)
-                        val groupedPosts = posts.groupBy { extractCanonicalHerb(it) }
                         groupedPosts.forEach { (herbGroup, groupPosts) ->
                             item(key = "group_header_$herbGroup") {
                                 Surface(
@@ -594,7 +600,7 @@ private fun TibbeNabawiCompactCard(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         border = onePxBorder()
     ) {
         Row(

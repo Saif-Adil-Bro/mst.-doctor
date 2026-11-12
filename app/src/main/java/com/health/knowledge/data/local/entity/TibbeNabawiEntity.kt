@@ -183,6 +183,64 @@ fun TibbeNabawiEntity.toArticleDomain(): Article {
         isReacted = false,
         isReviewed = true,
         postKey = "tibbe_$id",
-        source = "আত-তিব্বুন নববী (ইবনুল কাইয়্যিম রহিমাহুল্লাহ)${if (sourcePages.isNotBlank()) " • পৃ: $sourcePages" else ""}"
+        source = "আত-তিব্বুন নববী (ইবনুল কাইয়্যিম রহিমাহুল্লাহ)${if (sourcePages.isNotBlank()) " • পৃ: ${formatPageRangeBn(sourcePages)}" else ""}"
     )
+}
+
+/**
+ * Converts ASCII digits 0-9 in a string to Bengali digits ০-৯.
+ */
+fun toBengaliDigits(str: String): String {
+    val bnDigits = charArrayOf('০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯')
+    return str.map { ch ->
+        if (ch in '0'..'9') bnDigits[ch - '0'] else ch
+    }.joinToString("")
+}
+
+/**
+ * Formats comma-separated page numbers (e.g. "17, 18, 19, 20" or "১৭, ১৮, ১৯, ২০")
+ * into clean Bengali consecutive page ranges (e.g. "১৭ থেকে ২০").
+ */
+fun formatPageRangeBn(sourcePages: String): String {
+    if (sourcePages.isBlank()) return ""
+    val normalized = sourcePages.map { ch ->
+        when (ch) {
+            in '০'..'৯' -> '0' + (ch - '০')
+            else -> ch
+        }
+    }.joinToString("")
+
+    val numbers = Regex("""\d+""").findAll(normalized)
+        .mapNotNull { it.value.toIntOrNull() }
+        .sorted()
+        .distinct()
+        .toList()
+
+    if (numbers.isEmpty()) {
+        return toBengaliDigits(sourcePages)
+    }
+
+    val ranges = mutableListOf<Pair<Int, Int>>()
+    var rangeStart = numbers[0]
+    var prev = numbers[0]
+
+    for (i in 1 until numbers.size) {
+        val curr = numbers[i]
+        if (curr == prev + 1) {
+            prev = curr
+        } else {
+            ranges.add(Pair(rangeStart, prev))
+            rangeStart = curr
+            prev = curr
+        }
+    }
+    ranges.add(Pair(rangeStart, prev))
+
+    return ranges.joinToString(", ") { (start, end) ->
+        if (start == end) {
+            toBengaliDigits(start.toString())
+        } else {
+            "${toBengaliDigits(start.toString())} থেকে ${toBengaliDigits(end.toString())}"
+        }
+    }
 }
