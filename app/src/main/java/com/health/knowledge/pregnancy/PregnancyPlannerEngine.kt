@@ -20,21 +20,94 @@ data class PregnancyTimelineStatus(
     val trimester: Int,
     val trimesterLabelBn: String,
     val progressFraction: Float,
-    val progressPercent: Int
+    val progressPercent: Int,
+    val isFullTerm: Boolean = false
 )
 
 @Immutable
 data class FertileWindowStatus(
     val lastPeriodStartMillis: Long,
+    val lastPeriodEndMillis: Long = 0L,
+    val periodDurationDays: Int = 0,
+    val periodDurationNoticeBn: String? = null,
     val cycleDays: Int,
     val lastPeriodFormattedBn: String,
+    val lastPeriodEndFormattedBn: String = "",
     val fertileStartFormattedBn: String,
     val fertileEndFormattedBn: String,
     val ovulationDateFormattedBn: String,
     val nextPeriodFormattedBn: String,
+    val ovulationDateMillis: Long = 0L,
+    val nextPeriodDateMillis: Long = 0L,
     val currentCycleDay: Int,
     val isCurrentlyFertile: Boolean,
+    val isNextPeriodDueOrMissed: Boolean = false,
     val statusHeadlineBn: String
+)
+
+@Immutable
+data class BabyAgeStatus(
+    val deliveryMillis: Long,
+    val deliveryType: String, // "NORMAL", "C_SECTION"
+    val babyGender: String,   // "BOY", "GIRL", "UNSPECIFIED"
+    val deliveryFormattedBn: String,
+    val ageDaysTotal: Int,
+    val ageWeeksTotal: Int,
+    val ageMonthsTotal: Int,
+    val ageDisplayBn: String,
+    val milestoneTitleBn: String,
+    val milestoneDetailBn: String
+)
+
+@Immutable
+data class PostpartumBabyCareTip(
+    val id: String,
+    val category: String, // "BREASTFEEDING", "CORD_CARE", "MASSAGE", "SLEEP", "COLIC", "MILESTONES"
+    val emoji: String,
+    val titleBn: String,
+    val detailBn: String,
+    val highlightBn: String
+)
+
+@Immutable
+data class PostpartumMotherCareTip(
+    val id: String,
+    val deliveryTypeTarget: String, // "ALL", "NORMAL", "C_SECTION"
+    val emoji: String,
+    val titleBn: String,
+    val detailBn: String,
+    val highlightBn: String
+)
+
+@Immutable
+data class StageFatherTip(
+    val id: String,
+    val stage: String, // "PRE", "PREGNANT", "POSTPARTUM"
+    val emoji: String,
+    val badgeBn: String,
+    val titleBn: String,
+    val detailBn: String,
+    val actionBn: String
+)
+
+@Immutable
+data class StageSafetyWarning(
+    val id: String,
+    val stage: String, // "PRE", "PREGNANT", "POSTPARTUM"
+    val isRedFlag: Boolean, // true = danger sign, false = foods/herbs to avoid
+    val emoji: String,
+    val titleBn: String,
+    val detailBn: String
+)
+
+@Immutable
+data class InstantHomeRemedy(
+    val id: String,
+    val symptomId: String,
+    val emoji: String,
+    val titleBn: String,
+    val remedyListBn: List<String>,
+    val cautionBn: String
 )
 
 @Immutable
@@ -122,9 +195,9 @@ object PregnancyPlannerEngine {
         cycleDays: Int = 28,
         referenceDateMillis: Long = System.currentTimeMillis()
     ): PregnancyTimelineStatus {
-        val safeCycle = cycleDays.coerceIn(22, 38)
+        val safeCycle = cycleDays.coerceIn(18, 60)
         val cycleOffset = safeCycle - 28
-        val totalAdjustedDays = (TOTAL_PREGNANCY_DAYS + cycleOffset).coerceIn(266, 295)
+        val totalAdjustedDays = (TOTAL_PREGNANCY_DAYS + cycleOffset).coerceIn(260, 312)
 
         val cleanStart = HabitDateAndReportEngine.startOfDayMillis(startMillis)
         val cleanRef = HabitDateAndReportEngine.startOfDayMillis(referenceDateMillis)
@@ -134,7 +207,7 @@ object PregnancyPlannerEngine {
         val elapsedDays = rawElapsed.coerceIn(1, totalAdjustedDays)
         val remainingDays = (totalAdjustedDays - elapsedDays).coerceAtLeast(0)
 
-        val currentWeek = ((elapsedDays - 1) / 7 + 1).coerceIn(1, 40)
+        val currentWeek = ((elapsedDays - 1) / 7 + 1).coerceIn(1, 42)
         val extraDaysInWeek = (elapsedDays - 1) % 7
 
         val trimester = when (currentWeek) {
@@ -150,6 +223,7 @@ object PregnancyPlannerEngine {
 
         val fraction = (elapsedDays.toFloat() / totalAdjustedDays.toFloat()).coerceIn(0f, 1f)
         val percent = (fraction * 100f).roundToInt().coerceIn(0, 100)
+        val isFullTerm = currentWeek >= 37 || cleanRef >= eddMillis
 
         return PregnancyTimelineStatus(
             startMillis = cleanStart,
@@ -165,68 +239,144 @@ object PregnancyPlannerEngine {
             trimester = trimester,
             trimesterLabelBn = trimesterLabelBn,
             progressFraction = fraction,
-            progressPercent = percent
+            progressPercent = percent,
+            isFullTerm = isFullTerm
         )
     }
 
     /**
      * Calculates ovulation & fertile window for women planning to conceive based on
-     * last period start date and menstrual cycle length (22..38 days).
+     * last period start & end dates and menstrual cycle length (18..60 days).
      */
     fun calculateFertileWindow(
         lastPeriodStartMillis: Long,
+        lastPeriodEndMillis: Long = 0L,
         cycleDays: Int = 28,
         referenceDateMillis: Long = System.currentTimeMillis()
     ): FertileWindowStatus {
-        val safeCycle = cycleDays.coerceIn(22, 38)
+        val safeCycle = cycleDays.coerceIn(18, 60)
         val cleanRef = HabitDateAndReportEngine.startOfDayMillis(referenceDateMillis)
         var cycleStart = HabitDateAndReportEngine.startOfDayMillis(lastPeriodStartMillis)
 
-        // Roll forward to the active cycle if the recorded LMP was multiple cycles ago
-        while (HabitDateAndReportEngine.addDays(cycleStart, safeCycle) <= cleanRef) {
-            cycleStart = HabitDateAndReportEngine.addDays(cycleStart, safeCycle)
+        // Calculate Period Duration (স্থায়িত্বকাল: End Date - Start Date + 1)
+        var periodDuration = 0
+        var periodNotice: String? = null
+        if (lastPeriodEndMillis > 0L && lastPeriodEndMillis >= cycleStart) {
+            periodDuration = (((lastPeriodEndMillis - cycleStart) / DAY_MILLIS).toInt() + 1).coerceAtLeast(1)
+            periodNotice = when {
+                periodDuration < 3 -> "আপনার মাসিকের স্থায়িত্ব ৩ দিনের কম (স্বল্প রক্তক্ষরণ)। পুষ্টিহীনতা বা রক্তস্বল্পতা রোধে খাদ্যতালিকায় ডালিম, খেজুর, দুধ, ডিম এবং পর্যাপ্ত পানি গ্রহণ করুন।"
+                periodDuration > 7 -> "আপনার মাসিকের স্থায়িত্ব ৭ দিনের বেশি (অতিরিক্ত রক্তক্ষরণ)। শরীর দুর্বল লাগলে মধু, কালোজিরা, ভিটামিন-সি ও আয়রনসমৃদ্ধ খাবার গ্রহণ করুন এবং চিকিৎসকের পরামর্শ নিন।"
+                else -> null
+            }
         }
 
         val nextPeriodMillis = HabitDateAndReportEngine.addDays(cycleStart, safeCycle)
-        val ovulationDayOffset = (safeCycle - 14).coerceAtLeast(8)
-        val ovulationMillis = HabitDateAndReportEngine.addDays(cycleStart, ovulationDayOffset)
-        val fertileStartMillis = HabitDateAndReportEngine.addDays(ovulationMillis, -4)
+        val ovulationMillis = HabitDateAndReportEngine.addDays(nextPeriodMillis, -14)
+        val fertileStartMillis = HabitDateAndReportEngine.addDays(ovulationMillis, -5)
         val fertileEndMillis = HabitDateAndReportEngine.addDays(ovulationMillis, 1)
 
-        val currentCycleDay = (((cleanRef - cycleStart) / DAY_MILLIS).toInt() + 1).coerceIn(1, safeCycle)
+        val currentCycleDay = (((cleanRef - cycleStart) / DAY_MILLIS).toInt() + 1).coerceAtLeast(1)
         val isFertileNow = cleanRef in fertileStartMillis..fertileEndMillis
+        val isDueOrMissed = cleanRef >= nextPeriodMillis
 
         val statusHeadline = when {
-            isFertileNow -> "🌟 এখন আপনার উর্বর সময় (Fertile Window) চলছে!"
+            isDueOrMissed -> "⚠️ আপনার মাসিকের সম্ভাব্য সময় পার হয়েছে / চলে এসেছে!"
+            isFertileNow -> "🌟 এখন আপনার সর্বোচ্চ উর্বর সময় (Fertile Window) চলছে!"
             cleanRef < fertileStartMillis -> {
                 val daysLeft = ((fertileStartMillis - cleanRef) / DAY_MILLIS).toInt().coerceAtLeast(1)
                 "উর্বর সময় শুরু হতে ${HabitScheduleCalculator.toBengaliDigits(daysLeft.toString())} দিন বাকি"
             }
             else -> {
                 val daysToNext = ((nextPeriodMillis - cleanRef) / DAY_MILLIS).toInt().coerceAtLeast(1)
-                "পরবর্তী চক্রের সম্ভাব্য তারিখ ${HabitScheduleCalculator.toBengaliDigits(daysToNext.toString())} দিন পর"
+                "পরবর্তী মাসিকের সম্ভাব্য তারিখ ${HabitScheduleCalculator.toBengaliDigits(daysToNext.toString())} দিন পর"
             }
         }
 
         return FertileWindowStatus(
             lastPeriodStartMillis = cycleStart,
+            lastPeriodEndMillis = lastPeriodEndMillis,
+            periodDurationDays = periodDuration,
+            periodDurationNoticeBn = periodNotice,
             cycleDays = safeCycle,
             lastPeriodFormattedBn = HabitDateAndReportEngine.formatShortDateBn(cycleStart),
+            lastPeriodEndFormattedBn = if (lastPeriodEndMillis > 0L) HabitDateAndReportEngine.formatShortDateBn(lastPeriodEndMillis) else "",
             fertileStartFormattedBn = HabitDateAndReportEngine.formatShortDateBn(fertileStartMillis),
             fertileEndFormattedBn = HabitDateAndReportEngine.formatShortDateBn(fertileEndMillis),
             ovulationDateFormattedBn = HabitDateAndReportEngine.formatFullDateBn(ovulationMillis),
             nextPeriodFormattedBn = HabitDateAndReportEngine.formatFullDateBn(nextPeriodMillis),
+            ovulationDateMillis = ovulationMillis,
+            nextPeriodDateMillis = nextPeriodMillis,
             currentCycleDay = currentCycleDay,
             isCurrentlyFertile = isFertileNow,
+            isNextPeriodDueOrMissed = isDueOrMissed,
             statusHeadlineBn = statusHeadline
         )
     }
 
     fun startMillisFromEdd(eddMillis: Long, cycleDays: Int = 28): Long {
-        val safeCycle = cycleDays.coerceIn(22, 38)
-        val totalAdjustedDays = (TOTAL_PREGNANCY_DAYS + (safeCycle - 28)).coerceIn(266, 295)
+        val safeCycle = cycleDays.coerceIn(18, 60)
+        val totalAdjustedDays = (TOTAL_PREGNANCY_DAYS + (safeCycle - 28)).coerceIn(260, 312)
         val cleanEdd = HabitDateAndReportEngine.startOfDayMillis(eddMillis)
         return HabitDateAndReportEngine.addDays(cleanEdd, -totalAdjustedDays)
+    }
+
+    fun calculateBabyAge(
+        deliveryMillis: Long,
+        deliveryType: String = "NORMAL",
+        babyGender: String = "UNSPECIFIED",
+        referenceDateMillis: Long = System.currentTimeMillis()
+    ): BabyAgeStatus {
+        val cleanDelivery = HabitDateAndReportEngine.startOfDayMillis(deliveryMillis)
+        val cleanRef = HabitDateAndReportEngine.startOfDayMillis(referenceDateMillis)
+        val rawDays = ((cleanRef - cleanDelivery) / DAY_MILLIS).toInt().coerceAtLeast(0)
+        val ageWeeks = rawDays / 7
+        val ageMonths = rawDays / 30
+        val daysRemainder = rawDays % 30
+
+        val ageDisplay = when {
+            rawDays == 0 -> "আজই জন্ম নিয়েছে 👶"
+            rawDays < 7 -> "${HabitScheduleCalculator.toBengaliDigits(rawDays.toString())} দিন"
+            rawDays < 30 -> "${HabitScheduleCalculator.toBengaliDigits(ageWeeks.toString())} সপ্তাহ (${HabitScheduleCalculator.toBengaliDigits(rawDays.toString())} দিন)"
+            ageMonths < 12 -> {
+                if (daysRemainder == 0) {
+                    "${HabitScheduleCalculator.toBengaliDigits(ageMonths.toString())} মাস"
+                } else {
+                    "${HabitScheduleCalculator.toBengaliDigits(ageMonths.toString())} মাস, ${HabitScheduleCalculator.toBengaliDigits(daysRemainder.toString())} দিন"
+                }
+            }
+            else -> {
+                val years = ageMonths / 12
+                val remMonths = ageMonths % 12
+                if (remMonths == 0) {
+                    "${HabitScheduleCalculator.toBengaliDigits(years.toString())} বছর"
+                } else {
+                    "${HabitScheduleCalculator.toBengaliDigits(years.toString())} বছর, ${HabitScheduleCalculator.toBengaliDigits(remMonths.toString())} মাস"
+                }
+            }
+        }
+
+        val (milestoneTitle, milestoneDetail) = when {
+            rawDays <= 7 -> "প্রথম সপ্তাহ • নবজাতকের অভিযোজন" to "মায়ের শালদুধই শিশুর প্রথম টিকা ও রোগ প্রতিরোধকারী খাবার। নাভির গোড়া সবসময় শুকনো ও পরিষ্কার রাখুন। দিনে ১৬–১৮ ঘণ্টা ঘুম স্বাভাবিক।"
+            rawDays <= 14 -> "২য় সপ্তাহ • নাভির যত্ন ও ওজন পর্যবেক্ষণ" to "নাভির কর্ড সাধারণত ১–২ সপ্তাহের মধ্যে স্বাভাবিকভাবে শুকিয়ে খসে পড়ে। হালকা কুসুম রোদ ও তেল মালিশ শিশুর ত্বকের জন্য উপকারি।"
+            rawDays <= 30 -> "১ম মাস • দৃষ্টি ও শব্দের পরিচিতি" to "বাচ্চা ৮–১২ ইঞ্চি দূরত্বের মুখমণ্ডল ফোকাস করতে পারে। মা-বাবার কণ্ঠস্বর চেনে এবং হঠাৎ শব্দে হালকা চমকে ওঠা স্বাভাবিক।"
+            rawDays <= 60 -> "২য় মাস • সামাজিক হাসি (Social Smile)" to "বাচ্চা মা-বাবার চোখের দিকে তাকিয়ে হাসতে শুরু করে এবং উপুড় অবস্থায় মাথা সামান্য উঁচু করার চেষ্টা করে।"
+            rawDays <= 90 -> "৩য় মাস • হাত-চোখের সমন্বয়" to "হাতের মুঠি খুলে চারপাশের জিনিসে হাত ছোঁয়ায় এবং বিভিন্ন মিষ্টি শব্দ (Cooing) করে আনন্দ প্রকাশ করে। পেটে গ্যাসের জন্য সঠিক বার্পিং দিন।"
+            rawDays <= 180 -> "৪–৬ মাস • নিজে নিজে পাশ ফেরা ও শক্ত ঘাড়" to "বাচ্চা নিজে নিজে পাশ ফিরতে পারে এবং ঘাড় সম্পূর্ণ শক্ত হয়। ৬ মাস পূর্ণ না হওয়া পর্যন্ত শুধুমাত্র মায়ের বুকের দুধই একমাত্র খাদ্য ও পানীয়।"
+            else -> "৬+ মাস • পারিবারিক নরম পুষ্টিকর খাদ্য শুরু" to "বুকের দুধের পাশাপাশি ঘরে তৈরি নরম সুষম খাবার (খিচুড়ি, সুজি, ডিমের কুসুম, চটকানো ফল) অল্প অল্প করে শুরু করুন।"
+        }
+
+        return BabyAgeStatus(
+            deliveryMillis = cleanDelivery,
+            deliveryType = deliveryType,
+            babyGender = babyGender,
+            deliveryFormattedBn = HabitDateAndReportEngine.formatFullDateBn(cleanDelivery),
+            ageDaysTotal = rawDays,
+            ageWeeksTotal = ageWeeks,
+            ageMonthsTotal = ageMonths,
+            ageDisplayBn = ageDisplay,
+            milestoneTitleBn = milestoneTitle,
+            milestoneDetailBn = milestoneDetail
+        )
     }
 
     fun getGrowthForWeek(week: Int): WeeklyBabyGrowth {
@@ -897,4 +1047,238 @@ object PregnancyPlannerEngine {
             )
         }
     }
+
+    val postpartumBabyCareCatalog: List<PostpartumBabyCareTip> = listOf(
+        PostpartumBabyCareTip(
+            id = "baby_care_breastfeeding",
+            category = "BREASTFEEDING",
+            emoji = "🤱",
+            titleBn = "শালদুধ ও শুধুমাত্র বুকের দুধ (Exclusive Breastfeeding)",
+            detailBn = "জন্মের ১ ঘণ্টার মধ্যে শিশুকে মায়ের প্রথম শালদুধ (Colostrum) পান করান। প্রথম ৬ মাস শিশুকে এক ফোঁটা পানিও দেওয়া যাবে না; বুকের দুধেই শিশুর ক্ষুধা, তৃষ্ণা ও অ্যান্টিবডি রয়েছে।",
+            highlightBn = "প্রতি ২-৩ ঘণ্টা পর পর অথবা বাচ্চার চাহিদামতো (On demand) দুধ পান করান।"
+        ),
+        PostpartumBabyCareTip(
+            id = "baby_care_cord",
+            category = "CORD_CARE",
+            emoji = "🩹",
+            titleBn = "নাভির যত্ন (Umbilical Cord Care)",
+            detailBn = "নাভির গোড়ায় কোনো প্রকার তেল, হলুদ বা পাউডার লাগাবেন না। নাভি সবসময় শুকনো ও খোলা রাখুন যাতে বাতাস লাগে। ডায়াপার পরানোর সময় নাভির নিচে ভাজ করে রাখুন।",
+            highlightBn = "নাভি থেকে দুর্গন্ধযুক্ত পানি বা রক্ত বের হলে দ্রুত শিশু বিশেষজ্ঞ দেখান।"
+        ),
+        PostpartumBabyCareTip(
+            id = "baby_care_massage",
+            category = "MASSAGE",
+            emoji = "🧴",
+            titleBn = "তেল মালিশ ও রোদ পোহানো (Massage & Sunlight)",
+            detailBn = "সকাল ৮টা থেকে ৯টার হালকা রোদে শিশুকে ৫–১০ মিনিট রাখুন। খাঁটি সরিষার তেল বা অলিভ অয়েল দিয়ে হাত-পা ও পিঠে হালকা মালিশ করুন। চোখ ও মুখে তেল প্রবেশ করতে দেবেন না।",
+            highlightBn = "তেল মালিশের ফলে হাড়ের গঠন শক্ত হয় ও শিশুর রক্ত সঞ্চালন বৃদ্ধি পায়।"
+        ),
+        PostpartumBabyCareTip(
+            id = "baby_care_sleep",
+            category = "SLEEP",
+            emoji = "😴",
+            titleBn = "ঘুমের রুটিন ও শোয়ানোর নিয়ম (Sleep Routine)",
+            detailBn = "নবজাতকের দিনে ১৬ থেকে ১৮ ঘণ্টা ঘুমানো স্বাভাবিক। সবসময় শিশুকে চিত করে (পিঠের ওপর) সমতল নরম বিছানায় শোয়ান। মুখের কাছে ভারী কম্বল বা খেলনা রাখবেন না।",
+            highlightBn = "দিনের বেলা মৃদু আলো ও স্বাভাবিক শব্দ রাখুন, রাতে অন্ধকার ও শান্ত পরিবেশ তৈরি করুন।"
+        ),
+        PostpartumBabyCareTip(
+            id = "baby_care_colic",
+            category = "COLIC",
+            emoji = "💨",
+            titleBn = "পেটে গ্যাস ও কান্না উপশম (Colic & Burping)",
+            detailBn = "প্রতিবার দুধ খাওয়ানোর পর শিশুকে কাঁধের ওপর সোজা রেখে পিঠে নিচ থেকে উপরে আলতো চাপড় দিয়ে ঢেকুর (Burp) তোলান। পেটে গ্যাস হলে শিশুর পা সাইকেলের মতো আলতো নাড়াচাড়া করুন।",
+            highlightBn = "দুধ পানের পর সাথে সাথে শোয়াবেন না; অন্তত ১০-১৫ মিনিট সোজা রাখুন।"
+        ),
+        PostpartumBabyCareTip(
+            id = "baby_care_milestones",
+            category = "MILESTONES",
+            emoji = "🌟",
+            titleBn = "নবজাতকের বিকাশ ও ইসলামিক সুন্নাহ (Sunnah & Milestones)",
+            detailBn = "জন্মের পর ডান কানে আযান ও বাম কানে ইকামত দিন, মিষ্টি কিছু দিয়ে তাহনীক করুন এবং সপ্তম দিনে আক্বীকা ও মাথার চুল ওজনের সমপরিমাণ রুপা সদকা করুন।",
+            highlightBn = "বাচ্চার সাথে মিষ্টি সুরে কথা বলুন ও কুরআন তিলাওয়াত শোনান।"
+        )
+    )
+
+    val postpartumMotherCareCatalog: List<PostpartumMotherCareTip> = listOf(
+        PostpartumMotherCareTip(
+            id = "mother_recovery_diet",
+            category = "ALL",
+            emoji = "🍲",
+            titleBn = "প্রসব-পরবর্তী পুষ্টিকর রিকভারি খাদ্য",
+            detailBn = "গরম ভাতের সাথে কালোজিরা ভর্তা, লাউ, কাঁচকলা, দেশি মুরগির পাতলা ঝোল ও পেঁপে খান। প্রতিদিন অন্তত ১ গ্লাস খাঁটি দুধ, ১টি ডিম ও প্রচুর পুষ্টিকর তরল স্যুপ গ্রহণ করুন।",
+            highlightBn = "কালোজিরা ও রসুন জরায়ু দ্রুত সংকুচিত হতে ও দুধ বাড়াতে সাহায্য করে।"
+        ),
+        PostpartumMotherCareTip(
+            id = "mother_galactagogues",
+            category = "ALL",
+            emoji = "🥛",
+            titleBn = "বুকের দুধ বাড়ানোর প্রাকৃতিক গ্যালাক্টাগগ খাবার",
+            detailBn = "মেথি ভেজানো কুসুম গরম পানি, মৌরি বা জিরা চা, লাউয়ের তরকারি, রসুন ও মিষ্টি কুমড়া মায়ের বুকের দুধের প্রবাহ (Milk Supply) দ্বিগুণ করতে প্রমাণিত ভূমিকা রাখে।",
+            highlightBn = "মায়ের শরীর হাইড্রেটেড রাখা সবচেয়ে জরুরি; প্রতিদিন ৮–১০ গ্লাস কুসুম গরম পানি পান করুন।"
+        ),
+        PostpartumMotherCareTip(
+            id = "mother_normal_healing",
+            category = "NORMAL",
+            emoji = "🚶‍♀️",
+            titleBn = "নরমাল ডেলিভারির রিকভারি ও পেরিনিয়াল কেয়ার",
+            detailBn = "প্রতিবার ওয়াশরুম ব্যবহারের পর কুসুম গরম পানি দিয়ে পরিষ্কার করুন। হালকা কুসুম গরম পানিতে লবণ দিয়ে সিটজ বাথ (Sitz bath) নিলে ব্যথা কমে ও জখম দ্রুত শুকায়।",
+            highlightBn = "ভারী জিনিস তোলা এড়িয়ে চলুন এবং দিনে অন্তত ২ বার শুয়ে বিশ্রাম নিন।"
+        ),
+        PostpartumMotherCareTip(
+            id = "mother_csection_care",
+            category = "C_SECTION",
+            emoji = "🩹",
+            titleBn = "সিজারিয়ান কাটার যত্ন ও সতর্কতা",
+            detailBn = "সেলাইয়ের জায়গা সম্পূর্ণ শুকনো ও পরিষ্কার রাখুন। ডাক্তার অনুমতি না দেওয়া পর্যন্ত পেটে পানি লাগাবেন না। কাশি বা হাঁচির সময় পেটে বালিশ চেপে ধরুন যাতে টান না লাগে।",
+            highlightBn = "প্রোটিন সমৃদ্ধ খাবার (ডিম, মুরগি, ডাল) সেলাইয়ের স্থান দ্রুত নিরাময়ে সাহায্য করে।"
+        ),
+        PostpartumMotherCareTip(
+            id = "mother_mental_blues",
+            category = "ALL",
+            emoji = "🌸",
+            titleBn = "মানসিক স্বাস্থ্য ও পোস্টপার্টাম ব্লুজ (Mental Wellbeing)",
+            detailBn = "হরমোনের পরিবর্তনের কারণে প্রসবের পর মন খারাপ, কান্না পাওয়া বা ক্লান্তি লাগা স্বাভাবিক। নিজের অনুভূতি স্বামীর সাথে ভাগ করুন এবং একাকী থাকবেন না।",
+            highlightBn = "পর্যাপ্ত ঘুম নিশ্চিত করতে বাচ্চা ঘুমালেই নিজেও বিশ্রাম নেওয়ার চেষ্টা করুন।"
+        )
+    )
+
+    val stageFatherTipsCatalog: List<StageFatherTip> = listOf(
+        StageFatherTip(
+            id = "father_pre_conception",
+            stage = "PRE",
+            emoji = "🍯",
+            badgeBn = "সন্তান নেওয়ার প্রস্তুতি",
+            titleBn = "স্বামীর পুষ্টি, ফার্টিলিটি ও মানসিক সঙ্গ",
+            detailBn = "পুরুষের শুক্রাণুর মান উন্নত রাখতে নিয়মিত মধু, কালোজিরা, কাঠবাদাম ও দুধ খান। ধূমপান ও অতিরিক্ত রাত জাগা পরিহার করুন। স্ত্রীর উর্বর দিনগুলোতে তাকে মানসিকভাবে শান্ত ও প্রফুল্ল রাখুন।",
+            actionBn = "স্ত্রীর সাইকেল ও উর্বর দিন মনে রেখে চিকিৎসকের পরামর্শে ফলিক অ্যাসিড গ্রহণে উৎসাহ দিন।"
+        ),
+        StageFatherTip(
+            id = "father_pregnancy_support",
+            stage = "PREGNANT",
+            emoji = "🤰",
+            badgeBn = "গর্ভকালীন সহযোগিতা",
+            titleBn = "স্ত্রীর প্রতি সহানুভূতি, সেবা ও দায়িত্বশীলতা",
+            detailBn = "বমিভাব ও ক্লান্তির সময়ে গৃহস্থালির ভারী কাজে হাত লাগান। স্ত্রীর মুড সুইংয়ে ধৈর্যশীল হোন। প্রতিটি ডক্টর ভিজিটে সাথে যান এবং চিকিৎসকের নির্দেশিকা নোট করে রাখুন।",
+            actionBn = "প্রতিদিন স্ত্রীকে নিয়ে কিছুক্ষণ সান্ধ্যকালীন হাঁটাচলা করুন ও সূরা মারিয়াম তিলাওয়াত করুন।"
+        ),
+        StageFatherTip(
+            id = "father_postpartum_baby",
+            stage = "POSTPARTUM",
+            emoji = "👶",
+            badgeBn = "নতুন বাবার ভূমিকা",
+            titleBn = "মায়ের রিকভারিতে সহযোগিতা ও নবজাতকের বন্ধন",
+            detailBn = "মায়ের ঘুমানোর জন্য রাতের বেলা বাচ্চার ডায়াপার পরিবর্তন ও কান্না থামাতে কোলে নিন। সিজারিয়ান বা নরমাল ডেলিভারির পর স্ত্রীর ব্যথার সময় ওষুধ ও গরম স্যুপ এগিয়ে দিন।",
+            actionBn = "শিশুর চোখে চোখ রেখে কথা বলুন ও কোলে নিয়ে গায়ে হাত বুলিয়ে বাবার গভীর বন্ধন গড়ে তুলুন।"
+        )
+    )
+
+    val stageSafetyWarningsCatalog: List<StageSafetyWarning> = listOf(
+        StageSafetyWarning(
+            id = "safety_pre_foods",
+            stage = "PRE",
+            isRedFlag = false,
+            emoji = "🚫",
+            titleBn = "গর্ভধারণের আগে বর্জনীয় খাবার ও অভ্যাস",
+            detailBn = "অতিরিক্ত চা-কফি (ক্যাফেইন), কোমল পানীয়, কাঁচা পেঁপে ও ধূমপান জরায়ুর পরিবেশ ও ডিম্বাণুর কার্যক্ষমতা নষ্ট করতে পারে।"
+        ),
+        StageSafetyWarning(
+            id = "safety_preg_foods",
+            stage = "PREGNANT",
+            isRedFlag = false,
+            emoji = "⚠️",
+            titleBn = "গর্ভাবস্থায় এড়িয়ে চলার মতো খাবার",
+            detailBn = "কাঁচা বা আধপাকা পেঁপে, অতিরিক্ত আনারস, অপাস্তুরিত কাঁচা দুধ ও পনির, অতিরিক্ত সাজনা পাতা এবং চিকিৎসকের পরামর্শ ছাড়া যেকোনো ওষুধ সেবন বর্জন করুন।"
+        ),
+        StageSafetyWarning(
+            id = "safety_preg_redflags",
+            stage = "PREGNANT",
+            isRedFlag = true,
+            emoji = "🚨",
+            titleBn = "গর্ভকালীন ডেঞ্জার সাইন (জরুরি চিকিৎসকের শরণাপন্ন হোন)",
+            detailBn = "যোনিপথে যেকোনো রক্তপাত, তীব্র তলপেট বা পিঠ ব্যথা, হঠাৎ পানি ভাঙা, প্রচণ্ড মাথাব্যথা ও চোখে ঝাপসা দেখা, বাচ্চার নড়াচড়া কমে যাওয়া বা তীব্র জ্বর হলে দেরি না করে দ্রুত হাসপাতালে যান।"
+        ),
+        StageSafetyWarning(
+            id = "safety_post_cautions",
+            stage = "POSTPARTUM",
+            isRedFlag = true,
+            emoji = "🚨",
+            titleBn = "প্রসব-পরবর্তী বিপজ্জনক লক্ষণ",
+            detailBn = "অতিরিক্ত রক্তক্ষরণ (প্রতি ঘণ্টায় ১টির বেশি প্যাড ভেজা), তীব্র দুর্গন্ধযুক্ত স্রাব, উচ্চ রক্তচাপ, তীব্র শ্বাসকষ্ট বা বাচ্চার দুধ না টানা ও শরীর নীল হয়ে যাওয়ার লক্ষণ দেখামাত্র ডাক্তার দেখান।"
+        )
+    )
+
+    val instantHomeRemediesCatalog: List<InstantHomeRemedy> = listOf(
+        InstantHomeRemedy(
+            id = "remedy_nausea",
+            symptomId = "nausea",
+            emoji = "🤢",
+            titleBn = "বমিভাবের তাৎক্ষণিক ঘরোয়া সমাধান",
+            remedyListBn = listOf(
+                "সকালে ওঠার পর মুখে এক টুকরো আদা বা হালকা আদা-লেবু পানি দিয়ে মুখ কুলি করুন।",
+                "খালি পেটে না থেকে শুকনা মুড়ি বা টোস্ট বিস্কুট অল্প অল্প করে চিবিয়ে খান।",
+                "তাজা লেবুর খোসার গন্ধ শুকলে বমিভাব দ্রুত কমে যায়।"
+            ),
+            cautionBn = "দিনে ৩ বারের বেশি বমি হলে বা পানিশূন্যতা দেখা দিলে চিকিৎসকের পরামর্শ নিন।"
+        ),
+        InstantHomeRemedy(
+            id = "remedy_fatigue",
+            symptomId = "fatigue",
+            emoji = "😴",
+            titleBn = "ক্লান্তি ও দুর্বলতা দূর করার প্রাকৃতিক উপায়",
+            remedyListBn = listOf(
+                "২টি খোরমা বা আজওয়া খেজুর চিবিয়ে এক গ্লাস কুসুম গরম দুধ পান করুন।",
+                "এক গ্লাস ডাবের পানি শরীরে প্রাকৃতিক ইলেক্ট্রোলাইট ভারসাম্য বজায় রাখে।",
+                "দিনের বেলা বাম কাত হয়ে অন্তত ৪০–৫০ মিনিট বিশ্রাম নিন।"
+            ),
+            cautionBn = "অতিরিক্ত ফ্যাকাশে ভাব হলে রক্তে হিমোগ্লোবিন পরীক্ষা করুন।"
+        ),
+        InstantHomeRemedy(
+            id = "remedy_dizziness",
+            symptomId = "dizziness",
+            emoji = "💫",
+            titleBn = "মাথা ঘোরা ও রক্তচাপ নিয়ন্ত্রণের উপায়",
+            remedyListBn = listOf(
+                "বসা বা শোয়া থেকে ওঠার সময় ধীরে ধীরে সময় নিয়ে উঠুন।",
+                "এক গ্লাস পানিতে আধা চা চামচ মধু ও এক চিমটি লবণ মিশিয়ে পান করুন।",
+                "পর্যাপ্ত পানি পান করুন (প্রতিদিন অন্তত আড়াই থেকে তিন লিটার)।"
+            ),
+            cautionBn = "মাথা ঘোরার সাথে চোখে ঝাপসা দেখলে প্রেসার মেপে ডাক্তার দেখান।"
+        ),
+        InstantHomeRemedy(
+            id = "remedy_back_pain",
+            symptomId = "back_pain",
+            emoji = "🦴",
+            titleBn = "কোমর ও পিঠের ব্যথায় আরাম পাওয়ার কৌশল",
+            remedyListBn = listOf(
+                "ঘুমানোর সময় দুই হাঁটুর মাঝে একটি নরম বালিশ রেখে বাম কাতে ঘুমান।",
+                "হালকা কুসুম গরম সরিষার তেল পিঠের নিচের দিকে মালিশ করুন।",
+                "নিচু হয়ে ভারী জিনিস তুলবেন না; হাঁটু ভেঙে সোজা হয়ে বসুন।"
+            ),
+            cautionBn = "ব্যথা তলপেট বা উরুর দিকে ছড়িয়ে পড়লে পর্যবেক্ষণ করুন।"
+        ),
+        InstantHomeRemedy(
+            id = "remedy_heartburn",
+            symptomId = "heartburn",
+            emoji = "🔥",
+            titleBn = "বুক জ্বালাপোড়া ও অ্যাসিডিটির সমাধান",
+            remedyListBn = listOf(
+                "১ গ্লাস ঠান্ডা দুধ ধীরে ধীরে চুমুক দিয়ে পান করুন; এটি পাকস্থলীর এসিড শান্ত করে।",
+                "খাবারের পর এক চিমটি মৌরি বা সবুজ এলাচ মুখে রেখে চিবান।",
+                "রাতে খাওয়ার অন্তত ২ ঘণ্টা পর মাথা ও বুক সামান্য উঁচু করে ঘুমান।"
+            ),
+            cautionBn = "ভাজাপোড়া, অতিরিক্ত ঝাল ও টক খাবার রাতের বেলা সম্পূর্ণ এড়িয়ে চলুন।"
+        ),
+        InstantHomeRemedy(
+            id = "remedy_cramps",
+            symptomId = "cramps",
+            emoji = "⚡",
+            titleBn = "তলপেটে টান ও পেশির খিঁচুনি দূরীকরণ",
+            remedyListBn = listOf(
+                "কুসুম গরম পানি দিয়ে গোসল করুন বা পায়ে হালকা গরম সেঁক দিন।",
+                "কলা ও বাদাম খান—এতে থাকা পটাশিয়াম ও ম্যাগনেশিয়াম পেশির টান কমায়।",
+                "পায়ের পাতা সামনের দিকে টেনে স্ট্রেচিং করুন।"
+            ),
+            cautionBn = "তলপেটে নিয়মিত বিরতিতে তীব্র সংকোচন বা রক্তপাত দেখা দিলে দ্রুত হাসপাতালে যান।"
+        )
+    )
 }

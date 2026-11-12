@@ -385,13 +385,45 @@ class UserPreferencesManager @Inject constructor(
     )
     val pregnancyStartMillis: StateFlow<Long> = _pregnancyStartMillis.asStateFlow()
 
+    private val _pregnancyPeriodEndMillis = MutableStateFlow(
+        prefs.getLong(KEY_PREGNANCY_PERIOD_END_MILLIS, 0L)
+    )
+    val pregnancyPeriodEndMillis: StateFlow<Long> = _pregnancyPeriodEndMillis.asStateFlow()
+
+    private val _pregnancyDeliveryMillis = MutableStateFlow(
+        prefs.getLong(KEY_PREGNANCY_DELIVERY_MILLIS, 0L)
+    )
+    val pregnancyDeliveryMillis: StateFlow<Long> = _pregnancyDeliveryMillis.asStateFlow()
+
+    private val _pregnancyDeliveryType = MutableStateFlow(
+        prefs.getString(KEY_PREGNANCY_DELIVERY_TYPE, DELIVERY_TYPE_NORMAL) ?: DELIVERY_TYPE_NORMAL
+    )
+    val pregnancyDeliveryType: StateFlow<String> = _pregnancyDeliveryType.asStateFlow()
+
+    private val _pregnancyBabyGender = MutableStateFlow(
+        prefs.getString(KEY_PREGNANCY_BABY_GENDER, BABY_GENDER_UNSPECIFIED) ?: BABY_GENDER_UNSPECIFIED
+    )
+    val pregnancyBabyGender: StateFlow<String> = _pregnancyBabyGender.asStateFlow()
+
+    private val _deliverySnoozeUntil = MutableStateFlow(
+        prefs.getLong(KEY_PREGNANCY_DELIVERY_SNOOZE, 0L)
+    )
+    val deliverySnoozeUntil: StateFlow<Long> = _deliverySnoozeUntil.asStateFlow()
+
+    private val _missedPeriodSnoozeUntil = MutableStateFlow(
+        prefs.getLong(KEY_PREGNANCY_MISSED_PERIOD_SNOOZE, 0L)
+    )
+    val missedPeriodSnoozeUntil: StateFlow<Long> = _missedPeriodSnoozeUntil.asStateFlow()
+
     private val _pregnancyCycleDays = MutableStateFlow(
-        prefs.getInt(KEY_PREGNANCY_CYCLE_DAYS, 28).coerceIn(22, 38)
+        prefs.getInt(KEY_PREGNANCY_CYCLE_DAYS, 28).coerceIn(18, 60)
     )
     val pregnancyCycleDays: StateFlow<Int> = _pregnancyCycleDays.asStateFlow()
 
     private val _pregnancySymptoms = MutableStateFlow<Set<String>>(
-        prefs.getStringSet(KEY_PREGNANCY_SYMPTOMS, setOf("normal"))?.toSet() ?: setOf("normal")
+        prefs.getStringSet(KEY_PREGNANCY_SYMPTOMS, setOf("normal"))?.toSet()?.let { raw ->
+            if ("normal" in raw && raw.size > 1) raw.filter { it != "normal" }.toSet() else raw.ifEmpty { setOf("normal") }
+        } ?: setOf("normal")
     )
     val pregnancySymptoms: StateFlow<Set<String>> = _pregnancySymptoms.asStateFlow()
 
@@ -420,8 +452,66 @@ class UserPreferencesManager @Inject constructor(
         prefs.edit().putLong(KEY_PREGNANCY_START_MILLIS, startMillis).apply()
     }
 
+    fun setPregnancyPeriodDates(startMillis: Long, endMillis: Long) {
+        _pregnancyStartMillis.value = startMillis
+        _pregnancyPeriodEndMillis.value = endMillis
+        prefs.edit()
+            .putLong(KEY_PREGNANCY_START_MILLIS, startMillis)
+            .putLong(KEY_PREGNANCY_PERIOD_END_MILLIS, endMillis)
+            .apply()
+    }
+
+    fun recordNewPeriodCycle(newStartMillis: Long, newEndMillis: Long) {
+        val previousStart = _pregnancyStartMillis.value
+        if (previousStart > 0 && newStartMillis > previousStart) {
+            val observedCycleDays = ((newStartMillis - previousStart) / 86_400_000L).toInt()
+            if (observedCycleDays in 18..60) {
+                // Update average cycle length dynamically
+                val currentCycle = _pregnancyCycleDays.value
+                val blendedCycle = ((currentCycle + observedCycleDays) / 2).coerceIn(18, 60)
+                _pregnancyCycleDays.value = blendedCycle
+                prefs.edit().putInt(KEY_PREGNANCY_CYCLE_DAYS, blendedCycle).apply()
+            }
+        }
+        setPregnancyPeriodDates(newStartMillis, newEndMillis)
+    }
+
+    fun snoozeMissedPeriodPrompt(days: Int = 2) {
+        val snoozeUntil = System.currentTimeMillis() + days * 86_400_000L
+        _missedPeriodSnoozeUntil.value = snoozeUntil
+        prefs.edit().putLong(KEY_PREGNANCY_MISSED_PERIOD_SNOOZE, snoozeUntil).apply()
+    }
+
+    fun snoozeDeliveryPrompt(days: Int = 3) {
+        val snoozeUntil = System.currentTimeMillis() + days * 86_400_000L
+        _deliverySnoozeUntil.value = snoozeUntil
+        prefs.edit().putLong(KEY_PREGNANCY_DELIVERY_SNOOZE, snoozeUntil).apply()
+    }
+
+    fun transitionToPregnancyMode() {
+        _pregnancyStageMode.value = STAGE_POST_CONCEPTION
+        prefs.edit().putString(KEY_PREGNANCY_STAGE_MODE, STAGE_POST_CONCEPTION).apply()
+    }
+
+    fun transitionToPostpartumMode(
+        deliveryMillis: Long,
+        deliveryType: String = DELIVERY_TYPE_NORMAL,
+        babyGender: String = BABY_GENDER_UNSPECIFIED
+    ) {
+        _pregnancyStageMode.value = STAGE_POSTPARTUM
+        _pregnancyDeliveryMillis.value = deliveryMillis
+        _pregnancyDeliveryType.value = deliveryType
+        _pregnancyBabyGender.value = babyGender
+        prefs.edit()
+            .putString(KEY_PREGNANCY_STAGE_MODE, STAGE_POSTPARTUM)
+            .putLong(KEY_PREGNANCY_DELIVERY_MILLIS, deliveryMillis)
+            .putString(KEY_PREGNANCY_DELIVERY_TYPE, deliveryType)
+            .putString(KEY_PREGNANCY_BABY_GENDER, babyGender)
+            .apply()
+    }
+
     fun setPregnancyCycleDays(days: Int) {
-        val safeDays = days.coerceIn(22, 38)
+        val safeDays = days.coerceIn(18, 60)
         _pregnancyCycleDays.value = safeDays
         prefs.edit().putInt(KEY_PREGNANCY_CYCLE_DAYS, safeDays).apply()
     }
@@ -452,13 +542,25 @@ class UserPreferencesManager @Inject constructor(
         stageMode: String,
         startMillis: Long,
         cycleDays: Int,
-        symptoms: Set<String>
+        symptoms: Set<String>,
+        periodEndMillis: Long = 0L,
+        deliveryMillis: Long = 0L,
+        deliveryType: String = DELIVERY_TYPE_NORMAL,
+        babyGender: String = BABY_GENDER_UNSPECIFIED
     ) {
-        val safeDays = cycleDays.coerceIn(22, 38)
-        val safeSymptoms = if (symptoms.isEmpty()) setOf("normal") else symptoms.toSet()
+        val safeDays = cycleDays.coerceIn(18, 60)
+        val safeSymptoms = when {
+            symptoms.isEmpty() -> setOf("normal")
+            "normal" in symptoms && symptoms.size > 1 -> symptoms.filter { it != "normal" }.toSet()
+            else -> symptoms.toSet()
+        }
         _pregnancyGender.value = gender
         _pregnancyStageMode.value = stageMode
         _pregnancyStartMillis.value = startMillis
+        _pregnancyPeriodEndMillis.value = periodEndMillis
+        _pregnancyDeliveryMillis.value = deliveryMillis
+        _pregnancyDeliveryType.value = deliveryType
+        _pregnancyBabyGender.value = babyGender
         _pregnancyCycleDays.value = safeDays
         _pregnancySymptoms.value = safeSymptoms
         _pregnancyOnboarded.value = true
@@ -467,6 +569,10 @@ class UserPreferencesManager @Inject constructor(
             .putString(KEY_PREGNANCY_GENDER, gender)
             .putString(KEY_PREGNANCY_STAGE_MODE, stageMode)
             .putLong(KEY_PREGNANCY_START_MILLIS, startMillis)
+            .putLong(KEY_PREGNANCY_PERIOD_END_MILLIS, periodEndMillis)
+            .putLong(KEY_PREGNANCY_DELIVERY_MILLIS, deliveryMillis)
+            .putString(KEY_PREGNANCY_DELIVERY_TYPE, deliveryType)
+            .putString(KEY_PREGNANCY_BABY_GENDER, babyGender)
             .putInt(KEY_PREGNANCY_CYCLE_DAYS, safeDays)
             .putStringSet(KEY_PREGNANCY_SYMPTOMS, safeSymptoms)
             .putBoolean(KEY_PREGNANCY_ONBOARDED, true)
@@ -535,12 +641,26 @@ class UserPreferencesManager @Inject constructor(
         private const val KEY_PREGNANCY_GENDER = "pregnancy_user_gender"
         private const val KEY_PREGNANCY_STAGE_MODE = "pregnancy_stage_mode"
         private const val KEY_PREGNANCY_START_MILLIS = "pregnancy_start_millis"
+        private const val KEY_PREGNANCY_PERIOD_END_MILLIS = "pregnancy_period_end_millis"
+        private const val KEY_PREGNANCY_DELIVERY_MILLIS = "pregnancy_delivery_millis"
+        private const val KEY_PREGNANCY_DELIVERY_TYPE = "pregnancy_delivery_type"
+        private const val KEY_PREGNANCY_BABY_GENDER = "pregnancy_baby_gender"
+        private const val KEY_PREGNANCY_DELIVERY_SNOOZE = "pregnancy_delivery_snooze_until"
+        private const val KEY_PREGNANCY_MISSED_PERIOD_SNOOZE = "pregnancy_missed_period_snooze_until"
         private const val KEY_PREGNANCY_CYCLE_DAYS = "pregnancy_cycle_days"
         private const val KEY_PREGNANCY_SYMPTOMS = "pregnancy_reported_symptoms"
         private const val KEY_PREGNANCY_CHECKS = "pregnancy_completed_checks"
+
         const val GENDER_MALE = "MALE"
         const val GENDER_FEMALE = "FEMALE"
         const val STAGE_PRE_CONCEPTION = "PRE"
         const val STAGE_POST_CONCEPTION = "POST"
+        const val STAGE_POSTPARTUM = "POSTPARTUM"
+
+        const val DELIVERY_TYPE_NORMAL = "NORMAL"
+        const val DELIVERY_TYPE_C_SECTION = "C_SECTION"
+        const val BABY_GENDER_BOY = "BOY"
+        const val BABY_GENDER_GIRL = "GIRL"
+        const val BABY_GENDER_UNSPECIFIED = "UNSPECIFIED"
     }
 }

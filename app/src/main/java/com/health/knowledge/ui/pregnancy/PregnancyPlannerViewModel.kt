@@ -47,6 +47,12 @@ class PregnancyPlannerViewModel @Inject constructor(
     val userGender: StateFlow<String> = prefsManager.pregnancyGender
     val stageMode: StateFlow<String> = prefsManager.pregnancyStageMode
     val pregnancyStartMillis: StateFlow<Long> = prefsManager.pregnancyStartMillis
+    val periodEndMillis: StateFlow<Long> = prefsManager.pregnancyPeriodEndMillis
+    val deliveryMillis: StateFlow<Long> = prefsManager.pregnancyDeliveryMillis
+    val deliveryType: StateFlow<String> = prefsManager.pregnancyDeliveryType
+    val babyGender: StateFlow<String> = prefsManager.pregnancyBabyGender
+    val deliverySnoozeUntil: StateFlow<Long> = prefsManager.deliverySnoozeUntil
+    val missedPeriodSnoozeUntil: StateFlow<Long> = prefsManager.missedPeriodSnoozeUntil
     val cycleDays: StateFlow<Int> = prefsManager.pregnancyCycleDays
     val selectedSymptoms: StateFlow<Set<String>> = prefsManager.pregnancySymptoms
     val completedChecks: StateFlow<Set<String>> = prefsManager.pregnancyCompletedChecks
@@ -259,15 +265,47 @@ class PregnancyPlannerViewModel @Inject constructor(
         stageMode: String,
         startMillis: Long,
         cycleDays: Int,
-        symptoms: Set<String>
+        symptoms: Set<String>,
+        periodEndMillis: Long = 0L,
+        deliveryMillis: Long = 0L,
+        deliveryType: String = UserPreferencesManager.DELIVERY_TYPE_NORMAL,
+        babyGender: String = UserPreferencesManager.BABY_GENDER_UNSPECIFIED
     ) {
         prefsManager.savePregnancyProfileSetup(
             gender = gender,
             stageMode = stageMode,
             startMillis = startMillis,
             cycleDays = cycleDays,
-            symptoms = symptoms
+            symptoms = symptoms,
+            periodEndMillis = periodEndMillis,
+            deliveryMillis = deliveryMillis,
+            deliveryType = deliveryType,
+            babyGender = babyGender
         )
+    }
+
+    fun updatePeriodDates(startMillis: Long, endMillis: Long) {
+        prefsManager.setPregnancyPeriodDates(startMillis, endMillis)
+    }
+
+    fun recordNewPeriodCycle(newStart: Long, newEnd: Long) {
+        prefsManager.recordNewPeriodCycle(newStart, newEnd)
+    }
+
+    fun confirmConception() {
+        prefsManager.transitionToPregnancyMode()
+    }
+
+    fun confirmDelivery(deliveryMillis: Long, deliveryType: String, babyGender: String) {
+        prefsManager.transitionToPostpartumMode(deliveryMillis, deliveryType, babyGender)
+    }
+
+    fun snoozeDeliveryPrompt(days: Int = 3) {
+        prefsManager.snoozeDeliveryPrompt(days)
+    }
+
+    fun snoozeMissedPeriodPrompt(days: Int = 2) {
+        prefsManager.snoozeMissedPeriodPrompt(days)
     }
 
     fun reopenOnboarding() {

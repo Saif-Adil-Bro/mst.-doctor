@@ -37,14 +37,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.health.knowledge.domain.model.Article
+import com.health.knowledge.habit.HabitDateAndReportEngine
 import com.health.knowledge.habit.HabitScheduleCalculator
-import com.health.knowledge.pregnancy.FertileWindowStatus
-import com.health.knowledge.pregnancy.IslamicPregnancyAmal
-import com.health.knowledge.pregnancy.PregnancyChecklistItem
-import com.health.knowledge.pregnancy.PregnancyPlannerEngine
-import com.health.knowledge.pregnancy.PregnancyQuote
-import com.health.knowledge.pregnancy.PregnancyReminderPreset
-import com.health.knowledge.pregnancy.PregnancyTimelineStatus
+import com.health.knowledge.pregnancy.*
 import com.health.knowledge.ui.detail.VerificationConsentDialog
 import com.health.knowledge.ui.home.AdminPasswordDialog
 import com.health.knowledge.ui.home.ArticleCard
@@ -69,8 +64,14 @@ fun PregnancyPlannerScreen(
     val userGender by viewModel.userGender.collectAsState()
     val stageMode by viewModel.stageMode.collectAsState()
     val startMillis by viewModel.pregnancyStartMillis.collectAsState()
+    val periodEndMillis by viewModel.periodEndMillis.collectAsState()
     val cycleDays by viewModel.cycleDays.collectAsState()
     val selectedSymptoms by viewModel.selectedSymptoms.collectAsState()
+    val deliveryMillis by viewModel.deliveryMillis.collectAsState()
+    val deliveryType by viewModel.deliveryType.collectAsState()
+    val babyGender by viewModel.babyGender.collectAsState()
+    val deliverySnoozeUntil by viewModel.deliverySnoozeUntil.collectAsState()
+    val missedPeriodSnoozeUntil by viewModel.missedPeriodSnoozeUntil.collectAsState()
     val completedChecks by viewModel.completedChecks.collectAsState()
     val allHabits by viewModel.allHabits.collectAsState()
     val quoteIndex by viewModel.quoteIndex.collectAsState()
@@ -83,6 +84,9 @@ fun PregnancyPlannerScreen(
     var lastTapTime by remember { mutableLongStateOf(0L) }
     var showPasswordDialog by remember { mutableStateOf(false) }
     var showAdminAddPostDialog by remember { mutableStateOf(false) }
+    var showPeriodUpdateDialog by remember { mutableStateOf(false) }
+    var showDeliveryDialog by remember { mutableStateOf(false) }
+    var showMissedPeriodDialog by remember { mutableStateOf(false) }
     var articleToVerify by remember { mutableStateOf<Article?>(null) }
     var articleToDelete by remember { mutableStateOf<Article?>(null) }
 
@@ -93,11 +97,36 @@ fun PregnancyPlannerScreen(
         )
     }
 
-    val fertileStatus = remember(startMillis, cycleDays) {
+    val fertileStatus = remember(startMillis, periodEndMillis, cycleDays) {
         PregnancyPlannerEngine.calculateFertileWindow(
             lastPeriodStartMillis = startMillis,
+            lastPeriodEndMillis = periodEndMillis,
             cycleDays = cycleDays
         )
+    }
+
+    val babyAgeStatus = remember(deliveryMillis, deliveryType, babyGender) {
+        PregnancyPlannerEngine.calculateBabyAge(
+            deliveryMillis = deliveryMillis,
+            deliveryType = deliveryType,
+            babyGender = babyGender
+        )
+    }
+
+    LaunchedEffect(fertileStatus.isNextPeriodDueOrMissed, missedPeriodSnoozeUntil, isOnboarded, stageMode) {
+        if (isOnboarded && stageMode == UserPreferencesManager.STAGE_PRE_CONCEPTION &&
+            fertileStatus.isNextPeriodDueOrMissed && System.currentTimeMillis() >= missedPeriodSnoozeUntil
+        ) {
+            showMissedPeriodDialog = true
+        }
+    }
+
+    LaunchedEffect(timelineStatus.isFullTerm, deliverySnoozeUntil, isOnboarded, stageMode) {
+        if (isOnboarded && stageMode == UserPreferencesManager.STAGE_POST_CONCEPTION &&
+            timelineStatus.isFullTerm && System.currentTimeMillis() >= deliverySnoozeUntil
+        ) {
+            showDeliveryDialog = true
+        }
     }
 
     var selectedWeekForGrowth by remember(timelineStatus.currentWeek) {
@@ -254,6 +283,103 @@ fun PregnancyPlannerScreen(
             cal.get(Calendar.MONTH),
             cal.get(Calendar.DAY_OF_MONTH)
         ).show()
+    }
+
+    fun openDeliveryDatePicker() {
+        val cal = Calendar.getInstance().apply {
+            timeInMillis = if (deliveryMillis > 0L) deliveryMillis else System.currentTimeMillis()
+        }
+        DatePickerDialog(
+            context,
+            { _, year, month, dayOfMonth ->
+                val picked = Calendar.getInstance().apply {
+                    set(year, month, dayOfMonth, 0, 0, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }.timeInMillis
+                viewModel.confirmDelivery(picked, deliveryType, babyGender)
+                Toast.makeText(context, "✅ সন্তান জন্মের তারিখ আপডেট হয়েছে", Toast.LENGTH_SHORT).show()
+            },
+            cal.get(Calendar.YEAR),
+            cal.get(Calendar.MONTH),
+            cal.get(Calendar.DAY_OF_MONTH)
+        ).show()
+    }
+
+    if (showPeriodUpdateDialog) {
+        PeriodStartEndUpdateDialog(
+            initialStartMillis = startMillis,
+            initialEndMillis = periodEndMillis,
+            onDismiss = { showPeriodUpdateDialog = false },
+            onSave = { sMillis, eMillis ->
+                viewModel.recordNewPeriodCycle(sMillis, eMillis)
+                showPeriodUpdateDialog = false
+                Toast.makeText(context, "✅ মাসিকের তথ্য সংরক্ষিত হয়েছে", Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
+
+    if (showDeliveryDialog) {
+        DeliveryConfirmationDialog(
+            initialDeliveryMillis = if (deliveryMillis > 0L) deliveryMillis else System.currentTimeMillis(),
+            initialDeliveryType = deliveryType,
+            initialBabyGender = babyGender,
+            onDismiss = { showDeliveryDialog = false },
+            onConfirm = { dMillis, dType, bGender ->
+                viewModel.confirmDelivery(dMillis, dType, bGender)
+                showDeliveryDialog = false
+                Toast.makeText(context, "👶 মা ও নবজাতক ড্যাশবোর্ড সক্রিয় হয়েছে!", Toast.LENGTH_SHORT).show()
+            },
+            onSnooze = {
+                viewModel.snoozeDeliveryPrompt(days = 2)
+                showDeliveryDialog = false
+            }
+        )
+    }
+
+    if (showMissedPeriodDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                viewModel.snoozeMissedPeriodPrompt(days = 2)
+                showMissedPeriodDialog = false
+            },
+            title = {
+                Text(
+                    text = "🩸 সম্ভাব্য মাসিকের সময় অতিক্রম",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = "আপনার মাসিকের সম্ভাব্য সময় চলে এসেছে। আপনার কি নতুন মাসিক শুরু হয়েছে, নাকি আপনি কনসিভ করেছেন?",
+                    style = MaterialTheme.typography.bodyMedium,
+                    lineHeight = 20.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showMissedPeriodDialog = false
+                        viewModel.confirmConception()
+                        Toast.makeText(context, "🤰 আলহামদুলিল্লাহ! গর্ভকালীন মোডে স্বাগত।", Toast.LENGTH_SHORT).show()
+                    },
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("আলহামদুলিল্লাহ, কনসিভ করেছি 🤰", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = {
+                        showMissedPeriodDialog = false
+                        showPeriodUpdateDialog = true
+                    },
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("নতুন মাসিক শুরু হয়েছে 🩸", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+            }
+        )
     }
 
     Scaffold(
@@ -434,15 +560,23 @@ fun PregnancyPlannerScreen(
                     initialGender = userGender,
                     initialStageMode = stageMode,
                     initialStartMillis = startMillis,
+                    initialPeriodEndMillis = periodEndMillis,
                     initialCycleDays = cycleDays,
                     initialSymptoms = selectedSymptoms,
-                    onCompleteSetup = { gender, stage, lmpMillis, cycle, symptoms ->
+                    initialDeliveryMillis = deliveryMillis,
+                    initialDeliveryType = deliveryType,
+                    initialBabyGender = babyGender,
+                    onCompleteSetup = { gender, stage, lmpMillis, cycle, symptoms, pEndMillis, dMillis, dType, bGender ->
                         viewModel.completeOnboarding(
                             gender = gender,
                             stageMode = stage,
                             startMillis = lmpMillis,
                             cycleDays = cycle,
-                            symptoms = symptoms
+                            symptoms = symptoms,
+                            periodEndMillis = pEndMillis,
+                            deliveryMillis = dMillis,
+                            deliveryType = dType,
+                            babyGender = bGender
                         )
                         Toast.makeText(context, "✅ আপনার প্রোফাইল প্রস্তুত হয়েছে!", Toast.LENGTH_SHORT).show()
                     },
@@ -480,9 +614,9 @@ fun PregnancyPlannerScreen(
                 )
             }
 
-            stageMode == UserPreferencesManager.STAGE_PRE_CONCEPTION -> {
-                PreConceptionStageContent(
-                    fertileStatus = fertileStatus,
+            stageMode == UserPreferencesManager.STAGE_POSTPARTUM -> {
+                PostpartumBabyCareStageContent(
+                    babyAgeStatus = babyAgeStatus,
                     selectedSymptoms = selectedSymptoms,
                     quote = currentQuote,
                     completedChecks = completedChecks,
@@ -490,7 +624,7 @@ fun PregnancyPlannerScreen(
                     pregnancyPosts = pregnancyArticles,
                     isAdminMode = isAdminMode,
                     isRefreshingPosts = isRefreshingPosts,
-                    onPickLastPeriodDate = ::openStartDatePicker,
+                    onEditDeliveryDate = { showDeliveryDialog = true },
                     onToggleSymptom = viewModel::toggleSymptom,
                     onNextQuote = viewModel::nextQuote,
                     onSpeakText = viewModel::speakBengaliPrompt,
@@ -501,9 +635,47 @@ fun PregnancyPlannerScreen(
                             Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                         }
                     },
-                    onSwitchToPostConception = {
+                    onReturnToPregnancy = {
                         viewModel.setStageMode(UserPreferencesManager.STAGE_POST_CONCEPTION)
                     },
+                    onRefreshPosts = viewModel::syncPregnancyPostsFromFirestore,
+                    onArticleClick = onArticleClick,
+                    onBookmarkToggle = viewModel::toggleBookmark,
+                    onReactionClick = viewModel::reactToArticle,
+                    onVerifyClick = { articleToVerify = it },
+                    onPinToggle = viewModel::togglePinArticle,
+                    onDeleteClick = { articleToDelete = it },
+                    onOpenAdminPostDialog = { showAdminAddPostDialog = true },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues)
+                )
+            }
+
+            stageMode == UserPreferencesManager.STAGE_PRE_CONCEPTION -> {
+                PreConceptionStageContent(
+                    fertileStatus = fertileStatus,
+                    selectedCycleDays = cycleDays,
+                    onCycleDaysChanged = viewModel::updateCycleDays,
+                    selectedSymptoms = selectedSymptoms,
+                    quote = currentQuote,
+                    completedChecks = completedChecks,
+                    activeHabitIds = activeHabitIds,
+                    pregnancyPosts = pregnancyArticles,
+                    isAdminMode = isAdminMode,
+                    isRefreshingPosts = isRefreshingPosts,
+                    onOpenPeriodUpdateDialog = { showPeriodUpdateDialog = true },
+                    onToggleSymptom = viewModel::toggleSymptom,
+                    onNextQuote = viewModel::nextQuote,
+                    onSpeakText = viewModel::speakBengaliPrompt,
+                    onToggleCheck = viewModel::toggleCheckItem,
+                    onToggleReminderPreset = { preset ->
+                        viewModel.togglePregnancyReminderPreset(preset) { isNowActive ->
+                            val msg = if (isNowActive) "✅ অ্যালার্ম চালু হয়েছে!" else "🔕 অ্যালার্ম বন্ধ করা হয়েছে"
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    onSwitchToPostConception = viewModel::confirmConception,
                     onRefreshPosts = viewModel::syncPregnancyPostsFromFirestore,
                     onArticleClick = onArticleClick,
                     onBookmarkToggle = viewModel::toggleBookmark,
@@ -521,6 +693,8 @@ fun PregnancyPlannerScreen(
             else -> {
                 PostConceptionStageContent(
                     timelineStatus = timelineStatus,
+                    selectedCycleDays = cycleDays,
+                    onCycleDaysChanged = viewModel::updateCycleDays,
                     selectedSymptoms = selectedSymptoms,
                     selectedWeek = selectedWeekForGrowth,
                     onSelectWeek = { selectedWeekForGrowth = it.coerceIn(1, 40) },
@@ -534,6 +708,7 @@ fun PregnancyPlannerScreen(
                     isRefreshingPosts = isRefreshingPosts,
                     onPickStartDate = ::openStartDatePicker,
                     onPickEddDate = ::openEddDatePicker,
+                    onConfirmDeliveryClick = { showDeliveryDialog = true },
                     onToggleSymptom = viewModel::toggleSymptom,
                     onNextQuote = viewModel::nextQuote,
                     onSpeakText = viewModel::speakBengaliPrompt,
@@ -568,6 +743,8 @@ fun PregnancyPlannerScreen(
 @Composable
 private fun PreConceptionStageContent(
     fertileStatus: FertileWindowStatus,
+    selectedCycleDays: Int,
+    onCycleDaysChanged: (Int) -> Unit,
     selectedSymptoms: Set<String>,
     quote: PregnancyQuote,
     completedChecks: Set<String>,
@@ -575,7 +752,7 @@ private fun PreConceptionStageContent(
     pregnancyPosts: List<Article>,
     isAdminMode: Boolean,
     isRefreshingPosts: Boolean,
-    onPickLastPeriodDate: () -> Unit,
+    onOpenPeriodUpdateDialog: () -> Unit,
     onToggleSymptom: (String) -> Unit,
     onNextQuote: () -> Unit,
     onSpeakText: (String) -> Unit,
@@ -609,12 +786,75 @@ private fun PreConceptionStageContent(
                 fertileStatus = fertileStatus,
                 doneCount = doneCount,
                 totalCount = preChecklist.size,
-                onPickLastPeriodDate = onPickLastPeriodDate,
+                onOpenPeriodUpdateDialog = onOpenPeriodUpdateDialog,
                 onSwitchToPostConception = onSwitchToPostConception
             )
         }
 
-        // 2. Symptom Report & Personalized Advice Card
+        // 2. Missed Period / Due Interactive Card
+        if (fertileStatus.isNextPeriodDueOrMissed) {
+            item(key = "pre_missed_period_card") {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.45f).solidOverSurface()
+                    ),
+                    border = onePxBorder(MaterialTheme.colorScheme.tertiary)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "🩸 আপনার মাসিকের সম্ভাব্য সময় চলে এসেছে",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "আপনার কি নতুন মাসিক শুরু হয়েছে, নাকি আপনি কনসিভ করেছেন?",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = onSwitchToPostConception,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("কনসিভ করেছি 🤰", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                            OutlinedButton(
+                                onClick = onOpenPeriodUpdateDialog,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("নতুন মাসিক 🩸", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Cycle Days Selector (Presets + Stepper 18..60)
+        item(key = "pre_cycle_days_selector") {
+            CycleDaysSelector(
+                selectedCycleDays = selectedCycleDays,
+                onCycleDaysChanged = onCycleDaysChanged
+            )
+        }
+
+        // 4. Instant Home Remedies (matching symptoms)
+        item(key = "pre_instant_remedies") {
+            InstantHomeRemediesCard(
+                selectedSymptoms = selectedSymptoms,
+                onSpeakRemedy = onSpeakText
+            )
+        }
+
+        // 5. Symptom Report & Personalized Advice Card
         item(key = "pre_symptom_advice_card") {
             SymptomAdviceSectionCard(
                 selectedSymptoms = selectedSymptoms,
@@ -623,7 +863,23 @@ private fun PreConceptionStageContent(
             )
         }
 
-        // 3. Emotional & Spiritual Quote Card
+        // 6. Husband's Corner (Pre-Conception)
+        item(key = "pre_husband_corner") {
+            HusbandsCornerCard(
+                stageTag = "PRE",
+                onSpeakTip = onSpeakText
+            )
+        }
+
+        // 7. Safety & Caution Warnings (Pre-Conception)
+        item(key = "pre_safety_warnings") {
+            SafetyAndRedFlagsCard(
+                stageTag = "PRE",
+                onSpeakWarning = onSpeakText
+            )
+        }
+
+        // 8. Emotional & Spiritual Quote Card
         item(key = "pre_quote_card") {
             PregnancyQuoteCard(
                 quote = quote,
@@ -632,7 +888,7 @@ private fun PreConceptionStageContent(
             )
         }
 
-        // 4. Pre-Conception Checklist Header & Items
+        // 9. Pre-Conception Checklist Header & Items
         item(key = "pre_checklist_header") {
             Text(
                 text = "✅ সন্তান নেওয়ার আগে করণীয়",
@@ -651,7 +907,7 @@ private fun PreConceptionStageContent(
             )
         }
 
-        // 5. Pre-Conception Islamic Duas
+        // 10. Pre-Conception Islamic Duas
         item(key = "pre_duas_header") {
             Spacer(Modifier.height(4.dp))
             Text(
@@ -671,7 +927,7 @@ private fun PreConceptionStageContent(
             )
         }
 
-        // 6. Pre-Conception Reminders
+        // 11. Pre-Conception Reminders
         item(key = "pre_reminders_header") {
             Spacer(Modifier.height(4.dp))
             Text(
@@ -690,7 +946,7 @@ private fun PreConceptionStageContent(
             )
         }
 
-        // 7. Firestore-Synced Pregnancy Posts Section (Admin-Only Post Creation)
+        // 12. Firestore-Synced Pregnancy Posts Section
         item(key = "pre_firestore_posts_header") {
             Spacer(Modifier.height(6.dp))
             PregnancyPostsHeaderBar(
@@ -731,6 +987,11 @@ private fun PreConceptionStageContent(
                 )
             }
         }
+
+        // Medical Disclaimer Footer
+        item(key = "pre_disclaimer") {
+            PregnancyMedicalDisclaimerFooter()
+        }
     }
 }
 
@@ -739,7 +1000,7 @@ private fun FertileWindowHeroCard(
     fertileStatus: FertileWindowStatus,
     doneCount: Int,
     totalCount: Int,
-    onPickLastPeriodDate: () -> Unit,
+    onOpenPeriodUpdateDialog: () -> Unit,
     onSwitchToPostConception: () -> Unit
 ) {
     Card(
@@ -802,7 +1063,7 @@ private fun FertileWindowHeroCard(
             ) {
                 Column(
                     modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    verticalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
                     Text(
                         text = "🎯 সম্ভাব্য উর্বর সময়: ${fertileStatus.fertileStartFormattedBn} – ${fertileStatus.fertileEndFormattedBn}",
@@ -813,13 +1074,37 @@ private fun FertileWindowHeroCard(
                     Text(
                         text = "সম্ভাব্য ওভুলেশন: ${fertileStatus.ovulationDateFormattedBn}",
                         style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "শেষ মাসিক: ${fertileStatus.lastPeriodFormattedBn} • চক্র: ${HabitScheduleCalculator.toBengaliDigits(fertileStatus.cycleDays.toString())} দিন (আজ ${HabitScheduleCalculator.toBengaliDigits(fertileStatus.currentCycleDay.toString())}তম দিন)",
+                        text = "পরবর্তী মাসিকের সম্ভাব্য তারিখ: ${fertileStatus.nextPeriodFormattedBn}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "মাসিক শুরু: ${fertileStatus.lastPeriodFormattedBn}" +
+                            (if (fertileStatus.lastPeriodEndFormattedBn.isNotEmpty()) " • শেষ: ${fertileStatus.lastPeriodEndFormattedBn} (${HabitScheduleCalculator.toBengaliDigits(fertileStatus.periodDurationDays.toString())} দিন)" else "") +
+                            " • চক্র: ${HabitScheduleCalculator.toBengaliDigits(fertileStatus.cycleDays.toString())} দিন (আজ ${HabitScheduleCalculator.toBengaliDigits(fertileStatus.currentCycleDay.toString())}তম দিন)",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+
+                    if (fertileStatus.periodDurationNoticeBn.isNotEmpty()) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.4f),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = fertileStatus.periodDurationNoticeBn,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                modifier = Modifier.padding(8.dp),
+                                lineHeight = 16.sp
+                            )
+                        }
+                    }
                 }
             }
 
@@ -828,21 +1113,21 @@ private fun FertileWindowHeroCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 OutlinedButton(
-                    onClick = onPickLastPeriodDate,
+                    onClick = onOpenPeriodUpdateDialog,
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(10.dp),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 7.dp)
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 7.dp)
                 ) {
-                    Text("মাসিকের তারিখ", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("🩸 মাসিক শুরু/শেষ", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
 
                 Button(
                     onClick = onSwitchToPostConception,
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(10.dp),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 7.dp)
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 7.dp)
                 ) {
-                    Text("গর্ভবতী হয়েছি", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("কনসিভ করেছি 🤰", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -855,6 +1140,8 @@ private fun FertileWindowHeroCard(
 @Composable
 private fun PostConceptionStageContent(
     timelineStatus: PregnancyTimelineStatus,
+    selectedCycleDays: Int,
+    onCycleDaysChanged: (Int) -> Unit,
     selectedSymptoms: Set<String>,
     selectedWeek: Int,
     onSelectWeek: (Int) -> Unit,
@@ -868,6 +1155,7 @@ private fun PostConceptionStageContent(
     isRefreshingPosts: Boolean,
     onPickStartDate: () -> Unit,
     onPickEddDate: () -> Unit,
+    onConfirmDeliveryClick: () -> Unit,
     onToggleSymptom: (String) -> Unit,
     onNextQuote: () -> Unit,
     onSpeakText: (String) -> Unit,
@@ -911,11 +1199,44 @@ private fun PostConceptionStageContent(
             PregnancyCountdownHeroCard(
                 status = timelineStatus,
                 onPickStartDate = onPickStartDate,
-                onPickEddDate = onPickEddDate
+                onPickEddDate = onPickEddDate,
+                onConfirmDelivery = onConfirmDeliveryClick
             )
         }
 
-        // 2. Interactive Symptom Report & Personalized Care Card
+        // 2. Cycle Days Selector (Presets + Stepper 18..60)
+        item(key = "post_cycle_days_selector") {
+            CycleDaysSelector(
+                selectedCycleDays = selectedCycleDays,
+                onCycleDaysChanged = onCycleDaysChanged
+            )
+        }
+
+        // 3. Instant Home Remedies (matching symptoms)
+        item(key = "post_instant_remedies") {
+            InstantHomeRemediesCard(
+                selectedSymptoms = selectedSymptoms,
+                onSpeakRemedy = onSpeakText
+            )
+        }
+
+        // 4. Husband's Corner (Pregnancy Support)
+        item(key = "post_husband_corner") {
+            HusbandsCornerCard(
+                stageTag = "PREGNANT",
+                onSpeakTip = onSpeakText
+            )
+        }
+
+        // 5. Safety & Caution Warnings (Pregnancy Red Flags & Foods to avoid)
+        item(key = "post_safety_warnings") {
+            SafetyAndRedFlagsCard(
+                stageTag = "PREGNANT",
+                onSpeakWarning = onSpeakText
+            )
+        }
+
+        // 6. Interactive Symptom Report & Personalized Care Card
         item(key = "post_symptom_advice_card") {
             SymptomAdviceSectionCard(
                 selectedSymptoms = selectedSymptoms,
@@ -924,7 +1245,7 @@ private fun PostConceptionStageContent(
             )
         }
 
-        // 3. Heartwarming Emotional & Spiritual Quote Card
+        // 7. Heartwarming Emotional & Spiritual Quote Card
         item(key = "post_quote_card") {
             PregnancyQuoteCard(
                 quote = quote,
@@ -1227,6 +1548,1176 @@ private fun PostConceptionStageContent(
                             onVerifyClick = { onVerifyClick(article) },
                             onPinToggle = { onPinToggle(article) },
                             onDeleteClick = { onDeleteClick(article) }
+                        )
+                    }
+                }
+            }
+        }
+
+        item(key = "post_disclaimer") {
+            PregnancyMedicalDisclaimerFooter()
+        }
+    }
+}
+
+@Composable
+private fun PostpartumBabyCareStageContent(
+    babyAgeStatus: BabyAgeStatus,
+    selectedSymptoms: Set<String>,
+    quote: PregnancyQuote,
+    completedChecks: Set<String>,
+    activeHabitIds: Set<String>,
+    pregnancyPosts: List<Article>,
+    isAdminMode: Boolean,
+    isRefreshingPosts: Boolean,
+    onEditDeliveryDate: () -> Unit,
+    onToggleSymptom: (String) -> Unit,
+    onNextQuote: () -> Unit,
+    onSpeakText: (String) -> Unit,
+    onToggleCheck: (String) -> Unit,
+    onToggleReminderPreset: (PregnancyReminderPreset) -> Unit,
+    onReturnToPregnancy: () -> Unit,
+    onRefreshPosts: () -> Unit,
+    onArticleClick: (Int) -> Unit,
+    onBookmarkToggle: (Int, Boolean) -> Unit,
+    onReactionClick: (Article) -> Unit,
+    onVerifyClick: (Article) -> Unit,
+    onPinToggle: (Article) -> Unit,
+    onDeleteClick: (Article) -> Unit,
+    onOpenAdminPostDialog: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var postpartumSubTab by remember { mutableIntStateOf(0) }
+    var babyCareCategoryFilter by remember { mutableStateOf("ALL") }
+
+    val filteredBabyCareItems = remember(babyCareCategoryFilter) {
+        if (babyCareCategoryFilter == "ALL") {
+            PregnancyPlannerEngine.postpartumBabyCareCatalog
+        } else {
+            PregnancyPlannerEngine.postpartumBabyCareCatalog.filter { it.category == babyCareCategoryFilter }
+        }
+    }
+
+    LazyColumn(
+        modifier = modifier,
+        contentPadding = PaddingValues(bottom = 84.dp, top = 16.dp, start = 16.dp, end = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // 1. Postpartum & Baby Age Hero Card
+        item(key = "postpartum_hero") {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("postpartum_hero_card"),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.38f).solidOverSurface()
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.42f))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                            modifier = Modifier.size(52.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = if (babyAgeStatus.babyGenderTextBn.contains("কন্যা")) "👧" else if (babyAgeStatus.babyGenderTextBn.contains("পুত্র")) "👦" else "👶",
+                                    fontSize = 28.sp
+                                )
+                            }
+                        }
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                    shape = RoundedCornerShape(50)
+                                ) {
+                                    Text(
+                                        text = babyAgeStatus.stageLabelBn,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                    )
+                                }
+                                Surface(
+                                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                                    shape = RoundedCornerShape(50)
+                                ) {
+                                    Text(
+                                        text = babyAgeStatus.babyGenderTextBn,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = "বাবুর বয়স: ${babyAgeStatus.ageTextBn}",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "প্রসব পদ্ধতি: ${babyAgeStatus.deliveryTypeTextBn}",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedButton(
+                            onClick = onEditDeliveryDate,
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Icon(Icons.Default.EditCalendar, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("প্রসবের তারিখ পরিবর্তন", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        TextButton(
+                            onClick = onReturnToPregnancy,
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "গর্ভকালীন মোডে ফিরুন",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Instant Home Remedies (matching symptoms)
+        item(key = "postpartum_instant_remedies") {
+            InstantHomeRemediesCard(
+                selectedSymptoms = selectedSymptoms,
+                onSpeakRemedy = onSpeakText
+            )
+        }
+
+        // 3. Husband's Corner (Postpartum Mother & Baby Support)
+        item(key = "postpartum_husband_corner") {
+            HusbandsCornerCard(
+                stageTag = "POSTPARTUM",
+                onSpeakTip = onSpeakText
+            )
+        }
+
+        // 4. Safety & Red-Flag Box
+        item(key = "postpartum_safety_warnings") {
+            SafetyAndRedFlagsCard(
+                stageTag = "POSTPARTUM",
+                onSpeakWarning = onSpeakText
+            )
+        }
+
+        // 5. Physical Symptoms Advice Card
+        item(key = "postpartum_symptoms_card") {
+            SymptomAdviceSectionCard(
+                selectedSymptoms = selectedSymptoms,
+                onToggleSymptom = onToggleSymptom,
+                onSpeakAdvice = onSpeakText
+            )
+        }
+
+        // 6. Emotional / Quranic Quote Card
+        item(key = "postpartum_quote_card") {
+            PregnancyQuoteCard(
+                quote = quote,
+                onNextQuote = onNextQuote,
+                onSpeakQuote = { onSpeakText(quote.quoteBn) }
+            )
+        }
+
+        // 7. Sub-Tabs: 👶 শিশুর যত্ন | 🌸 মায়ের সুস্থতা | 🤝 বাবার ভূমিকা | 🚨 বিপদচিহ্ন | 🤲 সুন্নাহ | 📝 পোস্ট
+        item(key = "postpartum_sub_tabs") {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf(
+                    0 to "👶 শিশুর যত্ন",
+                    1 to "🌸 মায়ের সুস্থতা",
+                    2 to "🤝 বাবার ভূমিকা",
+                    3 to "🚨 বিপদচিহ্ন",
+                    4 to "🤲 সুন্নাহ",
+                    5 to "📝 পোস্ট (${HabitScheduleCalculator.toBengaliDigits(pregnancyPosts.size.toString())})"
+                ).forEach { (idx, label) ->
+                    FilterChip(
+                        selected = postpartumSubTab == idx,
+                        onClick = { postpartumSubTab = idx },
+                        label = {
+                            Text(
+                                text = label,
+                                fontSize = 12.sp,
+                                fontWeight = if (postpartumSubTab == idx) FontWeight.Bold else FontWeight.Medium
+                            )
+                        }
+                    )
+                }
+            }
+        }
+
+        when (postpartumSubTab) {
+            0 -> {
+                // Newborn Baby Care Guidelines
+                item(key = "baby_care_categories") {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf(
+                            "ALL" to "সব টিপস",
+                            "BREASTFEEDING" to "🍼 শালদুধ ও বুকের দুধ",
+                            "CORD_CARE" to "🌿 নাভি ও ত্বক",
+                            "MASSAGE" to "🧴 তেল মালিশ",
+                            "SLEEP_ROUTINE" to "😴 ঘুমের রুটিন",
+                            "COLIC_GAS" to "💨 পেট ফাঁপা ও গ্যাস",
+                            "BURPING" to "🫧 ঢেকুর তোলানো",
+                            "DEVELOPMENT" to "🎯 মাইলফলক"
+                        ).forEach { (catKey, catLabel) ->
+                            FilterChip(
+                                selected = babyCareCategoryFilter == catKey,
+                                onClick = { babyCareCategoryFilter = catKey },
+                                label = { Text(catLabel, fontSize = 11.sp, fontWeight = FontWeight.SemiBold) }
+                            )
+                        }
+                    }
+                }
+
+                items(filteredBabyCareItems, key = { "baby_care_${it.id}" }) { item ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f).solidOverSurface()
+                        ),
+                        border = onePxBorder(MaterialTheme.colorScheme.outlineVariant)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(item.icon, fontSize = 20.sp)
+                                    Text(
+                                        text = item.titleBn,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { onSpeakText("${item.titleBn}। ${item.descBn}। টিপস: ${item.tipBn}") },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(Icons.Default.VolumeUp, contentDescription = "শুনুন", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                            Text(
+                                text = item.descBn,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                lineHeight = 18.sp
+                            )
+                            Surface(
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("💡", fontSize = 13.sp)
+                                    Text(
+                                        text = item.tipBn,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            1 -> {
+                // Postpartum Mother Care & Galactagogues
+                item(key = "mother_care_header") {
+                    Text(
+                        text = "🌸 প্রসব পরবর্তী মায়ের পুনরুদ্ধার ও দুগ্ধ বৃদ্ধিকারী পথ্য",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                items(PregnancyPlannerEngine.postpartumMotherCareCatalog, key = { "mother_care_${it.id}" }) { item ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f).solidOverSurface()
+                        ),
+                        border = onePxBorder(MaterialTheme.colorScheme.outlineVariant)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(item.icon, fontSize = 20.sp)
+                                    Text(
+                                        text = item.titleBn,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { onSpeakText("${item.titleBn}। ${item.descBn}। নির্দেশিকা: ${item.foodsOrGuidanceBn}") },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(Icons.Default.VolumeUp, contentDescription = "শুনুন", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                            Text(
+                                text = item.descBn,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                lineHeight = 18.sp
+                            )
+                            Surface(
+                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("🌿", fontSize = 13.sp)
+                                    Text(
+                                        text = item.foodsOrGuidanceBn,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            2 -> {
+                item(key = "postpartum_father_tab") {
+                    HusbandsCornerCard(stageTag = "POSTPARTUM", onSpeakTip = onSpeakText)
+                }
+            }
+
+            3 -> {
+                item(key = "postpartum_redflag_tab") {
+                    SafetyAndRedFlagsCard(stageTag = "POSTPARTUM", onSpeakWarning = onSpeakText)
+                }
+            }
+
+            4 -> {
+                items(PregnancyPlannerEngine.newbornSunnahChecklist, key = { "sunnah_${it.id}" }) { item ->
+                    PregnancyChecklistRowCard(
+                        item = item,
+                        isChecked = item.id in completedChecks,
+                        isDontItem = false,
+                        onToggle = { onToggleCheck(item.id) }
+                    )
+                }
+            }
+
+            5 -> {
+                item(key = "postpartum_posts_header") {
+                    PregnancyPostsHeaderBar(
+                        totalCount = pregnancyPosts.size,
+                        isAdminMode = isAdminMode,
+                        isRefreshing = isRefreshingPosts,
+                        onRefresh = onRefreshPosts,
+                        onOpenAdminPostDialog = onOpenAdminPostDialog
+                    )
+                }
+
+                if (pregnancyPosts.isEmpty()) {
+                    item(key = "empty_postpartum_posts") {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            border = onePxBorder(MaterialTheme.colorScheme.outlineVariant)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text("📝", fontSize = 32.sp)
+                                Text(
+                                    text = "এই বিভাগে এখনো কোনো পোস্ট যুক্ত করা হয়নি।",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center
+                                )
+                                if (isAdminMode) {
+                                    Button(onClick = onOpenAdminPostDialog, shape = RoundedCornerShape(10.dp)) {
+                                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("প্রথম পোস্ট প্রকাশ করুন")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    items(pregnancyPosts, key = { "postpartum_post_${it.id}" }) { article ->
+                        ArticleCard(
+                            article = article,
+                            isAdminMode = isAdminMode,
+                            onClick = { onArticleClick(article.id) },
+                            onBookmarkToggle = { onBookmarkToggle(article.id, article.isBookmarked) },
+                            onReactionClick = { onReactionClick(article) },
+                            onVerifyClick = { onVerifyClick(article) },
+                            onPinToggle = { onPinToggle(article) },
+                            onDeleteClick = { onDeleteClick(article) }
+                        )
+                    }
+                }
+            }
+        }
+
+        item(key = "postpartum_disclaimer") {
+            PregnancyMedicalDisclaimerFooter()
+        }
+    }
+}
+
+@Composable
+private fun PeriodStartEndUpdateDialog(
+    initialStartMillis: Long,
+    initialEndMillis: Long,
+    onDismiss: () -> Unit,
+    onSave: (Long, Long) -> Unit
+) {
+    val context = LocalContext.current
+    var startMillis by remember {
+        mutableLongStateOf(if (initialStartMillis > 0L) initialStartMillis else System.currentTimeMillis())
+    }
+    var endMillis by remember {
+        mutableLongStateOf(initialEndMillis)
+    }
+
+    val durationDays = remember(startMillis, endMillis) {
+        if (startMillis > 0L && endMillis >= startMillis) {
+            ((endMillis - startMillis) / (1000L * 60 * 60 * 24)).toInt() + 1
+        } else {
+            0
+        }
+    }
+
+    val openStartDatePicker = {
+        val cal = Calendar.getInstance().apply {
+            if (startMillis > 0L) timeInMillis = startMillis
+        }
+        DatePickerDialog(
+            context,
+            { _, year, month, dayOfMonth ->
+                val picked = Calendar.getInstance().apply {
+                    set(year, month, dayOfMonth, 0, 0, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }.timeInMillis
+                startMillis = picked
+                if (endMillis > 0L && endMillis < picked) {
+                    endMillis = picked
+                }
+            },
+            cal.get(Calendar.YEAR),
+            cal.get(Calendar.MONTH),
+            cal.get(Calendar.DAY_OF_MONTH)
+        ).show()
+    }
+
+    val openEndDatePicker = {
+        val cal = Calendar.getInstance().apply {
+            if (endMillis > 0L) timeInMillis = endMillis else timeInMillis = startMillis
+        }
+        DatePickerDialog(
+            context,
+            { _, year, month, dayOfMonth ->
+                val picked = Calendar.getInstance().apply {
+                    set(year, month, dayOfMonth, 0, 0, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }.timeInMillis
+                if (picked >= startMillis) {
+                    endMillis = picked
+                } else {
+                    Toast.makeText(context, "শেষের তারিখ শুরুর তারিখের পরে হতে হবে", Toast.LENGTH_SHORT).show()
+                }
+            },
+            cal.get(Calendar.YEAR),
+            cal.get(Calendar.MONTH),
+            cal.get(Calendar.DAY_OF_MONTH)
+        ).show()
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "🩸 নতুন মাসিক শুরু ও শেষ আপডেট",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "মাসিক শুরুর তারিখ এবং শেষ হওয়ার তারিখ নির্বাচন করুন। এতে আপনার পরবর্তী সম্ভাব্য তারিখ ও উর্বর দিন স্বয়ংক্রিয়ভাবে হিসাব হবে।",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                OutlinedCard(
+                    onClick = openStartDatePicker,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text("মাসিক শুরুর তারিখ (LMP)", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = HabitDateAndReportEngine.formatFullDateBn(startMillis),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    }
+                }
+
+                OutlinedCard(
+                    onClick = openEndDatePicker,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text("মাসিক শেষ হওয়ার তারিখ (ঐচ্ছিক)", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = if (endMillis > 0L) HabitDateAndReportEngine.formatFullDateBn(endMillis) else "তারিখ নির্বাচন করুন",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (endMillis > 0L) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Icon(Icons.Default.EventAvailable, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    }
+                }
+
+                if (durationDays > 0) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text("⏱️", fontSize = 14.sp)
+                            Text(
+                                text = "স্থায়িত্বকাল: ${HabitScheduleCalculator.toBengaliDigits(durationDays.toString())} দিন",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
+                    if (durationDays < 3) {
+                        Text(
+                            text = "💡 স্থায়িত্বকাল ৩ দিনের কম হলে পর্যাপ্ত পুষ্টিকর খাবার ও বিশ্রাম নিশ্চিত করুন।",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else if (durationDays > 7) {
+                        Text(
+                            text = "⚠️ স্থায়িত্বকাল ৭ দিনের বেশি হলে রক্তক্ষরণ নিয়ন্ত্রণে চিকিৎসকের পরামর্শ নেওয়া উত্তম।",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSave(startMillis, endMillis) },
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("সংরক্ষণ করুন", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            OutlinedButton(
+                onClick = onDismiss,
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("বাতিল")
+            }
+        }
+    )
+}
+
+@Composable
+private fun DeliveryConfirmationDialog(
+    initialDeliveryMillis: Long,
+    initialDeliveryType: String,
+    initialBabyGender: String,
+    onDismiss: () -> Unit,
+    onConfirm: (Long, String, String) -> Unit,
+    onSnooze: () -> Unit
+) {
+    val context = LocalContext.current
+    var deliveryDateMillis by remember {
+        mutableLongStateOf(if (initialDeliveryMillis > 0L) initialDeliveryMillis else System.currentTimeMillis())
+    }
+    var deliveryType by remember {
+        mutableStateOf(if (initialDeliveryType.isNotBlank()) initialDeliveryType else UserPreferencesManager.DELIVERY_TYPE_NORMAL)
+    }
+    var babyGender by remember {
+        mutableStateOf(if (initialBabyGender.isNotBlank()) initialBabyGender else UserPreferencesManager.BABY_GENDER_UNSPECIFIED)
+    }
+
+    val openDatePicker = {
+        val cal = Calendar.getInstance().apply { timeInMillis = deliveryDateMillis }
+        DatePickerDialog(
+            context,
+            { _, year, month, dayOfMonth ->
+                val picked = Calendar.getInstance().apply {
+                    set(year, month, dayOfMonth, 0, 0, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }.timeInMillis
+                deliveryDateMillis = picked
+            },
+            cal.get(Calendar.YEAR),
+            cal.get(Calendar.MONTH),
+            cal.get(Calendar.DAY_OF_MONTH)
+        ).show()
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "👶 মা ও নবজাতক তথ্য হালনাগাদ",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "আলহামদুলিল্লাহ! আপনার বাবু পৃথিবীতে এসেছে? তথ্যগুলো নিশ্চিত করুন:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                OutlinedCard(
+                    onClick = openDatePicker,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text("বাচ্চা জন্মের তারিখ", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = HabitDateAndReportEngine.formatFullDateBn(deliveryDateMillis),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    }
+                }
+
+                Text("প্রসবের ধরন:", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = deliveryType == UserPreferencesManager.DELIVERY_TYPE_NORMAL,
+                        onClick = { deliveryType = UserPreferencesManager.DELIVERY_TYPE_NORMAL },
+                        label = { Text("🌿 নরমাল প্রসব", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) }
+                    )
+                    FilterChip(
+                        selected = deliveryType == UserPreferencesManager.DELIVERY_TYPE_C_SECTION,
+                        onClick = { deliveryType = UserPreferencesManager.DELIVERY_TYPE_C_SECTION },
+                        label = { Text("🩺 সি-সেকশন", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) }
+                    )
+                }
+
+                Text("সন্তানের লিঙ্গ:", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = babyGender == UserPreferencesManager.BABY_GENDER_BOY,
+                        onClick = { babyGender = UserPreferencesManager.BABY_GENDER_BOY },
+                        label = { Text("👦 পুত্র সন্তান", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) }
+                    )
+                    FilterChip(
+                        selected = babyGender == UserPreferencesManager.BABY_GENDER_GIRL,
+                        onClick = { babyGender = UserPreferencesManager.BABY_GENDER_GIRL },
+                        label = { Text("👧 কন্যা সন্তান", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) }
+                    )
+                    FilterChip(
+                        selected = babyGender == UserPreferencesManager.BABY_GENDER_UNSPECIFIED,
+                        onClick = { babyGender = UserPreferencesManager.BABY_GENDER_UNSPECIFIED },
+                        label = { Text("👶 নির্দিষ্ট নয়", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) }
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(deliveryDateMillis, deliveryType, babyGender) },
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("নিশ্চিত করুন 👶", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            OutlinedButton(
+                onClick = onSnooze,
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("এখনও হয়নি (পরে মনে করিয়ে দিন)")
+            }
+        }
+    )
+}
+
+@Composable
+private fun InstantHomeRemediesCard(
+    selectedSymptoms: Set<String>,
+    onSpeakRemedy: (String) -> Unit
+) {
+    val matchingRemedies = remember(selectedSymptoms) {
+        if (selectedSymptoms.isEmpty() || selectedSymptoms.contains("স্বাভাবিক")) {
+            emptyList()
+        } else {
+            PregnancyPlannerEngine.instantHomeRemediesCatalog.filter { remedy ->
+                remedy.symptomKey in selectedSymptoms
+            }
+        }
+    }
+
+    if (matchingRemedies.isEmpty()) return
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.28f).solidOverSurface()
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.38f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("🌿", fontSize = 20.sp)
+                Column {
+                    Text(
+                        text = "তাৎক্ষণিক ঘরোয়া ও প্রাকৃতিক সমাধান",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "আপনার নির্বাচিত উপসর্গের জন্য প্রাকৃতিক নিরাময় গাইড",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            matchingRemedies.forEach { remedy ->
+                Surface(
+                    color = MaterialTheme.colorScheme.surface,
+                    shape = RoundedCornerShape(12.dp),
+                    border = onePxBorder(MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = remedy.remedyTitleBn,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            IconButton(
+                                onClick = { onSpeakRemedy("${remedy.remedyTitleBn}। ${remedy.remedyBn}। সতর্কতা: ${remedy.cautionBn}") },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.VolumeUp,
+                                    contentDescription = "শুনুন",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+
+                        Text(
+                            text = remedy.remedyBn,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            lineHeight = 18.sp
+                        )
+
+                        Surface(
+                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("⚠️", fontSize = 11.sp)
+                                Text(
+                                    text = remedy.cautionBn,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HusbandsCornerCard(
+    stageTag: String,
+    onSpeakTip: (String) -> Unit
+) {
+    val tips = remember(stageTag) {
+        PregnancyPlannerEngine.stageFatherTipsCatalog.filter { it.stage == stageTag || it.stage == "ALL" }
+    }
+
+    if (tips.isEmpty()) return
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.32f).solidOverSurface()
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = onePxBorder(MaterialTheme.colorScheme.secondary.copy(alpha = 0.38f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("🤝", fontSize = 20.sp)
+                Column {
+                    Text(
+                        text = "জীবনসঙ্গীর সহযোগিতা (স্বামীর করণীয়)",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "সহানুভূতিশীল সান্নিধ্য ও প্রত্যক্ষ সহায়তা মা ও অনাগত শিশুর পরম শক্তি",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            tips.forEach { tip ->
+                Surface(
+                    color = MaterialTheme.colorScheme.surface,
+                    shape = RoundedCornerShape(12.dp),
+                    border = onePxBorder(MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(tip.icon, fontSize = 22.sp)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = tip.titleBn,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = tip.descBn,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                lineHeight = 17.sp
+                            )
+                        }
+                        IconButton(
+                            onClick = { onSpeakTip("${tip.titleBn}। ${tip.descBn}") },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.VolumeUp,
+                                contentDescription = "শুনুন",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SafetyAndRedFlagsCard(
+    stageTag: String,
+    onSpeakWarning: (String) -> Unit
+) {
+    val warnings = remember(stageTag) {
+        PregnancyPlannerEngine.stageSafetyWarningsCatalog.filter { it.stage == stageTag || it.stage == "ALL" }
+    }
+
+    if (warnings.isEmpty()) return
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFFFFF4F2)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = onePxBorder(Color(0xFFE57373).copy(alpha = 0.5f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("🚨", fontSize = 20.sp)
+                Column {
+                    Text(
+                        text = "সতর্কতা ও জরুরি বিপদচিহ্ন",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFC62828)
+                    )
+                    Text(
+                        text = "নিচের লক্ষণগুলো দেখা দিলে অবহেলা না করে দ্রুত চিকিৎসকের পরামর্শ নিন",
+                        fontSize = 11.sp,
+                        color = Color(0xFF757575)
+                    )
+                }
+            }
+
+            warnings.forEach { item ->
+                Surface(
+                    color = Color.White,
+                    shape = RoundedCornerShape(12.dp),
+                    border = onePxBorder(Color(0xFFFFCDD2))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Surface(
+                                    color = if (item.isRedFlag) Color(0xFFFFEBEE) else Color(0xFFFFF8E1),
+                                    shape = RoundedCornerShape(4.dp)
+                                ) {
+                                    Text(
+                                        text = if (item.isRedFlag) "জরুরি বিপদচিহ্ন" else "বর্জনীয়",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (item.isRedFlag) Color(0xFFC62828) else Color(0xFFF57F17),
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                                Text(
+                                    text = item.titleBn,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF212121)
+                                )
+                            }
+                            IconButton(
+                                onClick = { onSpeakWarning("${item.titleBn}। ${item.descBn}। নির্দেশিকা: ${item.actionBn}") },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.VolumeUp,
+                                    contentDescription = "শুনুন",
+                                    tint = Color(0xFFC62828),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+
+                        Text(
+                            text = item.descBn,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF424242),
+                            lineHeight = 17.sp
+                        )
+
+                        Text(
+                            text = "👉 ${item.actionBn}",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFC62828)
                         )
                     }
                 }
@@ -1662,7 +3153,8 @@ private fun SymptomAdviceSectionCard(
 private fun PregnancyCountdownHeroCard(
     status: PregnancyTimelineStatus,
     onPickStartDate: () -> Unit,
-    onPickEddDate: () -> Unit
+    onPickEddDate: () -> Unit,
+    onConfirmDelivery: (() -> Unit)? = null
 ) {
     val animatedProgress by animateFloatAsState(
         targetValue = status.progressFraction,
@@ -1693,6 +3185,43 @@ private fun PregnancyCountdownHeroCard(
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // Full-Term (37+ Weeks) Delivery Confirmation Prompt Banner
+            if (status.isFullTerm && onConfirmDelivery != null) {
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "🎉 পূর্ণ গর্ভকালীন মেয়াদ (৩৭+ সপ্তাহ)!",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Text(
+                                text = "বাচ্চা কি পৃথিবীতে এসেছে?",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
+                            )
+                        }
+                        Button(
+                            onClick = onConfirmDelivery,
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Text("হ্যাঁ, হয়েছে 👶", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
