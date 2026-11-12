@@ -15,19 +15,19 @@ import androidx.compose.ui.unit.Dp
 import androidx.core.view.WindowCompat
 import com.health.knowledge.util.UserPreferencesManager
 
-// Health-themed green palette
-val HealthGreen = Color(0xFF2E7D32)
-val HealthGreenLight = Color(0xFF60AD5E)
-val HealthGreenDark = Color(0xFF005005)
-val HealthGreenContainer = Color(0xFFB8F5B0)
-val HealthGreenOnContainer = Color(0xFF002204)
+// Deep Emerald Islamic-natural healthcare palette
+val HealthGreen = Color(0xFF006B3C)
+val HealthGreenLight = Color(0xFF2E8B57)
+val HealthGreenDark = Color(0xFF004D2C)
+val HealthGreenContainer = Color(0xFFE0F2E9)
+val HealthGreenOnContainer = Color(0xFF00381E)
 
-val HealthAmber = Color(0xFFFF8F00)
-val HealthAmberLight = Color(0xFFFFBF47)
-val HealthAmberContainer = Color(0xFFFFECB3)
+val HealthAmber = Color(0xFFD4AF37)
+val HealthAmberLight = Color(0xFFFFD54F)
+val HealthAmberContainer = Color(0xFFFFF8E1)
 
 val SurfaceLight = Color(0xFFFFFFFF)
-val BackgroundLight = Color(0xFFF6F9F5)
+val BackgroundLight = Color(0xFFF7FAF7)
 val SurfaceDark = Color(0xFF121212)
 
 // Soft Sepia reading palette (warm parchment)

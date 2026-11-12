@@ -51,6 +51,9 @@ interface TibbeNabawiDao {
     fun getBookmarked(): Flow<List<TibbeNabawiEntity>>
 
     @Query("SELECT COUNT(*) FROM tibbe_nabawi_posts")
+    fun observeCount(): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM tibbe_nabawi_posts")
     suspend fun getCount(): Int
 
     @Query("SELECT DISTINCT category FROM tibbe_nabawi_posts ORDER BY category ASC")

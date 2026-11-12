@@ -39,6 +39,8 @@ class TibbeNabawiRepository @Inject constructor(
     fun getBookmarked(): Flow<List<TibbeNabawiEntity>> = tibbeNabawiDao.getBookmarked()
 
     fun getCategories(): Flow<List<String>> = tibbeNabawiDao.getCategories()
+ 
+     fun observeCount(): Flow<Int> = tibbeNabawiDao.observeCount()
 
     suspend fun toggleBookmark(id: Int, currentState: Boolean) {
         tibbeNabawiDao.setBookmark(id, !currentState)

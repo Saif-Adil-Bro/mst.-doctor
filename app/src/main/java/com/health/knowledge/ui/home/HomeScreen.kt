@@ -49,6 +49,7 @@ import coil.request.ImageRequest
 import com.health.knowledge.domain.model.Article
 import com.health.knowledge.ui.detail.VerificationConsentDialog
 import com.health.knowledge.ui.habit.HomeHabitQuickMenuCard
+import com.health.knowledge.ui.home.components.*
 import com.health.knowledge.ui.theme.onePxBorder
 import com.health.knowledge.ui.theme.solidOverSurface
 import com.health.knowledge.util.HealthNotificationHelper
@@ -114,6 +115,7 @@ fun HomeScreen(
     val selectedHerb by viewModel.selectedHerb.collectAsState()
     val selectedMultiCategories by viewModel.selectedMultiCategories.collectAsState()
     val advancedFilteredArticles by viewModel.advancedFilteredArticles.collectAsState()
+    val tibbeCount by viewModel.tibbeCount.collectAsState()
 
     val context = LocalContext.current
     var showUserPostDialog by remember { mutableStateOf(false) }
@@ -303,178 +305,44 @@ fun HomeScreen(
 
     Scaffold(
         topBar = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.primary)
-                    .statusBarsPadding()
-                    .padding(top = 6.dp, bottom = 12.dp)
-            ) {
-                // App Title + Hidden 5-Click Admin Trigger + Theme & Admin Controls
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable(
-                                indication = null,
-                                interactionSource = remember { MutableInteractionSource() }
-                            ) {
-                                val now = System.currentTimeMillis()
-                                if (now - lastTapTime > 2500L) {
-                                    tapCount = 1
-                                } else {
-                                    tapCount++
-                                }
-                                lastTapTime = now
-                                if (tapCount >= 5) {
-                                    tapCount = 0
-                                    if (!isAdminMode) {
-                                        showPasswordDialog = true
-                                    } else {
-                                        onAdminClick()
-                                    }
-                                }
-                            }
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "🌿 স্বাস্থ্য জ্ঞান",
-                                color = Color.White,
-                                fontSize = 22.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            if (isAdminMode) {
-                                Spacer(Modifier.width(8.dp))
-                                Surface(
-                                    color = MaterialTheme.colorScheme.secondary,
-                                    shape = RoundedCornerShape(6.dp)
-                                ) {
-                                    Text(
-                                        text = "ADMIN",
-                                        color = Color.White,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
-                                }
-                            }
-                        }
-                        Text(
-                            text = "$totalCount টি স্বাস্থ্যতথ্য • অফলাইন ও অনলাইন",
-                            color = Color.White.copy(alpha = 0.85f),
-                            fontSize = 12.sp
-                        )
+            HomePremiumHeader(
+                totalCount = totalCount,
+                searchQuery = searchQuery,
+                onSearchQueryChange = viewModel::onSearchQueryChange,
+                onClearSearch = viewModel::clearSearch,
+                onFilterClick = { viewModel.onTabSelected("search") },
+                onNotificationClick = { showThemeDialog = true },
+                isAdminMode = isAdminMode,
+                onAdminManageClick = onAdminClick,
+                onAdminLockClick = {
+                    viewModel.lockAdmin()
+                    Toast.makeText(context, "🔒 অ্যাডমিন মোড বন্ধ করা হয়েছে", Toast.LENGTH_SHORT).show()
+                },
+                onTitleMultiTap = {
+                    val now = System.currentTimeMillis()
+                    if (now - lastTapTime > 2500L) {
+                        tapCount = 1
+                    } else {
+                        tapCount++
                     }
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        // Reading Theme & Reminder Switcher Button
-                        IconButton(
-                            onClick = { showThemeDialog = true },
-                            modifier = Modifier
-                                .size(36.dp)
-                                .background(Color.White.copy(alpha = 0.18f), CircleShape)
-                        ) {
-                            Icon(
-                                when (themeMode) {
-                                    UserPreferencesManager.THEME_DARK -> Icons.Default.DarkMode
-                                    UserPreferencesManager.THEME_SEPIA -> Icons.Default.MenuBook
-                                    UserPreferencesManager.THEME_LIGHT -> Icons.Default.LightMode
-                                    else -> Icons.Default.Palette
-                                },
-                                contentDescription = "থিম ও রিমাইন্ডার",
-                                tint = Color.White,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-
-                        // Show Admin Controls ONLY when Admin Mode is unlocked
-                        if (isAdminMode) {
-                            FilledTonalButton(
-                                onClick = onAdminClick,
-                                colors = ButtonDefaults.filledTonalButtonColors(
-                                    containerColor = Color.White,
-                                    contentColor = MaterialTheme.colorScheme.primary
-                                ),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
-                            ) {
-                                Icon(Icons.Default.AdminPanelSettings, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text("ম্যানেজ", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                            }
-                            IconButton(
-                                onClick = {
-                                    viewModel.lockAdmin()
-                                    Toast.makeText(context, "🔒 অ্যাডমিন মোড বন্ধ করা হয়েছে", Toast.LENGTH_SHORT).show()
-                                },
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .background(Color.White.copy(alpha = 0.2f), CircleShape)
-                            ) {
-                                Icon(
-                                    Icons.Default.Lock,
-                                    contentDescription = "লক অ্যাডমিন",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
+                    lastTapTime = now
+                    if (tapCount >= 5) {
+                        tapCount = 0
+                        if (!isAdminMode) {
+                            showPasswordDialog = true
+                        } else {
+                            onAdminClick()
                         }
                     }
-                }
-
-                // Search Bar (shown on Home tab)
-                if (activeTab == "home") {
-                    SearchBar(
-                        query = searchQuery,
-                        onQueryChange = viewModel::onSearchQueryChange,
-                        onClear = viewModel::clearSearch,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 4.dp)
-                    )
-                }
-            }
-        },
-        floatingActionButton = {
-            if (activeTab == "home") {
-                ExtendedFloatingActionButton(
-                    onClick = { showUserPostDialog = true },
-                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                    text = { Text("পোস্ট করুন", fontWeight = FontWeight.Bold) },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                )
-            }
+                },
+                showSearchBar = (activeTab == "home")
+            )
         },
         bottomBar = {
-            NavigationBar {
-                NavigationBarItem(
-                    selected = activeTab == "home",
-                    onClick = { viewModel.onTabSelected("home") },
-                    icon = { Icon(if (activeTab == "home") Icons.Filled.Home else Icons.Outlined.Home, null) },
-                    label = { Text("হোম") }
-                )
-                NavigationBarItem(
-                    selected = activeTab == "search",
-                    onClick = { viewModel.onTabSelected("search") },
-                    icon = { Icon(if (activeTab == "search") Icons.Filled.Eco else Icons.Outlined.Eco, null) },
-                    label = { Text("ভেষজ ও সার্চ") }
-                )
-                NavigationBarItem(
-                    selected = activeTab == "bookmarks",
-                    onClick = { viewModel.onTabSelected("bookmarks") },
-                    icon = { Icon(if (activeTab == "bookmarks") Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder, null) },
-                    label = { Text("সেভ ও নোট") }
-                )
-            }
+            ModernHomeBottomNavigation(
+                activeTab = activeTab,
+                onTabSelected = viewModel::onTabSelected
+            )
         }
     ) { paddingValues ->
         Crossfade(targetState = activeTab, label = "home_tab_crossfade") { tab ->
@@ -551,22 +419,14 @@ fun HomeScreen(
                             LazyColumn(
                                 state = homeListState,
                                 modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(bottom = 16.dp)
+                                contentPadding = PaddingValues(bottom = 24.dp)
                             ) {
-                                // Category chips + Daily Tip Card (when not searching)
                                 if (searchQuery.isBlank()) {
-                                    item(key = "category_chips", contentType = "header_chips") {
-                                        CategoryChips(
-                                            categories = categories,
-                                            selectedCategory = selectedCategory,
-                                            onCategorySelected = viewModel::onCategorySelected
-                                        )
-                                    }
-
                                     if (selectedCategory == null) {
+                                        // 1. Featured Daily Tip Card
                                         dailyTipArticle?.let { tip ->
                                             item(key = "daily_tip_card", contentType = "daily_tip") {
-                                                DailyHealthTipCard(
+                                                PremiumDailyTipCard(
                                                     article = tip,
                                                     reminderEnabled = dailyReminderEnabled,
                                                     reminderTimeText = viewModel.getFormattedReminderTime(),
@@ -577,20 +437,32 @@ fun HomeScreen(
                                             }
                                         }
 
-                                        item(key = "habit_reminder_menu_card", contentType = "habit_menu") {
-                                            HomeHabitQuickMenuCard(
+                                        // 2. Quick Access Cards (Two-column grid: হাদীস প্ল্যানার & প্রেগন্যান্সি)
+                                        item(key = "quick_access_cards", contentType = "quick_access") {
+                                            HomeQuickAccessCards(
                                                 activeHabitCount = activeHabitCount,
                                                 nextPostCountdownText = nextPostCountdownText,
-                                                onOpenHabitModule = onHabitReminderClick,
-                                                onOpenPregnancyModule = onPregnancyPlannerClick
+                                                onOpenHabitPlanner = onHabitReminderClick,
+                                                onOpenPregnancyPlanner = onPregnancyPlannerClick
                                             )
                                         }
 
+                                        // 3. Tibbe Nabawi Banner Card
                                         item(key = "tibbe_nabawi_banner", contentType = "tibbe_banner") {
-                                            HomeTibbeNabawiBanner(
+                                            TibbeNabawiBannerCard(
+                                                count = tibbeCount,
                                                 onOpenTibbeNabawi = onTibbeNabawiClick
                                             )
                                         }
+                                    }
+
+                                    // Category chips for selective filtering
+                                    item(key = "category_chips", contentType = "header_chips") {
+                                        CategoryChips(
+                                            categories = categories,
+                                            selectedCategory = selectedCategory,
+                                            onCategorySelected = viewModel::onCategorySelected
+                                        )
                                     }
                                 }
 
@@ -598,11 +470,11 @@ fun HomeScreen(
                                     item(key = "my_pending_posts_banner") {
                                         Surface(
                                             color = Color(0xFFFFF8E1),
-                                            shape = RoundedCornerShape(12.dp),
+                                            shape = RoundedCornerShape(16.dp),
                                             border = onePxBorder(Color(0xFFFFB300).copy(alpha = 0.5f)),
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .padding(horizontal = 16.dp, vertical = 6.dp)
+                                                .padding(horizontal = 20.dp, vertical = 6.dp)
                                                 .clickable {
                                                     viewModel.onTabSelected("bookmarks")
                                                     viewModel.onSavedSubTabChange("my_posts")
@@ -616,7 +488,7 @@ fun HomeScreen(
                                                 Row(
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     modifier = Modifier.weight(1f)
-                                                ) {
+                                                 ) {
                                                     Text("⏳", fontSize = 18.sp)
                                                     Spacer(Modifier.width(8.dp))
                                                     Column {
@@ -639,18 +511,28 @@ fun HomeScreen(
                                     }
                                 }
 
-                                // Results header + Sort chips (নতুন / জনপ্রিয় / পুরাতন)
+                                // 4. Results header + Sort chips (✨ নতুন / 🔥 জনপ্রিয় / 🏆 পুরাতন)
                                 item(key = "results_header", contentType = "header_text") {
+                                    val countText = if (articles.isNotEmpty()) "${articles.size}টি" else "${totalCount}টি"
                                     val headerText = when {
-                                        selectedCategory != null -> "\"${selectedCategory!!.replace("_", " ")}\": ${articles.size}টি"
-                                        searchQuery.isNotBlank() -> "\"$searchQuery\": ${articles.size}টি"
-                                        else -> "সকল স্বাস্থ্যতথ্য (${articles.size}টি)"
+                                        selectedCategory != null -> "\"${selectedCategory!!.replace("_", " ")}\": $countText"
+                                        searchQuery.isNotBlank() -> "\"$searchQuery\": $countText"
+                                        else -> "সকল স্বাস্থ্যতথ্য ($countText)"
                                     }
-                                    SortAndResultsHeader(
-                                        headerText = headerText,
-                                        sortOrder = sortOrder,
+                                    HealthArticlesSectionHeader(
+                                        title = headerText,
+                                        currentSort = sortOrder,
                                         onSortChange = viewModel::onSortOrderChange
                                     )
+                                }
+
+                                // 5. Community Islamic Knowledge / Book Banner Card with "+ পোস্ট করুন"
+                                if (searchQuery.isBlank() && selectedCategory == null) {
+                                    item(key = "community_post_banner", contentType = "community_banner") {
+                                        CommunityPostBanner(
+                                            onPostClick = { showUserPostDialog = true }
+                                        )
+                                    }
                                 }
 
                                 if (searchQuery.isNotBlank()) {
@@ -1059,17 +941,17 @@ fun ArticleCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 5.dp)
+            .padding(horizontal = 20.dp, vertical = 6.dp)
             .clickable(onClick = onClick),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         border = onePxBorder(
             when {
                 article.isPinned -> MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
                 article.isMine && !article.isReviewed -> Color(0xFFFFB300).copy(alpha = 0.55f)
-                else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
+                else -> Color(0xFFE5E7EB)
             }
         ),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(
             containerColor = when {
                 article.isMine && !article.isReviewed -> Color(0xFFFFFBF0)

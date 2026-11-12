@@ -115,6 +115,8 @@ class HomeViewModel @Inject constructor(
     val dailyReminderHour: StateFlow<Int> = prefsManager.dailyReminderHour
     val dailyReminderMinute: StateFlow<Int> = prefsManager.dailyReminderMinute
     val isAdminMode: StateFlow<Boolean> = prefsManager.isAdminMode
+    val tibbeCount: StateFlow<Int> = tibbeNabawiRepository.observeCount()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 200)
 
     // Saved scroll position across navigation and config changes
     var savedScrollIndex: Int = 0
