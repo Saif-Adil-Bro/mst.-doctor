@@ -305,58 +305,108 @@ fun HomeScreen(
 
     Scaffold(
         topBar = {
-            val isSearchTab = activeTab == "search"
-            HomePremiumHeader(
-                totalCount = totalCount,
-                searchQuery = if (isSearchTab) herbSearchQuery else searchQuery,
-                searchPlaceholder = if (isSearchTab) "ভেষজ উপাদান বা রোগ খুঁজুন (যেমন: মধু, আদা)..." else "রোগ, উপাদান বা বিষয় লিখুন...",
-                onSearchQueryChange = { q ->
-                    if (isSearchTab) {
-                        viewModel.onHerbSearchQueryChange(q)
-                    } else {
-                        viewModel.onSearchQueryChange(q)
-                    }
-                },
-                onClearSearch = {
-                    if (isSearchTab) {
-                        viewModel.onHerbSearchQueryChange("")
-                    } else {
-                        viewModel.clearSearch()
-                    }
-                },
-                onFilterClick = {
-                    if (isSearchTab) {
-                        viewModel.clearAdvancedFilters()
-                    } else {
-                        viewModel.onTabSelected("search")
-                    }
-                },
-                onNotificationClick = { showThemeDialog = true },
-                isAdminMode = isAdminMode,
-                onAdminManageClick = onAdminClick,
-                onAdminLockClick = {
-                    viewModel.lockAdmin()
-                    Toast.makeText(context, "🔒 অ্যাডমিন মোড বন্ধ করা হয়েছে", Toast.LENGTH_SHORT).show()
-                },
-                onTitleMultiTap = {
-                    val now = System.currentTimeMillis()
-                    if (now - lastTapTime > 2500L) {
-                        tapCount = 1
-                    } else {
-                        tapCount++
-                    }
-                    lastTapTime = now
-                    if (tapCount >= 5) {
-                        tapCount = 0
-                        if (!isAdminMode) {
-                            showPasswordDialog = true
+            if (activeTab != "bookmarks") {
+                val isSearchTab = activeTab == "search"
+                HomePremiumHeader(
+                    totalCount = totalCount,
+                    searchQuery = if (isSearchTab) herbSearchQuery else searchQuery,
+                    searchPlaceholder = if (isSearchTab) "ভেষজ উপাদান বা রোগ খুঁজুন (যেমন: মধু, আদা)..." else "রোগ, উপাদান বা বিষয় লিখুন...",
+                    onSearchQueryChange = { q ->
+                        if (isSearchTab) {
+                            viewModel.onHerbSearchQueryChange(q)
                         } else {
-                            onAdminClick()
+                            viewModel.onSearchQueryChange(q)
                         }
-                    }
-                },
-                showSearchBar = (activeTab == "home" || activeTab == "search")
-            )
+                    },
+                    onClearSearch = {
+                        if (isSearchTab) {
+                            viewModel.onHerbSearchQueryChange("")
+                        } else {
+                            viewModel.clearSearch()
+                        }
+                    },
+                    onFilterClick = {
+                        if (isSearchTab) {
+                            viewModel.clearAdvancedFilters()
+                        } else {
+                            viewModel.onTabSelected("search")
+                        }
+                    },
+                    onNotificationClick = { showThemeDialog = true },
+                    isAdminMode = isAdminMode,
+                    onAdminManageClick = onAdminClick,
+                    onAdminLockClick = {
+                        viewModel.lockAdmin()
+                        Toast.makeText(context, "🔒 অ্যাডমিন মোড বন্ধ করা হয়েছে", Toast.LENGTH_SHORT).show()
+                    },
+                    onTitleMultiTap = {
+                        val now = System.currentTimeMillis()
+                        if (now - lastTapTime > 2500L) {
+                            tapCount = 1
+                        } else {
+                            tapCount++
+                        }
+                        lastTapTime = now
+                        if (tapCount >= 5) {
+                            tapCount = 0
+                            if (!isAdminMode) {
+                                showPasswordDialog = true
+                            } else {
+                                onAdminClick()
+                            }
+                        }
+                    },
+                    showSearchBar = (activeTab == "home" || activeTab == "search")
+                )
+            } else {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = "সেভ ও নোট",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 19.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    },
+                    actions = {
+                        IconButton(onClick = { showThemeDialog = true }) {
+                            Icon(
+                                Icons.Default.NotificationsNone,
+                                contentDescription = "রিমাইন্ডার ও সেটিংস",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
+                )
+            }
+        },
+        floatingActionButton = {
+            if (activeTab == "home") {
+                ExtendedFloatingActionButton(
+                    onClick = { showUserPostDialog = true },
+                    icon = {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = "পোস্ট করুন",
+                            modifier = Modifier.size(20.dp)
+                        )
+                    },
+                    text = {
+                        Text(
+                            text = "পোস্ট করুন",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                    },
+                    containerColor = Color(0xFF006B3C),
+                    contentColor = Color.White,
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp)
+                )
+            }
         },
         bottomBar = {
             ModernHomeBottomNavigation(
@@ -544,15 +594,6 @@ fun HomeScreen(
                                         currentSort = sortOrder,
                                         onSortChange = viewModel::onSortOrderChange
                                     )
-                                }
-
-                                // 5. Community Islamic Knowledge / Book Banner Card with "+ পোস্ট করুন"
-                                if (searchQuery.isBlank() && selectedCategory == null) {
-                                    item(key = "community_post_banner", contentType = "community_banner") {
-                                        CommunityPostBanner(
-                                            onPostClick = { showUserPostDialog = true }
-                                        )
-                                    }
                                 }
 
                                 if (searchQuery.isNotBlank()) {
