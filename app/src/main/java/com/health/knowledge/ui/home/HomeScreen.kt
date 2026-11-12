@@ -1025,7 +1025,7 @@ fun ArticleCard(
             }
         )
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             // Cover Photo / Thumbnail from CDN URL (auto-fit screen width)
             if (hasCdnImage) {
                 AsyncImage(
@@ -1043,118 +1043,168 @@ fun ArticleCard(
                         .heightIn(max = 220.dp)
                         .clip(RoundedCornerShape(12.dp))
                 )
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(8.dp))
             }
 
-            // Header row: Pinned / New / Note badges + Bookmark / Admin actions
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            val hasBadges = article.isMine || article.isPinned || article.syncedFromFirebase || article.userNote.isNotBlank() || isAdminMode
+
+            if (hasBadges) {
+                // Header row: Pinned / New / Note badges + Bookmark / Admin actions
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (article.isMine) {
-                        if (!article.isReviewed && !article.isDraft) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (article.isMine) {
+                            if (!article.isReviewed && !article.isDraft) {
+                                Surface(
+                                    color = Color(0xFFFFB300),
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text(
+                                        "⏳ আপনার পোস্ট • পেন্ডিং",
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.Black,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            } else if (article.isReviewed) {
+                                Surface(
+                                    color = Color(0xFF2E7D32),
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text(
+                                        "✅ আপনার পোস্ট",
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                        if (article.isPinned) {
                             Surface(
-                                color = Color(0xFFFFB300),
+                                color = MaterialTheme.colorScheme.primary,
                                 shape = RoundedCornerShape(6.dp)
                             ) {
                                 Text(
-                                    "⏳ আপনার পোস্ট • পেন্ডিং",
+                                    "📌 পিন করা",
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = Color.Black,
-                                    fontWeight = FontWeight.Bold
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    fontWeight = FontWeight.SemiBold
                                 )
                             }
-                        } else if (article.isReviewed) {
+                        }
+                        if (article.syncedFromFirebase) {
                             Surface(
-                                color = Color(0xFF2E7D32),
+                                color = MaterialTheme.colorScheme.secondary,
                                 shape = RoundedCornerShape(6.dp)
                             ) {
                                 Text(
-                                    "✅ আপনার পোস্ট",
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                    "নতুন",
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Bold
+                                    color = MaterialTheme.colorScheme.onSecondary
+                                )
+                            }
+                        }
+                        if (article.userNote.isNotBlank()) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.tertiaryContainer,
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Text(
+                                    "📓 নোট",
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer
                                 )
                             }
                         }
                     }
-                    if (article.isPinned) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.primary,
-                            shape = RoundedCornerShape(6.dp)
-                        ) {
-                            Text(
-                                "📌 পিন করা",
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                fontWeight = FontWeight.SemiBold
-                            )
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (isAdminMode) {
+                            IconButton(
+                                onClick = onPinToggle,
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.PushPin,
+                                    contentDescription = "পিন করুন",
+                                    tint = if (article.isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            IconButton(
+                                onClick = onDeleteClick,
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.DeleteOutline,
+                                    contentDescription = "ডিলিট করুন",
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                         }
-                    }
-                    if (article.syncedFromFirebase) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.secondary,
-                            shape = RoundedCornerShape(6.dp)
+                        IconButton(
+                            onClick = onBookmarkToggle,
+                            modifier = Modifier.size(28.dp)
                         ) {
-                            Text(
-                                "নতুন",
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSecondary
-                            )
-                        }
-                    }
-                    if (article.userNote.isNotBlank()) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.tertiaryContainer,
-                            shape = RoundedCornerShape(6.dp)
-                        ) {
-                            Text(
-                                "📓 নোট",
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            Icon(
+                                if (article.isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                                contentDescription = "বুকমার্ক",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                     }
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (isAdminMode) {
-                        IconButton(
-                            onClick = onPinToggle,
-                            modifier = Modifier.size(28.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.PushPin,
-                                contentDescription = "পিন করুন",
-                                tint = if (article.isPinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                        IconButton(
-                            onClick = onDeleteClick,
-                            modifier = Modifier.size(28.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.DeleteOutline,
-                                contentDescription = "ডিলিট করুন",
-                                tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
+                Spacer(Modifier.height(5.dp))
+
+                // Title with comfortable typography & reading line-height
+                Text(
+                    text = article.title,
+                    fontFamily = com.health.knowledge.ui.theme.SolaimanLipi,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    lineHeight = 25.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            } else {
+                // When no badges, title and bookmark are placed inline at the top with zero excess gap
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Text(
+                        text = article.title,
+                        fontFamily = com.health.knowledge.ui.theme.SolaimanLipi,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        lineHeight = 25.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
                     IconButton(
                         onClick = onBookmarkToggle,
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier
+                            .size(26.dp)
+                            .padding(start = 4.dp)
                     ) {
                         Icon(
                             if (article.isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
@@ -1165,20 +1215,6 @@ fun ArticleCard(
                     }
                 }
             }
-
-            Spacer(Modifier.height(8.dp))
-
-            // Title with comfortable typography & reading line-height
-            Text(
-                text = article.title,
-                fontFamily = com.health.knowledge.ui.theme.SolaimanLipi,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                lineHeight = 25.sp,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
 
             Spacer(Modifier.height(6.dp))
 

@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.health.knowledge.data.local.entity.HabitEntity
 import com.health.knowledge.domain.model.Article
 import com.health.knowledge.habit.HabitDateAndReportEngine
 import com.health.knowledge.habit.HabitScheduleCalculator
@@ -79,6 +80,32 @@ fun PregnancyPlannerScreen(
     val isAdminMode by viewModel.isAdminMode.collectAsState()
     val pregnancyArticles by viewModel.pregnancyArticles.collectAsState()
     val isRefreshingPosts by viewModel.isRefreshingPosts.collectAsState()
+    val isSpeaking by viewModel.isSpeaking.collectAsState()
+    val speakingText by viewModel.speakingText.collectAsState()
+    val isEditingSettings by viewModel.isEditingSettings.collectAsState()
+
+    var showActivityReportDialog by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = isEditingSettings) {
+        viewModel.cancelEditingSettings()
+    }
+
+    fun openReminderTimePicker(preset: PregnancyReminderPreset, currentAnchorTime: String) {
+        val (curH, curM) = HabitScheduleCalculator.parseAnchorTime(currentAnchorTime)
+        android.app.TimePickerDialog(
+            context,
+            { _, selH, selM ->
+                val formatted = String.format(java.util.Locale.US, "%02d:%02d", selH, selM)
+                viewModel.updateReminderCustomTime(preset, formatted) {
+                    val formattedBn = HabitScheduleCalculator.formatHourMinuteBengali(selH, selM)
+                    Toast.makeText(context, "✅ সময় নির্ধারিত হয়েছে: $formattedBn", Toast.LENGTH_SHORT).show()
+                }
+            },
+            curH,
+            curM,
+            false
+        ).show()
+    }
 
     // 5-click detector on Header Title for Hidden Admin Unlock (same as Mother Component)
     var tapCount by remember { mutableIntStateOf(0) }
@@ -383,6 +410,22 @@ fun PregnancyPlannerScreen(
         )
     }
 
+    if (showActivityReportDialog) {
+        val stageLabel = when {
+            userGender == UserPreferencesManager.GENDER_MALE -> "পুরুষ স্বাস্থ্য ও হবু বাবা"
+            stageMode == UserPreferencesManager.STAGE_POSTPARTUM -> "মা ও নবজাতকের যত্ন"
+            stageMode == UserPreferencesManager.STAGE_PRE_CONCEPTION -> "গর্ভধারণের পূর্ব প্রস্তুতি"
+            else -> "গর্ভকালীন সপ্তাহ: ${HabitScheduleCalculator.toBengaliDigits(timelineStatus.currentWeek.toString())}"
+        }
+        ActivityReportDialog(
+            completedChecksCount = completedChecks.size,
+            activeHabitsCount = activeHabitIds.size,
+            symptomsCount = selectedSymptoms.size,
+            stageLabel = stageLabel,
+            onDismiss = { showActivityReportDialog = false }
+        )
+    }
+
     Scaffold(
         topBar = {
             Column(
@@ -403,7 +446,13 @@ fun PregnancyPlannerScreen(
                         modifier = Modifier.weight(1f)
                     ) {
                         IconButton(
-                            onClick = onBack,
+                            onClick = {
+                                if (isEditingSettings) {
+                                    viewModel.cancelEditingSettings()
+                                } else {
+                                    onBack()
+                                }
+                            },
                             modifier = Modifier.testTag("pregnancy_back_button")
                         ) {
                             Icon(
@@ -463,6 +512,7 @@ fun PregnancyPlannerScreen(
                             }
                             Text(
                                 text = when {
+                                    isEditingSettings -> "প্রোফাইল সেটিংস পরিবর্তন"
                                     !isOnboarded -> "প্রোফাইল সেটআপ"
                                     userGender == UserPreferencesManager.GENDER_MALE -> "👨 পুরুষ স্বাস্থ্য ও পিতৃত্ব গাইড"
                                     stageMode == UserPreferencesManager.STAGE_PRE_CONCEPTION -> "🌱 সন্তান নেওয়ার পরিকল্পনা • উর্বর সময় ট্র্যাকার"
@@ -476,8 +526,8 @@ fun PregnancyPlannerScreen(
                         }
                     }
 
-                    // Pure Icon Buttons: Admin Add Post (Admin-Only), Profile Setup & Calendar Date
-                    if (isOnboarded) {
+                    // Pure Icon Buttons: Admin Add Post (Admin-Only), Activity Report, Profile Setup & Calendar Date
+                    if (isOnboarded && !isEditingSettings) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             if (isAdminMode) {
                                 Surface(
@@ -499,13 +549,32 @@ fun PregnancyPlannerScreen(
                                 }
                             }
 
+                            // Activity Report Button
+                            Surface(
+                                color = Color.White.copy(alpha = 0.2f),
+                                shape = CircleShape,
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .testTag("pregnancy_activity_report_button")
+                                    .clickable { showActivityReportDialog = true }
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.Assessment,
+                                        contentDescription = "অ্যাক্টিভিটি রিপোর্ট",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+
                             Surface(
                                 color = Color.White.copy(alpha = 0.2f),
                                 shape = CircleShape,
                                 modifier = Modifier
                                     .size(38.dp)
                                     .testTag("pregnancy_profile_edit_button")
-                                    .clickable { viewModel.reopenOnboarding() }
+                                    .clickable { viewModel.startEditingSettings() }
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
@@ -543,7 +612,7 @@ fun PregnancyPlannerScreen(
         },
         floatingActionButton = {
             // Strictly Admin-Only FAB to publish pregnancy posts to Firestore
-            if (isOnboarded && isAdminMode) {
+            if (isOnboarded && isAdminMode && !isEditingSettings) {
                 ExtendedFloatingActionButton(
                     onClick = { showAdminAddPostDialog = true },
                     icon = { Icon(Icons.Default.CloudUpload, contentDescription = null) },
@@ -556,7 +625,7 @@ fun PregnancyPlannerScreen(
         }
     ) { paddingValues ->
         when {
-            !isOnboarded -> {
+            !isOnboarded || isEditingSettings -> {
                 PregnancyProfileOnboardingView(
                     initialGender = userGender,
                     initialStageMode = stageMode,
@@ -579,6 +648,7 @@ fun PregnancyPlannerScreen(
                             deliveryType = dType,
                             babyGender = bGender
                         )
+                        viewModel.finishEditingSettings()
                         Toast.makeText(context, "✅ আপনার প্রোফাইল প্রস্তুত হয়েছে!", Toast.LENGTH_SHORT).show()
                     },
                     modifier = Modifier.padding(paddingValues)
@@ -662,6 +732,7 @@ fun PregnancyPlannerScreen(
                     quote = currentQuote,
                     completedChecks = completedChecks,
                     activeHabitIds = activeHabitIds,
+                    allHabits = allHabits,
                     pregnancyPosts = pregnancyArticles,
                     isAdminMode = isAdminMode,
                     isRefreshingPosts = isRefreshingPosts,
@@ -676,6 +747,7 @@ fun PregnancyPlannerScreen(
                             Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                         }
                     },
+                    onEditReminderTime = ::openReminderTimePicker,
                     onSwitchToPostConception = viewModel::confirmConception,
                     onRefreshPosts = viewModel::syncPregnancyPostsFromFirestore,
                     onArticleClick = onArticleClick,
@@ -694,8 +766,6 @@ fun PregnancyPlannerScreen(
             else -> {
                 PostConceptionStageContent(
                     timelineStatus = timelineStatus,
-                    selectedCycleDays = cycleDays,
-                    onCycleDaysChanged = viewModel::updateCycleDays,
                     selectedSymptoms = selectedSymptoms,
                     selectedWeek = selectedWeekForGrowth,
                     onSelectWeek = { selectedWeekForGrowth = it.coerceIn(1, 40) },
@@ -704,6 +774,7 @@ fun PregnancyPlannerScreen(
                     quote = currentQuote,
                     completedChecks = completedChecks,
                     activeHabitIds = activeHabitIds,
+                    allHabits = allHabits,
                     pregnancyPosts = pregnancyArticles,
                     isAdminMode = isAdminMode,
                     isRefreshingPosts = isRefreshingPosts,
@@ -720,6 +791,7 @@ fun PregnancyPlannerScreen(
                             Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                         }
                     },
+                    onEditReminderTime = ::openReminderTimePicker,
                     onOpenHabitPlanner = onOpenHabitPlanner,
                     onRefreshPosts = viewModel::syncPregnancyPostsFromFirestore,
                     onArticleClick = onArticleClick,
@@ -750,6 +822,7 @@ private fun PreConceptionStageContent(
     quote: PregnancyQuote,
     completedChecks: Set<String>,
     activeHabitIds: Set<String>,
+    allHabits: List<HabitEntity> = emptyList(),
     pregnancyPosts: List<Article>,
     isAdminMode: Boolean,
     isRefreshingPosts: Boolean,
@@ -759,6 +832,7 @@ private fun PreConceptionStageContent(
     onSpeakText: (String) -> Unit,
     onToggleCheck: (String) -> Unit,
     onToggleReminderPreset: (PregnancyReminderPreset) -> Unit,
+    onEditReminderTime: ((PregnancyReminderPreset, String) -> Unit)? = null,
     onSwitchToPostConception: () -> Unit,
     onRefreshPosts: () -> Unit,
     onArticleClick: (Int) -> Unit,
@@ -940,10 +1014,14 @@ private fun PreConceptionStageContent(
         }
 
         items(PregnancyPlannerEngine.reminderPresets, key = { "pre_rem_${it.id}" }) { preset ->
+            val habit = allHabits.firstOrNull { it.id == preset.id }
+            val currentTime = habit?.anchorTime ?: preset.anchorTime
             PregnancyReminderPresetCard(
                 preset = preset,
                 isActive = preset.id in activeHabitIds,
-                onToggle = { onToggleReminderPreset(preset) }
+                currentTime = currentTime,
+                onToggle = { onToggleReminderPreset(preset) },
+                onEditTime = { onEditReminderTime?.invoke(preset, currentTime) }
             )
         }
 
@@ -1141,8 +1219,6 @@ private fun FertileWindowHeroCard(
 @Composable
 private fun PostConceptionStageContent(
     timelineStatus: PregnancyTimelineStatus,
-    selectedCycleDays: Int,
-    onCycleDaysChanged: (Int) -> Unit,
     selectedSymptoms: Set<String>,
     selectedWeek: Int,
     onSelectWeek: (Int) -> Unit,
@@ -1151,6 +1227,7 @@ private fun PostConceptionStageContent(
     quote: PregnancyQuote,
     completedChecks: Set<String>,
     activeHabitIds: Set<String>,
+    allHabits: List<HabitEntity> = emptyList(),
     pregnancyPosts: List<Article>,
     isAdminMode: Boolean,
     isRefreshingPosts: Boolean,
@@ -1162,6 +1239,7 @@ private fun PostConceptionStageContent(
     onSpeakText: (String) -> Unit,
     onToggleCheck: (String) -> Unit,
     onToggleReminderPreset: (PregnancyReminderPreset) -> Unit,
+    onEditReminderTime: ((PregnancyReminderPreset, String) -> Unit)? = null,
     onOpenHabitPlanner: () -> Unit,
     onRefreshPosts: () -> Unit,
     onArticleClick: (Int) -> Unit,
@@ -1202,14 +1280,6 @@ private fun PostConceptionStageContent(
                 onPickStartDate = onPickStartDate,
                 onPickEddDate = onPickEddDate,
                 onConfirmDelivery = onConfirmDeliveryClick
-            )
-        }
-
-        // 2. Cycle Days Selector (Presets + Stepper 18..60)
-        item(key = "post_cycle_days_selector") {
-            CycleDaysSelector(
-                selectedCycleDays = selectedCycleDays,
-                onCycleDaysChanged = onCycleDaysChanged
             )
         }
 
@@ -1462,10 +1532,14 @@ private fun PostConceptionStageContent(
                 }
 
                 items(PregnancyPlannerEngine.reminderPresets, key = { it.id }) { preset ->
+                    val habit = allHabits.firstOrNull { it.id == preset.id }
+                    val currentTime = habit?.anchorTime ?: preset.anchorTime
                     PregnancyReminderPresetCard(
                         preset = preset,
                         isActive = preset.id in activeHabitIds,
-                        onToggle = { onToggleReminderPreset(preset) }
+                        currentTime = currentTime,
+                        onToggle = { onToggleReminderPreset(preset) },
+                        onEditTime = { onEditReminderTime?.invoke(preset, currentTime) }
                     )
                 }
             }
@@ -3831,12 +3905,121 @@ internal fun IslamicPregnancyAmalCard(
 }
 
 @Composable
+fun ActivityReportDialog(
+    completedChecksCount: Int,
+    activeHabitsCount: Int,
+    symptomsCount: Int,
+    stageLabel: String,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("📊", fontSize = 22.sp)
+                Text(
+                    text = "অ্যাক্টিভিটি হিস্ট্রি ও রিপোর্ট",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "আপনার সকল অ্যাক্টিভিটি, চেকলিস্ট ও রিমাইন্ডার স্বয়ংক্রিয়ভাবে লোকাল মেমোরিতে সংরক্ষিত রয়েছে।",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                ActivityStatRow(
+                    emoji = "✅",
+                    label = "সম্পন্ন চেকলিস্ট ও আমল",
+                    value = "${HabitScheduleCalculator.toBengaliDigits(completedChecksCount.toString())}টি"
+                )
+                ActivityStatRow(
+                    emoji = "🔔",
+                    label = "সক্রিয় স্বাস্থ্য অ্যালার্ম",
+                    value = "${HabitScheduleCalculator.toBengaliDigits(activeHabitsCount.toString())}টি"
+                )
+                ActivityStatRow(
+                    emoji = "🩺",
+                    label = "লগকৃত শারীরিক উপসর্গ",
+                    value = "${HabitScheduleCalculator.toBengaliDigits(symptomsCount.toString())}টি"
+                )
+                ActivityStatRow(
+                    emoji = "📅",
+                    label = "বর্তমান পর্যায়",
+                    value = stageLabel
+                )
+
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "🔒 আপনার সকল স্বাস্থ্য ডাটা এই ডিভাইসেই এনক্রিপ্টেড ও সম্পূর্ণ নিরাপদ থাকে।",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(10.dp)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("ঠিক আছে", fontWeight = FontWeight.Bold)
+            }
+        }
+    )
+}
+
+@Composable
+private fun ActivityStatRow(emoji: String, label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(emoji, fontSize = 16.sp)
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+        )
+    }
+}
+
+@Composable
 internal fun PregnancyReminderPresetCard(
     preset: PregnancyReminderPreset,
     isActive: Boolean,
-    onToggle: () -> Unit
+    currentTime: String = preset.anchorTime,
+    onToggle: () -> Unit,
+    onEditTime: (() -> Unit)? = null
 ) {
-    val (h, m) = HabitScheduleCalculator.parseAnchorTime(preset.anchorTime)
+    val (h, m) = HabitScheduleCalculator.parseAnchorTime(currentTime)
     val timeBn = HabitScheduleCalculator.formatHourMinuteBengali(h, m)
 
     Card(
@@ -3882,12 +4065,31 @@ internal fun PregnancyReminderPresetCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Text(
-                        text = timeBn,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Spacer(Modifier.height(3.dp))
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                        modifier = Modifier.clickable { onEditTime?.invoke() }
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AccessTime,
+                                contentDescription = "সময় পরিবর্তন",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(11.dp)
+                            )
+                            Text(
+                                text = "$timeBn • পরিবর্তন",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
             }
 

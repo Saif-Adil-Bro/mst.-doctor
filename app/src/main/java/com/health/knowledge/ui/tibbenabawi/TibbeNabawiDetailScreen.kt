@@ -4,6 +4,7 @@ import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -529,9 +530,17 @@ fun TibbeQuoteCard(
     quote: TibbeQuote,
     modifier: Modifier = Modifier
 ) {
-    val emeraldPrimary = Color(0xFF006B3C)
-    val cardBg = Color(0xFFF4F9F5)
-    val borderCol = emeraldPrimary.copy(alpha = 0.25f)
+    val isDark = isSystemInDarkTheme()
+    val emeraldPrimary = if (isDark) Color(0xFF81C784) else Color(0xFF006B3C)
+    val cardBg = if (isDark) Color(0xFF1B2E23) else Color(0xFFF4F9F5)
+    val borderCol = if (isDark) emeraldPrimary.copy(alpha = 0.35f) else emeraldPrimary.copy(alpha = 0.25f)
+    val arabicTextColor = if (isDark) Color(0xFFA5D6A7) else Color(0xFF006B3C)
+    val translationLabelColor = if (isDark) Color(0xFF81C784) else Color(0xFF006B3C)
+    val translationTextColor = MaterialTheme.colorScheme.onSurface
+    val badgeBg = if (isDark) Color(0xFF264734) else emeraldPrimary.copy(alpha = 0.12f)
+    val refBadgeBg = if (isDark) Color(0xFF2A2D30) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+    val refTextColor = if (isDark) Color(0xFFD1D5DB) else MaterialTheme.colorScheme.onSurfaceVariant
+    val dividerColor = if (isDark) emeraldPrimary.copy(alpha = 0.25f) else emeraldPrimary.copy(alpha = 0.15f)
 
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -553,7 +562,7 @@ fun TibbeQuoteCard(
             ) {
                 Surface(
                     shape = RoundedCornerShape(6.dp),
-                    color = emeraldPrimary.copy(alpha = 0.12f)
+                    color = badgeBg
                 ) {
                     Text(
                         text = "📜 ${quote.type.ifBlank { "হাদিস" }}",
@@ -569,14 +578,14 @@ fun TibbeQuoteCard(
                 if (quote.reference.isNotBlank()) {
                     Surface(
                         shape = RoundedCornerShape(6.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                        color = refBadgeBg
                     ) {
                         Text(
                             text = "📖 ${quote.reference}",
                             style = MaterialTheme.typography.labelSmall.copy(
                                 fontFamily = SolaimanLipi,
                                 fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = refTextColor
                             ),
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         )
@@ -596,7 +605,7 @@ fun TibbeQuoteCard(
                             fontFamily = FontFamily.Serif,
                             fontSize = 21.sp,
                             fontWeight = FontWeight.Bold,
-                            color = emeraldPrimary,
+                            color = arabicTextColor,
                             lineHeight = 36.sp,
                             textDirection = TextDirection.Rtl
                         )
@@ -608,7 +617,7 @@ fun TibbeQuoteCard(
             if (quote.translation.isNotBlank()) {
                 Spacer(Modifier.height(10.dp))
                 HorizontalDivider(
-                    color = emeraldPrimary.copy(alpha = 0.15f),
+                    color = dividerColor,
                     thickness = 0.8.dp,
                     modifier = Modifier.padding(vertical = 4.dp)
                 )
@@ -622,7 +631,7 @@ fun TibbeQuoteCard(
                             style = MaterialTheme.typography.bodyMedium.copy(
                                 fontFamily = SolaimanLipi,
                                 fontWeight = FontWeight.Bold,
-                                color = emeraldPrimary,
+                                color = translationLabelColor,
                                 fontSize = 14.5.sp
                             )
                         )
@@ -631,7 +640,7 @@ fun TibbeQuoteCard(
                             style = MaterialTheme.typography.bodyMedium.copy(
                                 fontFamily = SolaimanLipi,
                                 fontWeight = FontWeight.Normal,
-                                color = MaterialTheme.colorScheme.onSurface,
+                                color = translationTextColor,
                                 fontSize = 14.5.sp,
                                 lineHeight = 22.sp
                             ),

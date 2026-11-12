@@ -39,51 +39,88 @@ data class TibbeQuote(
 )
 
 fun TibbeNabawiEntity.parsedQuotes(): List<TibbeQuote> {
-    val raw = quotes?.trim()
+    var raw = quotes?.trim()
     if (raw.isNullOrBlank()) return emptyList()
 
-    return try {
-        if (raw.startsWith("[")) {
-            val element = com.google.gson.JsonParser.parseString(raw)
-            if (element.isJsonArray) {
-                val array = element.asJsonArray
-                val list = mutableListOf<TibbeQuote>()
-                for (item in array) {
-                    if (item.isJsonObject) {
-                        val obj = item.asJsonObject
-                        val type = obj.get("type")?.asString?.trim().takeUnless { it.isNullOrBlank() } ?: "হাদিস"
-                        val arabic = (obj.get("arabic") ?: obj.get("text") ?: obj.get("quote") ?: obj.get("matn"))?.asString?.trim().orEmpty()
-                        val translation = (obj.get("translation") ?: obj.get("bangla") ?: obj.get("meaning"))?.asString?.trim().orEmpty()
-                        val reference = (obj.get("reference") ?: obj.get("source") ?: obj.get("book"))?.asString?.trim().orEmpty()
-                        if (arabic.isNotBlank() || translation.isNotBlank()) {
-                            list.add(TibbeQuote(type = type, arabic = arabic, translation = translation, reference = reference))
-                        }
-                    } else if (item.isJsonPrimitive) {
-                        val s = item.asString.trim()
-                        if (s.isNotBlank()) {
-                            list.add(TibbeQuote(type = "হাদিস", arabic = s))
-                        }
-                    }
-                }
-                if (list.isNotEmpty()) return list
+    // 1. If wrapped in outer quotes or doubly escaped
+    if (raw.startsWith("\"") && raw.endsWith("\"") && raw.length > 2) {
+        raw = raw.substring(1, raw.length - 1).replace("\\\"", "\"").replace("\\\\", "\\").trim()
+    }
+
+    // 2. Try standard or lenient JSON parsing
+    try {
+        val jsonCleaned = raw.trim()
+        if (jsonCleaned.startsWith("[") || jsonCleaned.startsWith("{")) {
+            val reader = com.google.gson.stream.JsonReader(java.io.StringReader(jsonCleaned)).apply {
+                isLenient = true
             }
-        } else if (raw.startsWith("{")) {
-            val element = com.google.gson.JsonParser.parseString(raw)
-            if (element.isJsonObject) {
-                val obj = element.asJsonObject
+            val element = com.google.gson.JsonParser.parseReader(reader)
+            val list = mutableListOf<TibbeQuote>()
+
+            fun processObject(obj: com.google.gson.JsonObject) {
                 val type = obj.get("type")?.asString?.trim().takeUnless { it.isNullOrBlank() } ?: "হাদিস"
                 val arabic = (obj.get("arabic") ?: obj.get("text") ?: obj.get("quote") ?: obj.get("matn"))?.asString?.trim().orEmpty()
                 val translation = (obj.get("translation") ?: obj.get("bangla") ?: obj.get("meaning"))?.asString?.trim().orEmpty()
                 val reference = (obj.get("reference") ?: obj.get("source") ?: obj.get("book"))?.asString?.trim().orEmpty()
                 if (arabic.isNotBlank() || translation.isNotBlank()) {
-                    return listOf(TibbeQuote(type = type, arabic = arabic, translation = translation, reference = reference))
+                    list.add(TibbeQuote(type = type, arabic = arabic, translation = translation, reference = reference))
                 }
             }
+
+            if (element.isJsonArray) {
+                for (item in element.asJsonArray) {
+                    if (item.isJsonObject) {
+                        processObject(item.asJsonObject)
+                    } else if (item.isJsonPrimitive) {
+                        val s = item.asString.trim()
+                        if (s.isNotBlank() && !s.contains("\"type\"")) {
+                            list.add(TibbeQuote(type = "হাদিস", arabic = s))
+                        }
+                    }
+                }
+                if (list.isNotEmpty()) return list
+            } else if (element.isJsonObject) {
+                processObject(element.asJsonObject)
+                if (list.isNotEmpty()) return list
+            }
         }
-        listOf(TibbeQuote(type = "হাদিস", arabic = raw))
     } catch (_: Exception) {
-        listOf(TibbeQuote(type = "হাদিস", arabic = raw))
+        // Fall through to regex extraction
     }
+
+    // 3. Resilient Regex Extraction for damaged, escaped or concatenated JSON strings
+    if (raw.contains("arabic") || raw.contains("translation") || raw.contains("\"type\"")) {
+        val extractedList = mutableListOf<TibbeQuote>()
+        val blockRegex = Regex("""\{[^{}]*\}""")
+        val blocks = blockRegex.findAll(raw).map { it.value }.toList()
+        val targets = if (blocks.isNotEmpty()) blocks else listOf(raw)
+
+        fun extractField(block: String, key: String): String {
+            val pat = Regex("""\"$key\"\s*:\s*\"((?:\\.|[^\"\\])*)\"""")
+            val m = pat.find(block)
+            return m?.groupValues?.getOrNull(1)?.replace("\\\"", "\"")?.replace("\\n", "\n")?.trim().orEmpty()
+        }
+
+        for (b in targets) {
+            val type = extractField(b, "type").ifBlank { "হাদিস" }
+            val ar = extractField(b, "arabic").ifBlank { extractField(b, "matn") }
+            val tr = extractField(b, "translation").ifBlank { extractField(b, "bangla") }
+            val rf = extractField(b, "reference").ifBlank { extractField(b, "source") }
+            if (ar.isNotBlank() || tr.isNotBlank()) {
+                extractedList.add(TibbeQuote(type = type, arabic = ar, translation = tr, reference = rf))
+            }
+        }
+        if (extractedList.isNotEmpty()) return extractedList
+    }
+
+    // 4. Safe fallback: Never treat raw JSON syntax as Arabic matn!
+    val isRawJson = raw.startsWith("{") || raw.startsWith("[") || raw.contains("\"type\":") || raw.contains("\"arabic\":")
+    if (isRawJson) {
+        val cleanAr = raw.replace(Regex("""[{}\[\]"]|type:|arabic:|translation:|reference:"""), "").trim()
+        return if (cleanAr.isNotBlank()) listOf(TibbeQuote(type = "হাদিস", arabic = cleanAr)) else emptyList()
+    }
+
+    return listOf(TibbeQuote(type = "হাদিস", arabic = raw))
 }
 
 fun TibbeNabawiEntity.toArticleDomain(): Article {

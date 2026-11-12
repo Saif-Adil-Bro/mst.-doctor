@@ -48,7 +48,7 @@ fun HomeQuickAccessCards(
         Card(
             modifier = Modifier
                 .weight(1f)
-                .height(92.dp)
+                .height(98.dp)
                 .shadow(elevation = 2.dp, shape = RoundedCornerShape(18.dp), spotColor = Color(0x14004D2C))
                 .clickable(onClick = onOpenHabitPlanner),
             shape = RoundedCornerShape(18.dp),
@@ -58,8 +58,7 @@ fun HomeQuickAccessCards(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(10.dp),
-                verticalArrangement = Arrangement.SpaceBetween
+                    .padding(horizontal = 10.dp, vertical = 9.dp)
             ) {
                 // Top Row: Clock icon + Forward Arrow button
                 Row(
@@ -70,14 +69,14 @@ fun HomeQuickAccessCards(
                     Surface(
                         color = Color(0xFF006B3C),
                         shape = CircleShape,
-                        modifier = Modifier.size(30.dp)
+                        modifier = Modifier.size(28.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = Icons.Default.AlarmOn,
                                 contentDescription = "হ্যাবিট প্ল্যানার",
                                 tint = Color.White,
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(15.dp)
                             )
                         }
                     }
@@ -85,54 +84,57 @@ fun HomeQuickAccessCards(
                     Surface(
                         color = Color(0xFFE0F2E9),
                         shape = CircleShape,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(22.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                                 contentDescription = "যান",
                                 tint = Color(0xFF006B3C),
-                                modifier = Modifier.size(13.dp)
+                                modifier = Modifier.size(12.dp)
                             )
                         }
                     }
                 }
 
-                // Middle: Title
-                Text(
-                    text = "হ্যাবিট প্ল্যানার",
-                    color = Color(0xFF1F2937),
-                    fontSize = 13.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Spacer(Modifier.weight(1f))
 
-                // Bottom: Subtitle with Alarm status
-                val alarmSubtitle = when {
-                    !nextPostCountdownText.isNullOrBlank() -> nextPostCountdownText
-                    else -> "পরের অ্যালার্ম: সকাল ০৮:০০"
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(3.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Schedule,
-                        contentDescription = null,
-                        tint = Color(0xFF006B3C),
-                        modifier = Modifier.size(11.dp)
-                    )
+                // Title and Subtitle grouped closely together without gap
+                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
                     Text(
-                        text = alarmSubtitle,
-                        color = Color(0xFF006B3C),
-                        fontSize = 10.5.sp,
+                        text = "হ্যাবিট প্ল্যানার",
+                        color = Color(0xFF1F2937),
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+
+                    val alarmSubtitle = when {
+                        !nextPostCountdownText.isNullOrBlank() -> nextPostCountdownText
+                        else -> "পরের অ্যালার্ম: সকাল ০৮:০০"
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Schedule,
+                            contentDescription = null,
+                            tint = Color(0xFF006B3C),
+                            modifier = Modifier.size(10.dp)
+                        )
+                        Text(
+                            text = alarmSubtitle,
+                            color = Color(0xFF006B3C),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
         }
@@ -141,7 +143,7 @@ fun HomeQuickAccessCards(
         Card(
             modifier = Modifier
                 .weight(1f)
-                .height(92.dp)
+                .height(98.dp)
                 .shadow(elevation = 2.dp, shape = RoundedCornerShape(18.dp), spotColor = Color(0x14FF7043))
                 .clickable(onClick = onOpenPregnancyPlanner),
             shape = RoundedCornerShape(18.dp),
@@ -159,8 +161,7 @@ fun HomeQuickAccessCards(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(10.dp),
-                    verticalArrangement = Arrangement.SpaceBetween
+                        .padding(horizontal = 10.dp, vertical = 9.dp)
                 ) {
                     // Top Row: Pregnancy icon + Forward Arrow button
                     Row(
@@ -171,48 +172,51 @@ fun HomeQuickAccessCards(
                         Surface(
                             color = Color(0xFF004D2C),
                             shape = CircleShape,
-                            modifier = Modifier.size(30.dp)
+                            modifier = Modifier.size(28.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
-                                Text("🤰", fontSize = 16.sp)
+                                Text("🤰", fontSize = 15.sp)
                             }
                         }
 
                         Surface(
                             color = Color(0xFFFFE0D6),
                             shape = CircleShape,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(22.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                                     contentDescription = "যান",
                                     tint = Color(0xFFD84315),
-                                    modifier = Modifier.size(13.dp)
+                                    modifier = Modifier.size(12.dp)
                                 )
                             }
                         }
                     }
 
-                    // Middle: Title
-                    Text(
-                        text = "প্রেগন্যান্সি",
-                        color = Color(0xFF1F2937),
-                        fontSize = 13.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Spacer(Modifier.weight(1f))
 
-                    // Bottom: Subtitle
-                    Text(
-                        text = "আগে ও পরে",
-                        color = Color(0xFF6B7280),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    // Title and Subtitle grouped closely together without gap
+                    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                        Text(
+                            text = "প্রেগন্যান্সি",
+                            color = Color(0xFF1F2937),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+
+                        Text(
+                            text = "আগে ও পরে",
+                            color = Color(0xFF6B7280),
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
         }

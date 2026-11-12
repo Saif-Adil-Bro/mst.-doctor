@@ -68,31 +68,12 @@ fun TibbeNabawiBannerCard(
                 }
 
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = "তিব্বে নববী",
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 16.sp,
-                            color = Color(0xFF1F2937)
-                        )
-
-                        // Dynamic actual count pill badge
-                        Surface(
-                            color = emeraldPrimary,
-                            shape = RoundedCornerShape(20.dp)
-                        ) {
-                            Text(
-                                text = "${count}টি পণ্য",
-                                color = Color.White,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                            )
-                        }
-                    }
+                    Text(
+                        text = "তিব্বে নববী",
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 16.sp,
+                        color = Color(0xFF1F2937)
+                    )
 
                     Text(
                         text = "হাদীস ও সুন্নাহভিত্তিক স্বাস্থ্য, ভেষজ ও রোগের চিকিৎসা",

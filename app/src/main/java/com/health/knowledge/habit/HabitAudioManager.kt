@@ -15,6 +15,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.util.Locale
 import java.util.UUID
@@ -42,6 +45,41 @@ class HabitAudioManager @Inject constructor(
     private var tts: TextToSpeech? = null
     private var isTtsReady = false
     private var activeMediaPlayer: MediaPlayer? = null
+
+    private val _isSpeaking = MutableStateFlow(false)
+    val isSpeaking: StateFlow<Boolean> = _isSpeaking.asStateFlow()
+
+    private val _speakingText = MutableStateFlow<String?>(null)
+    val speakingText: StateFlow<String?> = _speakingText.asStateFlow()
+
+    fun stopSpeaking() {
+        try {
+            activeMediaPlayer?.let { player ->
+                if (player.isPlaying) player.stop()
+                player.release()
+            }
+            activeMediaPlayer = null
+            tts?.stop()
+        } catch (_: Exception) {}
+        _isSpeaking.value = false
+        _speakingText.value = null
+    }
+
+    fun toggleSpeakText(
+        text: String,
+        fallbackSoundKey: String = SOUND_SOFT_BELL
+    ) {
+        val cleanText = text.trim()
+        if (_isSpeaking.value && (_speakingText.value == cleanText || cleanText.isEmpty())) {
+            stopSpeaking()
+            return
+        }
+
+        stopSpeaking()
+        _isSpeaking.value = true
+        _speakingText.value = cleanText
+        speakWithFallback(cleanText, fallbackSoundKey)
+    }
 
     companion object {
         const val SOUND_WATER_DROP = "water_drop"
@@ -160,10 +198,17 @@ class HabitAudioManager @Inject constructor(
 
             val utteranceId = "habit_tts_${UUID.randomUUID()}"
             engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                override fun onStart(utteranceId: String?) {}
-                override fun onDone(utteranceId: String?) {}
+                override fun onStart(utteranceId: String?) {
+                    _isSpeaking.value = true
+                }
+                override fun onDone(utteranceId: String?) {
+                    _isSpeaking.value = false
+                    _speakingText.value = null
+                }
                 @Deprecated("Deprecated in Java")
                 override fun onError(utteranceId: String?) {
+                    _isSpeaking.value = false
+                    _speakingText.value = null
                     playPresetSound(fallbackSoundKey, onComplete = null)
                 }
             })

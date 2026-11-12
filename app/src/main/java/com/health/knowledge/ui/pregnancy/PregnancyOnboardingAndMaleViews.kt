@@ -862,12 +862,6 @@ fun PregnancyProfileOnboardingView(
                                         }
                                     }
                                 }
-
-                                // Cycle Days Selector
-                                CycleDaysSelector(
-                                    selectedCycleDays = selectedCycleDays,
-                                    onCycleDaysChanged = { selectedCycleDays = it }
-                                )
                             }
 
                             else -> {

@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.*
@@ -187,7 +188,7 @@ fun HomePremiumHeader(
                         }
                     }
 
-                    // Notification Button with Unread Indicator
+                    // Settings Button
                     Box(
                         modifier = Modifier
                             .size(42.dp)
@@ -196,19 +197,10 @@ fun HomePremiumHeader(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Notifications,
-                            contentDescription = "রিমাইন্ডার ও নোটিফিকেশন",
+                            imageVector = Icons.Filled.Settings,
+                            contentDescription = "সেটিংস",
                             tint = Color.White,
                             modifier = Modifier.size(22.dp)
-                        )
-
-                        // Red dot unread indicator on top right
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(top = 8.dp, end = 8.dp)
-                                .size(8.dp)
-                                .background(Color(0xFFE53935), CircleShape)
                         )
                     }
                 }

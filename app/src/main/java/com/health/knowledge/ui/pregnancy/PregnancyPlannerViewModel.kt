@@ -58,6 +58,15 @@ class PregnancyPlannerViewModel @Inject constructor(
     val completedChecks: StateFlow<Set<String>> = prefsManager.pregnancyCompletedChecks
     val isAdminMode: StateFlow<Boolean> = prefsManager.isAdminMode
 
+    val allHabits: StateFlow<List<HabitEntity>> = habitDao.getAllHabitsFlow()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val isSpeaking: StateFlow<Boolean> = audioManager.isSpeaking
+    val speakingText: StateFlow<String?> = audioManager.speakingText
+
+    private val _isEditingSettings = MutableStateFlow(false)
+    val isEditingSettings: StateFlow<Boolean> = _isEditingSettings.asStateFlow()
+
     private val _isRefreshingPosts = MutableStateFlow(false)
     val isRefreshingPosts: StateFlow<Boolean> = _isRefreshingPosts.asStateFlow()
 
@@ -309,7 +318,19 @@ class PregnancyPlannerViewModel @Inject constructor(
     }
 
     fun reopenOnboarding() {
-        prefsManager.setPregnancyOnboarded(false)
+        _isEditingSettings.value = true
+    }
+
+    fun startEditingSettings() {
+        _isEditingSettings.value = true
+    }
+
+    fun cancelEditingSettings() {
+        _isEditingSettings.value = false
+    }
+
+    fun finishEditingSettings() {
+        _isEditingSettings.value = false
     }
 
     fun setGender(gender: String) {
@@ -352,11 +373,72 @@ class PregnancyPlannerViewModel @Inject constructor(
     }
 
     fun speakBengaliPrompt(text: String) {
-        audioManager.playReminderAlert(
-            audioMode = HabitScheduleCalculator.AUDIO_TTS_VOICE,
-            presetSoundKey = HabitAudioManager.SOUND_SOFT_BELL,
-            spokenText = text
-        )
+        audioManager.toggleSpeakText(text)
+    }
+
+    fun stopSpeaking() {
+        audioManager.stopSpeaking()
+    }
+
+    fun updateReminderCustomTime(
+        preset: PregnancyReminderPreset,
+        newAnchorTime: String,
+        onComplete: (Boolean) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            val existing = habitDao.getHabitById(preset.id)
+            if (existing != null) {
+                val updated = existing.copy(anchorTime = newAnchorTime, isActive = 1)
+                habitDao.upsertHabit(updated)
+                habitScheduler.scheduleHabit(updated)
+            } else {
+                val habit = HabitEntity(
+                    id = preset.id,
+                    title = preset.titleBn,
+                    category = preset.category,
+                    anchorTime = newAnchorTime,
+                    hasPreReminder = 1,
+                    preOffsetMins = preset.preOffsetMins,
+                    hasPostReminder = 1,
+                    postOffsetMins = preset.postOffsetMins,
+                    repeatDays = "[1,2,3,4,5,6,7]",
+                    isActive = 1,
+                    createdAt = System.currentTimeMillis()
+                )
+                val configs = listOf(
+                    ReminderConfigEntity(
+                        id = "cfg_pre_${preset.id}",
+                        habitId = preset.id,
+                        phase = HabitScheduleCalculator.PHASE_PRE_EVENT,
+                        messageTemplate = "${preset.titleBn}-এর প্রস্তুতি নিন।",
+                        audioMode = HabitScheduleCalculator.AUDIO_TTS_VOICE,
+                        presetSoundKey = HabitAudioManager.SOUND_SOFT_BELL,
+                        ttsText = "${preset.titleBn}-এর প্রস্তুতি নিন।"
+                    ),
+                    ReminderConfigEntity(
+                        id = "cfg_exact_${preset.id}",
+                        habitId = preset.id,
+                        phase = HabitScheduleCalculator.PHASE_EXACT_EVENT,
+                        messageTemplate = preset.messageBn,
+                        audioMode = HabitScheduleCalculator.AUDIO_TTS_VOICE,
+                        presetSoundKey = HabitAudioManager.SOUND_SOFT_BELL,
+                        ttsText = preset.messageBn
+                    ),
+                    ReminderConfigEntity(
+                        id = "cfg_post_${preset.id}",
+                        habitId = preset.id,
+                        phase = HabitScheduleCalculator.PHASE_POST_EVENT,
+                        messageTemplate = "${preset.titleBn} সম্পন্ন হয়েছে কি না যাচাই করুন।",
+                        audioMode = HabitScheduleCalculator.AUDIO_TTS_VOICE,
+                        presetSoundKey = HabitAudioManager.SOUND_WATER_DROP,
+                        ttsText = "${preset.titleBn} সম্পন্ন হয়েছে কি না যাচাই করুন।"
+                    )
+                )
+                habitDao.saveHabitWithConfigs(habit, configs)
+                habitScheduler.scheduleHabit(habit)
+            }
+            onComplete(true)
+        }
     }
 
     /**
