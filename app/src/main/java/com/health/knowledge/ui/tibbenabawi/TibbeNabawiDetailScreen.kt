@@ -34,6 +34,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -157,7 +158,10 @@ fun TibbeNabawiDetailScreen(
         }
     ) { innerPadding ->
         CompositionLocalProvider(
-            LocalTextStyle provides MaterialTheme.typography.bodyLarge.copy(fontFamily = SolaimanLipi)
+            LocalTextStyle provides MaterialTheme.typography.bodyLarge.copy(
+                fontFamily = SolaimanLipi,
+                lineHeight = TextUnit.Unspecified
+            )
         ) {
             val currentPost = post
 
@@ -207,6 +211,7 @@ fun TibbeNabawiDetailScreen(
                                 Text(
                                     text = currentPost.category,
                                     fontSize = 12.sp,
+                                    lineHeight = 16.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White,
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
@@ -222,6 +227,7 @@ fun TibbeNabawiDetailScreen(
                                     Text(
                                         text = "📖 পৃষ্ঠা: ${formatPageRangeBn(currentPost.sourcePages)}",
                                         fontSize = 11.sp,
+                                        lineHeight = 15.sp,
                                         fontWeight = FontWeight.Medium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
@@ -278,29 +284,56 @@ fun TibbeNabawiDetailScreen(
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("উপাদান / খাদ্য", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Text(
+                                    text = "উপাদান / খাদ্য",
+                                    fontSize = 11.sp,
+                                    lineHeight = 15.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                                 Text(
                                     text = currentPost.foodName.ifBlank { "সাধারণ" },
                                     fontSize = 13.sp,
+                                    lineHeight = 18.sp,
                                     fontWeight = FontWeight.SemiBold
                                 )
                             }
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("প্রকৃতি / মেজাজ", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Text(
+                                    text = "প্রকৃতি / মেজাজ",
+                                    fontSize = 11.sp,
+                                    lineHeight = 15.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                                 Text(
                                     text = currentPost.nature ?: "উল্লেখ নেই",
                                     fontSize = 13.sp,
+                                    lineHeight = 18.sp,
                                     fontWeight = FontWeight.SemiBold
                                 )
                             }
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("স্বাদ", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Text(
+                                    text = "স্বাদ",
+                                    fontSize = 11.sp,
+                                    lineHeight = 15.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                                 Text(
                                     text = currentPost.taste ?: "উল্লেখ নেই",
                                     fontSize = 13.sp,
+                                    lineHeight = 18.sp,
                                     fontWeight = FontWeight.SemiBold
                                 )
                             }
@@ -312,6 +345,7 @@ fun TibbeNabawiDetailScreen(
                             Text(
                                 text = "যেসব রোগের নিরাময়ে কার্যকর:",
                                 fontSize = 12.sp,
+                                lineHeight = 16.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -330,6 +364,7 @@ fun TibbeNabawiDetailScreen(
                                             Text(
                                                 text = "• $trimmed",
                                                 fontSize = 12.sp,
+                                                lineHeight = 16.sp,
                                                 fontWeight = FontWeight.Medium,
                                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
@@ -439,18 +474,21 @@ fun TibbeNabawiDetailScreen(
                         Text(
                             text = "📚 রেফারেন্স তথ্যসূত্র:",
                             fontSize = 11.sp,
+                            lineHeight = 15.sp,
                             fontWeight = FontWeight.Bold,
                             color = emeraldPrimary
                         )
                         Text(
                             text = "গ্রন্থ: আত-তিব্বুন নববী (إكرام الطب النبوي) — ইমাম ইবনুল কাইয়্যিম আল-জাওযিয়্যাহ (রহিমাহুল্লাহ)",
                             fontSize = 12.sp,
+                            lineHeight = 17.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         if (currentPost.sourcePages.isNotBlank()) {
                             Text(
                                 text = "মূল কিতাবের পৃষ্ঠা: ${formatPageRangeBn(currentPost.sourcePages)}",
                                 fontSize = 12.sp,
+                                lineHeight = 17.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
@@ -464,6 +502,7 @@ fun TibbeNabawiDetailScreen(
                         Text(
                             text = "এই ক্যাটাগরির আরও পথ্য ও চিকিৎসা",
                             fontSize = 15.sp,
+                            lineHeight = 20.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -475,7 +514,9 @@ fun TibbeNabawiDetailScreen(
                             items(relatedPosts, key = { it.id }) { item ->
                                 Card(
                                     onClick = { onRelatedPostClick(item.id) },
-                                    modifier = Modifier.width(220.dp),
+                                    modifier = Modifier
+                                        .width(220.dp)
+                                        .defaultMinSize(minHeight = 82.dp),
                                     shape = RoundedCornerShape(14.dp),
                                     colors = CardDefaults.cardColors(
                                         containerColor = MaterialTheme.colorScheme.surface
@@ -486,11 +527,12 @@ fun TibbeNabawiDetailScreen(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .padding(12.dp),
-                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                        verticalArrangement = Arrangement.spacedBy(5.dp)
                                     ) {
                                         Text(
                                             text = item.title,
                                             fontSize = 13.sp,
+                                            lineHeight = 18.sp,
                                             fontWeight = FontWeight.Bold,
                                             maxLines = 2,
                                             overflow = TextOverflow.Ellipsis
@@ -499,6 +541,7 @@ fun TibbeNabawiDetailScreen(
                                             Text(
                                                 text = "🌿 ${item.foodName}",
                                                 fontSize = 11.sp,
+                                                lineHeight = 15.sp,
                                                 color = emeraldPrimary,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis

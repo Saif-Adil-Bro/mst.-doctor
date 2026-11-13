@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.core.view.WindowCompat
 import com.health.knowledge.util.UserPreferencesManager
 
@@ -147,7 +148,8 @@ fun HealthKnowledgeTheme(
     ) {
         androidx.compose.runtime.CompositionLocalProvider(
             androidx.compose.material3.LocalTextStyle provides androidx.compose.material3.LocalTextStyle.current.copy(
-                fontFamily = SolaimanLipi
+                fontFamily = SolaimanLipi,
+                lineHeight = TextUnit.Unspecified
             )
         ) {
             content()

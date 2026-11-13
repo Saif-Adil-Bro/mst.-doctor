@@ -34,6 +34,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -282,7 +283,10 @@ fun DetailScreen(
         }
     ) { paddingValues ->
         CompositionLocalProvider(
-            LocalTextStyle provides MaterialTheme.typography.bodyLarge.copy(fontFamily = SolaimanLipi)
+            LocalTextStyle provides MaterialTheme.typography.bodyLarge.copy(
+                fontFamily = SolaimanLipi,
+                lineHeight = TextUnit.Unspecified
+            )
         ) {
             article?.let { art ->
             val hasCdnImage = remember(art.photoPath) {

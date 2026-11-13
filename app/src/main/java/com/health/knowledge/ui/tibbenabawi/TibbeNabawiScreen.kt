@@ -29,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -130,7 +131,10 @@ fun TibbeNabawiScreen(
         }
     ) { innerPadding ->
         CompositionLocalProvider(
-            LocalTextStyle provides MaterialTheme.typography.bodyLarge.copy(fontFamily = SolaimanLipi)
+            LocalTextStyle provides MaterialTheme.typography.bodyLarge.copy(
+                fontFamily = SolaimanLipi,
+                lineHeight = TextUnit.Unspecified
+            )
         ) {
             Column(
                 modifier = Modifier

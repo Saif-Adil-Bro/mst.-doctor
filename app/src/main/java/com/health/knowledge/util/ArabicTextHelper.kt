@@ -141,7 +141,7 @@ fun SmartMultilingualBody(
                     modifier = Modifier.fillMaxWidth(),
                     fontFamily = SolaimanLipi,
                     fontSize = fontSizeSp.sp,
-                    lineHeight = (fontSizeSp * 1.68f).sp,
+                    lineHeight = (fontSizeSp * 1.50f).sp,
                     color = textColor,
                     textAlign = TextAlign.Start,
                     style = TextStyle(
