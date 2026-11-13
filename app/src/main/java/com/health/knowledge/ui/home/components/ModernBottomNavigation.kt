@@ -26,6 +26,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.health.knowledge.ui.theme.onePxBorder
@@ -127,7 +128,7 @@ private fun BottomNavItem(
 
     Box(
         modifier = modifier
-            .fillMaxHeight()
+            .defaultMinSize(minHeight = 56.dp)
             .clip(RoundedCornerShape(16.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -162,7 +163,9 @@ private fun BottomNavItem(
                 text = label,
                 color = iconColor,
                 fontSize = 11.sp,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
