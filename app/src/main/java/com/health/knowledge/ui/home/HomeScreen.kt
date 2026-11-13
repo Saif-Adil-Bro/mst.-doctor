@@ -1259,18 +1259,26 @@ fun ArticleCard(
 
             Spacer(Modifier.height(10.dp))
 
-            // Non-scrolling Row to eliminate touch slop contention during vertical LazyColumn scroll
+            // Horizontally scrollable single-line tag row for categories/diseases and herbal/medicines
             if (article.categories.isNotEmpty() || article.medicines.isNotEmpty()) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    article.categories.take(3).forEach { cat ->
-                        TagChip(text = cat.replace("_", " "), color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f))
+                    article.categories.distinct().forEach { cat ->
+                        TagChip(
+                            text = cat.replace("_", " "),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
+                        )
                     }
-                    article.medicines.take(2).forEach { med ->
-                        TagChip(text = "💊 $med", color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.65f))
+                    article.medicines.distinct().forEach { med ->
+                        TagChip(
+                            text = "💊 $med",
+                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.65f)
+                        )
                     }
                 }
                 Spacer(Modifier.height(10.dp))
@@ -1373,7 +1381,10 @@ fun TagChip(text: String, color: Color) {
         Text(
             text = text,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-            style = MaterialTheme.typography.labelSmall
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
