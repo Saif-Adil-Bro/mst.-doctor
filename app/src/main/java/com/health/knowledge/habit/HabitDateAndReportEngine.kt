@@ -31,13 +31,39 @@ data class DateStripItem(
     val completedCount: Int
 )
 
+enum class ReportBarStatus {
+    COMPLETED,
+    PARTIAL,
+    MISSED,
+    PENDING,
+    NO_SCHEDULE
+}
+
 @Immutable
 data class ReportBarBucket(
     val label: String,
     val completed: Int,
     val total: Int,
     val fraction: Float,
-    val isHighlighted: Boolean = false
+    val isHighlighted: Boolean = false,
+    val fullTitleBn: String = label,
+    val missed: Int = 0,
+    val pending: Int = 0,
+    val status: ReportBarStatus = ReportBarStatus.PENDING,
+    val bucketStartMillis: Long = 0L,
+    val completedItems: List<String> = emptyList(),
+    val incompleteItems: List<String> = emptyList()
+)
+
+@Immutable
+data class HabitConsistencyStat(
+    val habitId: String,
+    val title: String,
+    val category: String,
+    val anchorTimeFormatted: String,
+    val completedDays: Int,
+    val scheduledDays: Int,
+    val completionPercent: Int
 )
 
 @Immutable
@@ -52,7 +78,10 @@ data class HabitPeriodReport(
     val missedCount: Int,
     val completionPercent: Int,
     val bars: List<ReportBarBucket>,
-    val filteredLogs: List<HabitExecutionLogEntity>
+    val filteredLogs: List<HabitExecutionLogEntity>,
+    val bestBucketLabel: String = "",
+    val activeDaysCount: Int = 0,
+    val habitConsistency: List<HabitConsistencyStat> = emptyList()
 )
 
 object HabitDateAndReportEngine {
@@ -169,6 +198,17 @@ object HabitDateAndReportEngine {
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
         }.timeInMillis
+    }
+
+    /**
+     * Returns true if the habit's scheduled anchor time on [dateMillis] is strictly after [nowMillis].
+     */
+    fun isHabitTimeSlotInFuture(
+        dateMillis: Long,
+        anchorTime: String,
+        nowMillis: Long = System.currentTimeMillis()
+    ): Boolean {
+        return anchorTimestampForDate(dateMillis, anchorTime) > nowMillis
     }
 
     fun formatFullDateBn(timeMillis: Long): String {
@@ -353,6 +393,22 @@ object HabitDateAndReportEngine {
         }
     }
 
+    private fun resolveBarStatus(
+        completed: Int,
+        missed: Int,
+        pending: Int,
+        total: Int
+    ): ReportBarStatus {
+        return when {
+            total <= 0 -> ReportBarStatus.NO_SCHEDULE
+            completed >= total -> ReportBarStatus.COMPLETED
+            completed > 0 -> ReportBarStatus.PARTIAL
+            missed > 0 -> ReportBarStatus.MISSED
+            pending > 0 -> ReportBarStatus.PENDING
+            else -> ReportBarStatus.NO_SCHEDULE
+        }
+    }
+
     private fun computeDailyReport(
         activeHabits: List<HabitEntity>,
         logs: List<HabitExecutionLogEntity>,
@@ -374,13 +430,17 @@ object HabitDateAndReportEngine {
 
         // 4 time-of-day buckets for Daily chart: সকাল (<12), দুপুর (12..15), বিকাল (16..18), রাত (19..23)
         val bucketRanges = listOf(
-            "সকাল" to (0..11),
-            "দুপুর" to (12..15),
-            "বিকাল" to (16..18),
-            "রাত" to (19..23)
+            "সকাল" to "সকালের সময়সূচি (ভোর–১১:৫৯)",
+            "দুপুর" to "দুপুরের সময়সূচি (১২:০০–৩:৫৯)",
+            "বিকাল" to "বিকালের সময়সূচি (৪:০০–৬:৫৯)",
+            "রাত" to "রাতের সময়সূচি (৭:০০–১১:৫৯)"
         )
         val bucketTotal = IntArray(4)
         val bucketDone = IntArray(4)
+        val bucketMissed = IntArray(4)
+        val bucketPending = IntArray(4)
+        val bucketCompletedItems = Array(4) { mutableListOf<String>() }
+        val bucketIncompleteItems = Array(4) { mutableListOf<String>() }
 
         for (habit in scheduledToday) {
             val (h, _) = HabitScheduleCalculator.parseAnchorTime(habit.anchorTime)
@@ -391,16 +451,28 @@ object HabitDateAndReportEngine {
                 else -> 3
             }
             bucketTotal[bIdx]++
+            val timeBn = HabitScheduleCalculator.format24hToBengali(habit.anchorTime)
 
             if (habit.id in completedIds) {
                 completedCount++
                 bucketDone[bIdx]++
+                bucketCompletedItems[bIdx].add("${habit.title} ($timeBn)")
             } else {
                 val anchorTs = anchorTimestampForDate(selectedStart, habit.anchorTime)
-                when {
-                    selectedStart < todayStart -> missedCount++
-                    selectedStart == todayStart && anchorTs + 60 * 60_000L < nowMillis -> missedCount++
-                    else -> pendingCount++
+                val isMissed = when {
+                    selectedStart < todayStart -> true
+                    selectedStart == todayStart && anchorTs + 60 * 60_000L < nowMillis -> true
+                    else -> false
+                }
+                if (isMissed) {
+                    missedCount++
+                    bucketMissed[bIdx]++
+                    bucketIncompleteItems[bIdx].add("${habit.title} ($timeBn • মিসড)")
+                } else {
+                    pendingCount++
+                    bucketPending[bIdx]++
+                    val suffix = if (anchorTs > nowMillis) "আসন্ন" else "বাকি"
+                    bucketIncompleteItems[bIdx].add("${habit.title} ($timeBn • $suffix)")
                 }
             }
         }
@@ -408,15 +480,32 @@ object HabitDateAndReportEngine {
         val total = scheduledToday.size
         val percent = if (total > 0) ((completedCount * 100f) / total).roundToInt() else 0
 
-        val bars = bucketRanges.mapIndexed { idx, (label, _) ->
+        val currentHour = Calendar.getInstance().apply { timeInMillis = nowMillis }.get(Calendar.HOUR_OF_DAY)
+        val currentBucketIdx = when (currentHour) {
+            in 0..11 -> 0
+            in 12..15 -> 1
+            in 16..18 -> 2
+            else -> 3
+        }
+
+        val bars = bucketRanges.mapIndexed { idx, (label, fullTitle) ->
             val bTot = bucketTotal[idx]
             val bDon = bucketDone[idx]
+            val bMis = bucketMissed[idx]
+            val bPen = bucketPending[idx]
             ReportBarBucket(
                 label = label,
+                fullTitleBn = fullTitle,
                 completed = bDon,
                 total = bTot,
+                missed = bMis,
+                pending = bPen,
                 fraction = if (bTot > 0) (bDon.toFloat() / bTot.toFloat()).coerceIn(0f, 1f) else 0f,
-                isHighlighted = bDon > 0 && bDon == bTot
+                status = resolveBarStatus(bDon, bMis, bPen, bTot),
+                isHighlighted = if (selectedStart == todayStart) idx == currentBucketIdx else (bDon > 0 && bDon == bTot),
+                bucketStartMillis = selectedStart,
+                completedItems = bucketCompletedItems[idx],
+                incompleteItems = bucketIncompleteItems[idx]
             )
         }
 
@@ -436,7 +525,8 @@ object HabitDateAndReportEngine {
             missedCount = missedCount,
             completionPercent = percent,
             bars = bars,
-            filteredLogs = periodLogs
+            filteredLogs = periodLogs,
+            activeDaysCount = if (completedCount > 0) 1 else 0
         )
     }
 
@@ -448,7 +538,6 @@ object HabitDateAndReportEngine {
         todayStart: Long,
         nowMillis: Long
     ): HabitPeriodReport {
-        // Compute Monday..Sunday of the week containing selectedStart
         val isoSelected = isoDayOfWeek(selectedStart) // 1 = Mon .. 7 = Sun
         val weekStart = addDays(selectedStart, -(isoSelected - 1))
         val weekEnd = endOfDayMillis(addDays(weekStart, 6))
@@ -457,8 +546,14 @@ object HabitDateAndReportEngine {
         var completedCount = 0
         var pendingCount = 0
         var missedCount = 0
+        var activeDaysCount = 0
+
+        val habitScheduled = mutableMapOf<String, Int>()
+        val habitDone = mutableMapOf<String, Int>()
 
         val bars = ArrayList<ReportBarBucket>(7)
+        var bestLabel = ""
+        var bestRatio = -1f
 
         for (dayIdx in 0..6) {
             val dStart = addDays(weekStart, dayIdx)
@@ -468,32 +563,83 @@ object HabitDateAndReportEngine {
             }
             val doneIds = completedByDay[dStart].orEmpty()
             var dDone = 0
+            var dMissed = 0
+            var dPending = 0
+            val completedItems = mutableListOf<String>()
+            val incompleteItems = mutableListOf<String>()
 
             for (habit in dayHabits) {
                 totalScheduled++
+                habitScheduled[habit.id] = (habitScheduled[habit.id] ?: 0) + 1
+                val timeBn = HabitScheduleCalculator.format24hToBengali(habit.anchorTime)
+
                 if (habit.id in doneIds) {
                     completedCount++
                     dDone++
+                    habitDone[habit.id] = (habitDone[habit.id] ?: 0) + 1
+                    completedItems.add("${habit.title} ($timeBn)")
                 } else {
                     val anchorTs = anchorTimestampForDate(dStart, habit.anchorTime)
-                    when {
-                        dStart < todayStart -> missedCount++
-                        dStart == todayStart && anchorTs + 60 * 60_000L < nowMillis -> missedCount++
-                        else -> pendingCount++
+                    val isMissed = when {
+                        dStart < todayStart -> true
+                        dStart == todayStart && anchorTs + 60 * 60_000L < nowMillis -> true
+                        else -> false
+                    }
+                    if (isMissed) {
+                        missedCount++
+                        dMissed++
+                        incompleteItems.add("${habit.title} ($timeBn • মিসড)")
+                    } else {
+                        pendingCount++
+                        dPending++
+                        val tag = if (dStart > todayStart || anchorTs > nowMillis) "আসন্ন" else "বাকি"
+                        incompleteItems.add("${habit.title} ($timeBn • $tag)")
                     }
                 }
             }
 
+            if (dDone > 0) activeDaysCount++
+
             val dTot = dayHabits.size
+            val frac = if (dTot > 0) (dDone.toFloat() / dTot.toFloat()).coerceIn(0f, 1f) else 0f
+            if (dDone > 0 && frac > bestRatio) {
+                bestRatio = frac
+                bestLabel = shortWeekdaysBn[isoDay] ?: ""
+            }
+
             bars.add(
                 ReportBarBucket(
                     label = shortWeekdaysBn[isoDay] ?: "",
+                    fullTitleBn = formatFullDateBn(dStart),
                     completed = dDone,
                     total = dTot,
-                    fraction = if (dTot > 0) (dDone.toFloat() / dTot.toFloat()).coerceIn(0f, 1f) else 0f,
-                    isHighlighted = dStart == selectedStart
+                    missed = dMissed,
+                    pending = dPending,
+                    fraction = frac,
+                    status = resolveBarStatus(dDone, dMissed, dPending, dTot),
+                    isHighlighted = dStart == selectedStart,
+                    bucketStartMillis = dStart,
+                    completedItems = completedItems,
+                    incompleteItems = incompleteItems
                 )
             )
+        }
+
+        val consistency = activeHabits.mapNotNull { habit ->
+            val sched = habitScheduled[habit.id] ?: 0
+            if (sched == 0) null
+            else {
+                val done = habitDone[habit.id] ?: 0
+                HabitConsistencyStat(
+                    habitId = habit.id,
+                    title = habit.title,
+                    category = habit.category,
+                    anchorTimeFormatted = HabitScheduleCalculator.format24hToBengali(habit.anchorTime),
+                    completedDays = done,
+                    scheduledDays = sched,
+                    completionPercent = ((done * 100f) / sched).roundToInt()
+                )
+            }
         }
 
         val percent = if (totalScheduled > 0) {
@@ -518,7 +664,10 @@ object HabitDateAndReportEngine {
             missedCount = missedCount,
             completionPercent = percent,
             bars = bars,
-            filteredLogs = periodLogs
+            filteredLogs = periodLogs,
+            bestBucketLabel = bestLabel,
+            activeDaysCount = activeDaysCount,
+            habitConsistency = consistency
         )
     }
 
@@ -531,7 +680,6 @@ object HabitDateAndReportEngine {
         nowMillis: Long
     ): HabitPeriodReport {
         val cal = Calendar.getInstance().apply { timeInMillis = selectedStart }
-        val selectedDayOfMonth = cal.get(Calendar.DAY_OF_MONTH)
         cal.set(Calendar.DAY_OF_MONTH, 1)
         val monthStart = startOfDayMillis(cal.timeInMillis)
         val maxDay = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
@@ -542,17 +690,13 @@ object HabitDateAndReportEngine {
         var completedCount = 0
         var pendingCount = 0
         var missedCount = 0
+        var activeDaysCount = 0
 
-        // Group into 5 weekly buckets of the month: ১-৭, ৮-১৪, ১৫-২১, ২২-২৮, ২৯+
-        val weekBuckets = listOf(
-            "সপ্তাহ ১" to (1..7),
-            "সপ্তাহ ২" to (8..14),
-            "সপ্তাহ ৩" to (15..21),
-            "সপ্তাহ ৪" to (22..28),
-            "সপ্তাহ ৫" to (29..31)
-        )
-        val wTot = IntArray(5)
-        val wDone = IntArray(5)
+        val habitScheduled = mutableMapOf<String, Int>()
+        val habitDone = mutableMapOf<String, Int>()
+        val bars = ArrayList<ReportBarBucket>(maxDay)
+        var bestLabel = ""
+        var bestRatio = -1f
 
         val dayCal = Calendar.getInstance()
         for (dayNum in 1..maxDay) {
@@ -560,42 +704,91 @@ object HabitDateAndReportEngine {
             dayCal.set(Calendar.DAY_OF_MONTH, dayNum)
             val dStart = startOfDayMillis(dayCal.timeInMillis)
             val isoDay = calendarDayToIso(dayCal.get(Calendar.DAY_OF_WEEK))
-            val wIdx = ((dayNum - 1) / 7).coerceIn(0, 4)
 
             val dayHabits = activeHabits.filter {
                 isoDay in HabitScheduleCalculator.parseRepeatDays(it.repeatDays)
             }
             val doneIds = completedByDay[dStart].orEmpty()
 
+            var dDone = 0
+            var dMissed = 0
+            var dPending = 0
+            val completedItems = mutableListOf<String>()
+            val incompleteItems = mutableListOf<String>()
+
             for (habit in dayHabits) {
                 totalScheduled++
-                wTot[wIdx]++
+                habitScheduled[habit.id] = (habitScheduled[habit.id] ?: 0) + 1
+                val timeBn = HabitScheduleCalculator.format24hToBengali(habit.anchorTime)
+
                 if (habit.id in doneIds) {
                     completedCount++
-                    wDone[wIdx]++
+                    dDone++
+                    habitDone[habit.id] = (habitDone[habit.id] ?: 0) + 1
+                    completedItems.add("${habit.title} ($timeBn)")
                 } else {
                     val anchorTs = anchorTimestampForDate(dStart, habit.anchorTime)
-                    when {
-                        dStart < todayStart -> missedCount++
-                        dStart == todayStart && anchorTs + 60 * 60_000L < nowMillis -> missedCount++
-                        else -> pendingCount++
+                    val isMissed = when {
+                        dStart < todayStart -> true
+                        dStart == todayStart && anchorTs + 60 * 60_000L < nowMillis -> true
+                        else -> false
+                    }
+                    if (isMissed) {
+                        missedCount++
+                        dMissed++
+                        incompleteItems.add("${habit.title} ($timeBn • মিসড)")
+                    } else {
+                        pendingCount++
+                        dPending++
+                        val tag = if (dStart > todayStart || anchorTs > nowMillis) "আসন্ন" else "বাকি"
+                        incompleteItems.add("${habit.title} ($timeBn • $tag)")
                     }
                 }
             }
+
+            if (dDone > 0) activeDaysCount++
+
+            val dTot = dayHabits.size
+            val dayLabelBn = HabitScheduleCalculator.toBengaliDigits(dayNum.toString())
+            val frac = if (dTot > 0) (dDone.toFloat() / dTot.toFloat()).coerceIn(0f, 1f) else 0f
+            if (dDone > 0 && frac >= bestRatio) {
+                bestRatio = frac
+                bestLabel = formatShortDateBn(dStart)
+            }
+
+            bars.add(
+                ReportBarBucket(
+                    label = dayLabelBn,
+                    fullTitleBn = formatFullDateBn(dStart),
+                    completed = dDone,
+                    total = dTot,
+                    missed = dMissed,
+                    pending = dPending,
+                    fraction = frac,
+                    status = resolveBarStatus(dDone, dMissed, dPending, dTot),
+                    isHighlighted = dStart == selectedStart,
+                    bucketStartMillis = dStart,
+                    completedItems = completedItems,
+                    incompleteItems = incompleteItems
+                )
+            )
         }
 
-        val selectedWeekIdx = ((selectedDayOfMonth - 1) / 7).coerceIn(0, 4)
-        val activeBucketCount = if (maxDay > 28) 5 else 4
-        val bars = (0 until activeBucketCount).map { idx ->
-            val tot = wTot[idx]
-            val don = wDone[idx]
-            ReportBarBucket(
-                label = weekBuckets[idx].first,
-                completed = don,
-                total = tot,
-                fraction = if (tot > 0) (don.toFloat() / tot.toFloat()).coerceIn(0f, 1f) else 0f,
-                isHighlighted = idx == selectedWeekIdx
-            )
+        val consistency = activeHabits.mapNotNull { habit ->
+            val sched = habitScheduled[habit.id] ?: 0
+            if (sched == 0) null
+            else {
+                val done = habitDone[habit.id] ?: 0
+                HabitConsistencyStat(
+                    habitId = habit.id,
+                    title = habit.title,
+                    category = habit.category,
+                    anchorTimeFormatted = HabitScheduleCalculator.format24hToBengali(habit.anchorTime),
+                    completedDays = done,
+                    scheduledDays = sched,
+                    completionPercent = ((done * 100f) / sched).roundToInt()
+                )
+            }
         }
 
         val percent = if (totalScheduled > 0) {
@@ -618,7 +811,10 @@ object HabitDateAndReportEngine {
             missedCount = missedCount,
             completionPercent = percent,
             bars = bars,
-            filteredLogs = periodLogs
+            filteredLogs = periodLogs,
+            bestBucketLabel = bestLabel,
+            activeDaysCount = activeDaysCount,
+            habitConsistency = consistency
         )
     }
 
@@ -646,9 +842,18 @@ object HabitDateAndReportEngine {
         var completedCount = 0
         var pendingCount = 0
         var missedCount = 0
+        var activeDaysCount = 0
 
         val mTot = IntArray(12)
         val mDone = IntArray(12)
+        val mMissed = IntArray(12)
+        val mPending = IntArray(12)
+
+        val monthHabitSched = Array(12) { mutableMapOf<String, Int>() }
+        val monthHabitDone = Array(12) { mutableMapOf<String, Int>() }
+        val monthHabitMissed = Array(12) { mutableMapOf<String, Int>() }
+        val yearHabitSched = mutableMapOf<String, Int>()
+        val yearHabitDone = mutableMapOf<String, Int>()
 
         val iterCal = Calendar.getInstance().apply { timeInMillis = yearStart }
         while (iterCal.get(Calendar.YEAR) == year) {
@@ -659,35 +864,118 @@ object HabitDateAndReportEngine {
                 isoDay in HabitScheduleCalculator.parseRepeatDays(it.repeatDays)
             }
             val doneIds = completedByDay[dStart].orEmpty()
+            var anyDoneToday = false
 
             for (habit in dayHabits) {
                 totalScheduled++
                 mTot[mIdx]++
+                yearHabitSched[habit.id] = (yearHabitSched[habit.id] ?: 0) + 1
+                monthHabitSched[mIdx][habit.id] = (monthHabitSched[mIdx][habit.id] ?: 0) + 1
+
                 if (habit.id in doneIds) {
                     completedCount++
                     mDone[mIdx]++
+                    anyDoneToday = true
+                    yearHabitDone[habit.id] = (yearHabitDone[habit.id] ?: 0) + 1
+                    monthHabitDone[mIdx][habit.id] = (monthHabitDone[mIdx][habit.id] ?: 0) + 1
                 } else {
                     val anchorTs = anchorTimestampForDate(dStart, habit.anchorTime)
-                    when {
-                        dStart < todayStart -> missedCount++
-                        dStart == todayStart && anchorTs + 60 * 60_000L < nowMillis -> missedCount++
-                        else -> pendingCount++
+                    val isMissed = when {
+                        dStart < todayStart -> true
+                        dStart == todayStart && anchorTs + 60 * 60_000L < nowMillis -> true
+                        else -> false
+                    }
+                    if (isMissed) {
+                        missedCount++
+                        mMissed[mIdx]++
+                        monthHabitMissed[mIdx][habit.id] = (monthHabitMissed[mIdx][habit.id] ?: 0) + 1
+                    } else {
+                        pendingCount++
+                        mPending[mIdx]++
                     }
                 }
             }
+            if (anyDoneToday) activeDaysCount++
             iterCal.add(Calendar.DAY_OF_YEAR, 1)
         }
+
+        val yearBn = HabitScheduleCalculator.toBengaliDigits(year.toString())
+        var bestMonthLabel = ""
+        var bestMonthRatio = -1f
 
         val bars = (0..11).map { mIdx ->
             val tot = mTot[mIdx]
             val don = mDone[mIdx]
+            val mis = mMissed[mIdx]
+            val pen = mPending[mIdx]
+            val frac = if (tot > 0) (don.toFloat() / tot.toFloat()).coerceIn(0f, 1f) else 0f
+            if (don > 0 && frac > bestMonthRatio) {
+                bestMonthRatio = frac
+                bestMonthLabel = fullMonthsBn[mIdx]
+            }
+
+            val compItems = mutableListOf<String>()
+            val incompItems = mutableListOf<String>()
+            for (habit in activeHabits) {
+                val hSched = monthHabitSched[mIdx][habit.id] ?: 0
+                if (hSched > 0) {
+                    val hDone = monthHabitDone[mIdx][habit.id] ?: 0
+                    val hMis = monthHabitMissed[mIdx][habit.id] ?: 0
+                    if (hDone > 0) {
+                        compItems.add(
+                            "${habit.title}: ${HabitScheduleCalculator.toBengaliDigits(hDone.toString())}/${HabitScheduleCalculator.toBengaliDigits(hSched.toString())} দিন"
+                        )
+                    }
+                    if (hMis > 0) {
+                        incompItems.add(
+                            "${habit.title}: ${HabitScheduleCalculator.toBengaliDigits(hMis.toString())} দিন মিসড"
+                        )
+                    } else if (hDone < hSched && pen > 0) {
+                        val rem = hSched - hDone
+                        incompItems.add(
+                            "${habit.title}: ${HabitScheduleCalculator.toBengaliDigits(rem.toString())} দিন বাকি"
+                        )
+                    }
+                }
+            }
+
+            val mCal = Calendar.getInstance().apply {
+                set(Calendar.YEAR, year)
+                set(Calendar.MONTH, mIdx)
+                set(Calendar.DAY_OF_MONTH, 1)
+            }
+
             ReportBarBucket(
                 label = shortMonthsBn[mIdx],
+                fullTitleBn = "${fullMonthsBn[mIdx]} $yearBn",
                 completed = don,
                 total = tot,
-                fraction = if (tot > 0) (don.toFloat() / tot.toFloat()).coerceIn(0f, 1f) else 0f,
-                isHighlighted = mIdx == selectedMonth
+                missed = mis,
+                pending = pen,
+                fraction = frac,
+                status = resolveBarStatus(don, mis, pen, tot),
+                isHighlighted = mIdx == selectedMonth,
+                bucketStartMillis = startOfDayMillis(mCal.timeInMillis),
+                completedItems = compItems,
+                incompleteItems = incompItems
             )
+        }
+
+        val consistency = activeHabits.mapNotNull { habit ->
+            val sched = yearHabitSched[habit.id] ?: 0
+            if (sched == 0) null
+            else {
+                val done = yearHabitDone[habit.id] ?: 0
+                HabitConsistencyStat(
+                    habitId = habit.id,
+                    title = habit.title,
+                    category = habit.category,
+                    anchorTimeFormatted = HabitScheduleCalculator.format24hToBengali(habit.anchorTime),
+                    completedDays = done,
+                    scheduledDays = sched,
+                    completionPercent = ((done * 100f) / sched).roundToInt()
+                )
+            }
         }
 
         val percent = if (totalScheduled > 0) {
@@ -698,8 +986,6 @@ object HabitDateAndReportEngine {
             val ts = it.executedTime ?: it.scheduledTime
             ts in yearStart..yearEnd
         }
-
-        val yearBn = HabitScheduleCalculator.toBengaliDigits(year.toString())
 
         return HabitPeriodReport(
             period = ReportPeriod.YEARLY,
@@ -712,7 +998,10 @@ object HabitDateAndReportEngine {
             missedCount = missedCount,
             completionPercent = percent,
             bars = bars,
-            filteredLogs = periodLogs
+            filteredLogs = periodLogs,
+            bestBucketLabel = bestMonthLabel,
+            activeDaysCount = activeDaysCount,
+            habitConsistency = consistency
         )
     }
 }

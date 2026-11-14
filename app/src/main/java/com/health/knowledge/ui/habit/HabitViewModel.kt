@@ -107,13 +107,15 @@ class HabitViewModel @Inject constructor(
      * Toggles completion of [habit] on [dateMillis].
      * - If already COMPLETED on [dateMillis], removes the completion log (marks as remaining/undone).
      * - If not yet completed on [dateMillis]:
-     *   - If [dateMillis] is Today, marks completed now and schedules dynamic post-event alarm.
-     *   - If [dateMillis] is a past/other date, records a COMPLETED log at that date's anchor time.
+     *   - If the habit's scheduled anchor time on [dateMillis] is strictly in the future (> now),
+     *     blocks completion and returns `blockedAsFuture = true`.
+     *   - If [dateMillis] is Today (and slot time has arrived/passed), marks completed now and schedules dynamic post-event alarm.
+     *   - If [dateMillis] is a past date, records a COMPLETED log at that date's anchor time.
      */
     fun toggleHabitForDate(
         habit: HabitEntity,
         dateMillis: Long,
-        onResult: (isNowCompleted: Boolean, postTimeMillis: Long?) -> Unit
+        onResult: (isNowCompleted: Boolean, postTimeMillis: Long?, blockedAsFuture: Boolean) -> Unit
     ) {
         viewModelScope.launch {
             val dayStart = HabitDateAndReportEngine.startOfDayMillis(dateMillis)
@@ -133,17 +135,22 @@ class HabitViewModel @Inject constructor(
                     )
                 }
                 _nowMillis.value = System.currentTimeMillis()
-                onResult(false, null)
+                onResult(false, null, false)
             } else {
                 val now = System.currentTimeMillis()
                 _nowMillis.value = now
+                if (HabitDateAndReportEngine.isHabitTimeSlotInFuture(dayStart, habit.anchorTime, now)) {
+                    onResult(false, null, true)
+                    return@launch
+                }
+
                 if (HabitDateAndReportEngine.isSameDay(dayStart, now)) {
                     val postTime = habitScheduler.scheduleDynamicPostEvent(
                         habitId = habit.id,
                         completedTimestamp = now
                     )
                     _nowMillis.value = System.currentTimeMillis()
-                    onResult(true, postTime)
+                    onResult(true, postTime, false)
                 } else {
                     val anchorTs = HabitDateAndReportEngine.anchorTimestampForDate(
                         dateMillis = dayStart,
@@ -158,7 +165,7 @@ class HabitViewModel @Inject constructor(
                         status = HabitScheduleCalculator.STATUS_COMPLETED
                     )
                     habitDao.upsertExecutionLog(dateLog)
-                    onResult(true, null)
+                    onResult(true, null, false)
                 }
             }
         }

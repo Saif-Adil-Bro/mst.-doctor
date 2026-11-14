@@ -13,8 +13,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,13 +34,17 @@ import androidx.compose.ui.unit.sp
 import com.health.knowledge.data.local.entity.HabitEntity
 import com.health.knowledge.data.local.entity.HabitExecutionLogEntity
 import com.health.knowledge.habit.DateStripItem
+import com.health.knowledge.habit.HabitConsistencyStat
 import com.health.knowledge.habit.HabitPeriodReport
 import com.health.knowledge.habit.HabitScheduleCalculator
 import com.health.knowledge.habit.ReportBarBucket
+import com.health.knowledge.habit.ReportBarStatus
 import com.health.knowledge.habit.ReportPeriod
+import com.health.knowledge.ui.theme.SolaimanLipi
 import com.health.knowledge.ui.theme.onePxBorder
 import com.health.knowledge.ui.theme.solidOverSurface
 import kotlin.math.max
+import kotlin.math.roundToInt
 
 /**
  * Horizontal Scrollable Date Strip (-30 days to +30 days around today) with quick "আজ" jump button
@@ -306,7 +313,8 @@ fun PeriodReportFilterRow(
 
 /**
  * Unified Period Report Card with Progress Ring, Completed/Pending/Missed Summary,
- * Next Alarm Banner (when viewing Today), and Visual Bar Chart.
+ * Weekly/Monthly/Yearly Insights, Color-Coded Clickable Bar Chart, Breakdown Panel,
+ * Yearly 12-Month Grid, and Habit Consistency Section.
  */
 @Composable
 fun HabitPeriodReportSummaryCard(
@@ -354,16 +362,30 @@ fun HabitPeriodReportSummaryCard(
         }
     }
 
+    val defaultSelectedIdx = remember(report.period, report.periodTitleBn, report.bars.size) {
+        report.bars.indexOfFirst { it.isHighlighted }.takeIf { it >= 0 } ?: 0
+    }
+    var selectedBarIdx by remember(report.period, report.periodTitleBn, report.bars.size) {
+        mutableIntStateOf(defaultSelectedIdx)
+    }
+    val safeSelectedIdx = selectedBarIdx.coerceIn(0, max(0, report.bars.lastIndex))
+    val selectedBucket = report.bars.getOrNull(safeSelectedIdx)
+
+    val cardBg = when (report.period) {
+        ReportPeriod.WEEKLY -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.28f).solidOverSurface()
+        ReportPeriod.MONTHLY -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.34f).solidOverSurface()
+        ReportPeriod.YEARLY -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.26f).solidOverSurface()
+        ReportPeriod.DAILY -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.32f).solidOverSurface()
+    }
+
     Card(
         modifier = modifier
             .fillMaxWidth()
             .testTag("habit_period_report_card"),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.34f).solidOverSurface()
-        ),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = cardBg),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.40f))
+        border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.38f))
     ) {
         Column(
             modifier = Modifier
@@ -378,27 +400,32 @@ fun HabitPeriodReportSummaryCard(
                 horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 Box(
-                    modifier = Modifier.size(68.dp),
+                    modifier = Modifier.size(72.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator(
                         progress = { 1f },
                         modifier = Modifier.fillMaxSize(),
                         color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
-                        strokeWidth = 6.dp,
+                        strokeWidth = 7.dp,
                         strokeCap = StrokeCap.Round
                     )
                     CircularProgressIndicator(
                         progress = { animatedProgress },
                         modifier = Modifier.fillMaxSize(),
-                        color = MaterialTheme.colorScheme.primary,
-                        strokeWidth = 6.dp,
+                        color = when {
+                            report.completionPercent >= 80 -> Color(0xFF2E7D32)
+                            report.completionPercent >= 40 -> MaterialTheme.colorScheme.primary
+                            else -> Color(0xFFED8A0A)
+                        },
+                        strokeWidth = 7.dp,
                         strokeCap = StrokeCap.Round
                     )
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             text = "${HabitScheduleCalculator.toBengaliDigits(report.completionPercent.toString())}%",
-                            style = MaterialTheme.typography.labelLarge,
+                            fontFamily = SolaimanLipi,
+                            fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -421,18 +448,25 @@ fun HabitPeriodReportSummaryCard(
                     ) {
                         Text(
                             text = "${report.period.labelBn} রিপোর্ট",
+                            fontFamily = SolaimanLipi,
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
-                        Text(
-                            text = report.periodTitleBn,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        Surface(
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                            shape = RoundedCornerShape(50)
+                        ) {
+                            Text(
+                                text = report.periodTitleBn,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
                     }
 
                     // 3 Stat Pills: সম্পন্ন | বাকি | মিসড
@@ -455,9 +489,74 @@ fun HabitPeriodReportSummaryCard(
                         ReportStatBadge(
                             label = "মিসড",
                             count = report.missedCount,
-                            accentColor = Color(0xFFC62828),
+                            accentColor = Color(0xFFD32F2F),
                             modifier = Modifier.weight(1f)
                         )
+                    }
+                }
+            }
+
+            // Period Insight Pills for Weekly, Monthly & Yearly
+            if (report.period != ReportPeriod.DAILY) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surface,
+                        shape = RoundedCornerShape(10.dp),
+                        border = onePxBorder(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "📅 সক্রিয় দিন",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = "${HabitScheduleCalculator.toBengaliDigits(report.activeDaysCount.toString())} দিন",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
+                    if (report.bestBucketLabel.isNotBlank()) {
+                        val bestPrefix = if (report.period == ReportPeriod.YEARLY) "🏆 সেরা মাস" else "🏆 সেরা দিন"
+                        Surface(
+                            color = Color(0xFF2E7D32).copy(alpha = 0.09f),
+                            shape = RoundedCornerShape(10.dp),
+                            border = onePxBorder(Color(0xFF2E7D32).copy(alpha = 0.35f)),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = bestPrefix,
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF2E7D32),
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    text = report.bestBucketLabel,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF2E7D32),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -538,11 +637,86 @@ fun HabitPeriodReportSummaryCard(
                 }
             }
 
-            // Visual Period Bar Chart (Daily 4 slots / Weekly 7 days / Monthly 4-5 weeks / Yearly 12 months)
+            // Color Legend + Visual Clickable Bar Chart
             if (report.bars.isNotEmpty()) {
-                PeriodBarChartSection(bars = report.bars)
+                ReportColorLegendRow()
+
+                PeriodBarChartSection(
+                    period = report.period,
+                    bars = report.bars,
+                    selectedIndex = safeSelectedIdx,
+                    onSelectBar = { idx -> selectedBarIdx = idx }
+                )
+
+                // Clicked Bar Details: Completed vs Incomplete items
+                if (selectedBucket != null) {
+                    SelectedBarBreakdownPanel(
+                        bucket = selectedBucket,
+                        period = report.period
+                    )
+                }
+            }
+
+            // Yearly 12-Month Performance Grid (clickable to jump to any month bar)
+            if (report.period == ReportPeriod.YEARLY && report.bars.size == 12) {
+                YearlyMonthOverviewGrid(
+                    bars = report.bars,
+                    selectedIndex = safeSelectedIdx,
+                    onSelectMonth = { idx -> selectedBarIdx = idx }
+                )
+            }
+
+            // Routine-wise Consistency Progress Bars (Weekly / Monthly / Yearly)
+            if (report.period != ReportPeriod.DAILY && report.habitConsistency.isNotEmpty()) {
+                HabitConsistencyBreakdownSection(
+                    period = report.period,
+                    stats = report.habitConsistency
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun ReportColorLegendRow() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        LegendDotItem(color = Color(0xFF2E7D32), label = "সম্পন্ন")
+        LegendDotItem(color = Color(0xFFED8A0A), label = "আংশিক")
+        LegendDotItem(color = Color(0xFFD32F2F), label = "অসম্পন্ন")
+        LegendDotItem(color = MaterialTheme.colorScheme.outlineVariant, label = "আসন্ন")
+        Spacer(Modifier.weight(1f, fill = false))
+        Text(
+            text = "বারে ট্যাপ করে বিস্তারিত দেখুন",
+            fontSize = 10.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun LegendDotItem(color: Color, label: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(color)
+        )
+        Text(
+            text = label,
+            fontSize = 10.5.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -581,73 +755,478 @@ private fun ReportStatBadge(
 }
 
 @Composable
+private fun barColorForStatus(status: ReportBarStatus): Color {
+    return when (status) {
+        ReportBarStatus.COMPLETED -> Color(0xFF2E7D32)
+        ReportBarStatus.PARTIAL -> Color(0xFFED8A0A)
+        ReportBarStatus.MISSED -> Color(0xFFD32F2F)
+        ReportBarStatus.PENDING -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)
+        ReportBarStatus.NO_SCHEDULE -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+    }
+}
+
+@Composable
 private fun PeriodBarChartSection(
-    bars: List<ReportBarBucket>
+    period: ReportPeriod,
+    bars: List<ReportBarBucket>,
+    selectedIndex: Int,
+    onSelectBar: (Int) -> Unit
 ) {
+    val isScrollableChart = period == ReportPeriod.MONTHLY || period == ReportPeriod.YEARLY
+    val listState = rememberLazyListState(
+        initialFirstVisibleItemIndex = (selectedIndex - 3).coerceAtLeast(0)
+    )
+
+    LaunchedEffect(period, selectedIndex) {
+        if (isScrollableChart && bars.isNotEmpty()) {
+            val target = (selectedIndex - 3).coerceIn(0, bars.lastIndex)
+            listState.animateScrollToItem(target)
+        }
+    }
+
     Surface(
         color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(14.dp),
         border = onePxBorder(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("period_bar_chart")
     ) {
-        Row(
+        if (isScrollableChart) {
+            LazyRow(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 10.dp),
+                contentPadding = PaddingValues(horizontal = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.Bottom
+            ) {
+                itemsIndexed(bars) { idx, bucket ->
+                    BarBucketColumn(
+                        bucket = bucket,
+                        isSelected = idx == selectedIndex,
+                        onClick = { onSelectBar(idx) },
+                        modifier = Modifier.width(if (period == ReportPeriod.MONTHLY) 32.dp else 38.dp)
+                    )
+                }
+            }
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.Bottom
+            ) {
+                bars.forEachIndexed { idx, bucket ->
+                    BarBucketColumn(
+                        bucket = bucket,
+                        isSelected = idx == selectedIndex,
+                        onClick = { onSelectBar(idx) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BarBucketColumn(
+    bucket: ReportBarBucket,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val barColor = barColorForStatus(bucket.status)
+    val fillTarget = when {
+        bucket.total <= 0 -> 0.10f
+        bucket.status == ReportBarStatus.MISSED -> 0.30f // Clearly visible red bar on missed days
+        else -> bucket.fraction.coerceIn(0.14f, 1f)
+    }
+    val animatedFraction by animateFloatAsState(
+        targetValue = fillTarget,
+        animationSpec = tween(durationMillis = 380),
+        label = "bar_${bucket.label}"
+    )
+
+    Surface(
+        color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.11f) else Color.Transparent,
+        shape = RoundedCornerShape(10.dp),
+        border = if (isSelected) onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)) else null,
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .clickable { onClick() }
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 3.dp, vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = HabitScheduleCalculator.toBengaliDigits(bucket.completed.toString()),
+                fontSize = 10.sp,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
+
+            Box(
+                modifier = Modifier
+                    .width(14.dp)
+                    .height(62.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)),
+                contentAlignment = Alignment.BottomCenter
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight(animatedFraction)
+                        .clip(RoundedCornerShape(50))
+                        .background(barColor)
+                )
+            }
+
+            Text(
+                text = bucket.label,
+                fontSize = 10.sp,
+                fontWeight = if (isSelected || bucket.isHighlighted) FontWeight.Bold else FontWeight.Medium,
+                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                textAlign = TextAlign.Center,
+                overflow = TextOverflow.Clip
+            )
+        }
+    }
+}
+
+@Composable
+private fun SelectedBarBreakdownPanel(
+    bucket: ReportBarBucket,
+    period: ReportPeriod
+) {
+    val ratioText = "${HabitScheduleCalculator.toBengaliDigits(bucket.completed.toString())}/${HabitScheduleCalculator.toBengaliDigits(bucket.total.toString())} সম্পন্ন"
+    val badgeColor = barColorForStatus(bucket.status)
+
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(14.dp),
+        border = onePxBorder(MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("selected_bar_breakdown")
+    ) {
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.Bottom
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            bars.forEach { bucket ->
-                val animatedFraction by animateFloatAsState(
-                    targetValue = bucket.fraction.coerceIn(0.08f, 1f),
-                    animationSpec = tween(durationMillis = 400),
-                    label = "bar_${bucket.label}"
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "📌 ${bucket.fullTitleBn}",
+                    fontFamily = SolaimanLipi,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
                 )
-                val barColor = when {
-                    bucket.completed > 0 && bucket.completed >= bucket.total -> Color(0xFF2E7D32)
-                    bucket.isHighlighted -> MaterialTheme.colorScheme.primary
-                    bucket.completed > 0 -> MaterialTheme.colorScheme.primary.copy(alpha = 0.75f)
-                    else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
-                }
-
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                Spacer(Modifier.width(8.dp))
+                Surface(
+                    color = badgeColor.copy(alpha = 0.13f),
+                    shape = RoundedCornerShape(50),
+                    border = onePxBorder(badgeColor.copy(alpha = 0.35f))
                 ) {
                     Text(
-                        text = HabitScheduleCalculator.toBengaliDigits(bucket.completed.toString()),
-                        fontSize = 9.sp,
-                        fontWeight = if (bucket.isHighlighted) FontWeight.Bold else FontWeight.Normal,
-                        color = if (bucket.isHighlighted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        text = ratioText,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = badgeColor,
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
                     )
+                }
+            }
 
-                    Box(
-                        modifier = Modifier
-                            .width(12.dp)
-                            .height(44.dp)
-                            .clip(RoundedCornerShape(50))
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)),
-                        contentAlignment = Alignment.BottomCenter
+            if (bucket.total == 0) {
+                Text(
+                    text = "এই সময়ে কোনো রুটিন নির্ধারিত ছিল না।",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                // Completed Items Section
+                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .fillMaxHeight(animatedFraction)
-                                .clip(RoundedCornerShape(50))
-                                .background(barColor)
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = Color(0xFF2E7D32),
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Text(
+                            text = if (period == ReportPeriod.YEARLY) "সম্পন্ন হওয়া রুটিনসমূহ:" else "যেগুলো সম্পন্ন হয়েছে:",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF2E7D32)
                         )
                     }
 
-                    Text(
-                        text = bucket.label,
-                        fontSize = 9.sp,
-                        fontWeight = if (bucket.isHighlighted) FontWeight.Bold else FontWeight.Medium,
-                        color = if (bucket.isHighlighted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        textAlign = TextAlign.Center,
-                        overflow = TextOverflow.Clip
-                    )
+                    if (bucket.completedItems.isEmpty()) {
+                        Text(
+                            text = "• কোনোটিই সম্পন্ন হয়নি",
+                            fontSize = 11.5.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 6.dp)
+                        )
+                    } else {
+                        bucket.completedItems.forEach { itemText ->
+                            Surface(
+                                color = Color(0xFF2E7D32).copy(alpha = 0.09f),
+                                shape = RoundedCornerShape(8.dp),
+                                border = onePxBorder(Color(0xFF2E7D32).copy(alpha = 0.28f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = "✓ $itemText",
+                                    fontFamily = SolaimanLipi,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Incomplete Items Section
+                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    val isPendingOnly = bucket.status == ReportBarStatus.PENDING
+                    val sectionAccent = if (isPendingOnly) MaterialTheme.colorScheme.primary else Color(0xFFD32F2F)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isPendingOnly) Icons.Default.Schedule else Icons.Default.Cancel,
+                            contentDescription = null,
+                            tint = sectionAccent,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Text(
+                            text = if (isPendingOnly) "আসন্ন / বাকি রুটিনসমূহ:" else "যেগুলো সম্পন্ন হয়নি:",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = sectionAccent
+                        )
+                    }
+
+                    if (bucket.incompleteItems.isEmpty()) {
+                        Text(
+                            text = "🎉 সব রুটিন শতভাগ সম্পন্ন হয়েছে!",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF2E7D32),
+                            modifier = Modifier.padding(start = 6.dp)
+                        )
+                    } else {
+                        bucket.incompleteItems.forEach { itemText ->
+                            val isUpcomingItem = itemText.contains("আসন্ন") || itemText.contains("বাকি")
+                            val chipAccent = if (isUpcomingItem) Color(0xFFED8A0A) else Color(0xFFD32F2F)
+                            val prefixIcon = if (isUpcomingItem) "⏳" else "✕"
+                            Surface(
+                                color = chipAccent.copy(alpha = 0.09f),
+                                shape = RoundedCornerShape(8.dp),
+                                border = onePxBorder(chipAccent.copy(alpha = 0.28f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = "$prefixIcon $itemText",
+                                    fontFamily = SolaimanLipi,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun YearlyMonthOverviewGrid(
+    bars: List<ReportBarBucket>,
+    selectedIndex: Int,
+    onSelectMonth: (Int) -> Unit
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(14.dp),
+        border = onePxBorder(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "📆 ১২ মাসের সারাংশ গ্রিড",
+                fontFamily = SolaimanLipi,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            bars.chunked(4).forEachIndexed { rowIdx, rowMonths ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    rowMonths.forEachIndexed { colIdx, monthBucket ->
+                        val absIdx = rowIdx * 4 + colIdx
+                        val selected = absIdx == selectedIndex
+                        val pct = if (monthBucket.total > 0) {
+                            ((monthBucket.completed * 100f) / monthBucket.total).roundToInt()
+                        } else 0
+                        val statusColor = barColorForStatus(monthBucket.status)
+
+                        Surface(
+                            color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.13f)
+                            else statusColor.copy(alpha = 0.08f),
+                            shape = RoundedCornerShape(10.dp),
+                            border = onePxBorder(
+                                if (selected) MaterialTheme.colorScheme.primary
+                                else statusColor.copy(alpha = 0.35f)
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { onSelectMonth(absIdx) }
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(vertical = 7.dp, horizontal = 4.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Text(
+                                    text = monthBucket.label,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1
+                                )
+                                Text(
+                                    text = "${HabitScheduleCalculator.toBengaliDigits(pct.toString())}%",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = statusColor,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HabitConsistencyBreakdownSection(
+    period: ReportPeriod,
+    stats: List<HabitConsistencyStat>
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(14.dp),
+        border = onePxBorder(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "📊 ${period.labelBn} রুটিন-ভিত্তিক ধারাবাহিকতা",
+                fontFamily = SolaimanLipi,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            stats.forEach { item ->
+                val emoji = when (item.category) {
+                    HabitScheduleCalculator.CATEGORY_MEAL_LINKED -> "🍽️"
+                    HabitScheduleCalculator.CATEGORY_MEDICATION -> "💊"
+                    HabitScheduleCalculator.CATEGORY_HYDRATION -> "💧"
+                    else -> "⏰"
+                }
+                val accent = when {
+                    item.completionPercent >= 80 -> Color(0xFF2E7D32)
+                    item.completionPercent >= 40 -> MaterialTheme.colorScheme.primary
+                    else -> Color(0xFFED8A0A)
+                }
+                val progressFraction = (item.completionPercent / 100f).coerceIn(0f, 1f)
+
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "$emoji ${item.title}",
+                            fontFamily = SolaimanLipi,
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "${HabitScheduleCalculator.toBengaliDigits(item.completedDays.toString())}/${HabitScheduleCalculator.toBengaliDigits(item.scheduledDays.toString())} (${HabitScheduleCalculator.toBengaliDigits(item.completionPercent.toString())}%)",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = accent
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(7.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .fillMaxWidth(progressFraction)
+                                .clip(RoundedCornerShape(50))
+                                .background(accent)
+                        )
+                    }
                 }
             }
         }

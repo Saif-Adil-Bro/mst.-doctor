@@ -56,7 +56,9 @@ fun HabitReminderScreen(
     onBack: () -> Unit,
     viewModel: HabitViewModel = hiltViewModel()
 ) {
-    BackHandler { onBack() }
+    var showExitConfirmDialog by remember { mutableStateOf(false) }
+
+    BackHandler { showExitConfirmDialog = true }
 
     val context = LocalContext.current
     val habits by viewModel.habits.collectAsState()
@@ -183,6 +185,47 @@ fun HabitReminderScreen(
         )
     }
 
+    if (showExitConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showExitConfirmDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            title = {
+                Text(
+                    text = "হ্যাবিট প্ল্যানার বন্ধ করবেন?",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text("আপনি কি হ্যাবিট প্ল্যানার পেজটি ক্লোজ করে ফিরে যেতে চান?")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showExitConfirmDialog = false
+                        onBack()
+                    },
+                    modifier = Modifier.testTag("habit_exit_confirm_ok")
+                ) {
+                    Text("ওকে")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showExitConfirmDialog = false },
+                    modifier = Modifier.testTag("habit_exit_confirm_cancel")
+                ) {
+                    Text("বাতিল")
+                }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             Column(
@@ -203,7 +246,7 @@ fun HabitReminderScreen(
                         modifier = Modifier.weight(1f)
                     ) {
                         IconButton(
-                            onClick = onBack,
+                            onClick = { showExitConfirmDialog = true },
                             modifier = Modifier.testTag("habit_back_button")
                         ) {
                             Icon(
@@ -303,8 +346,16 @@ fun HabitReminderScreen(
                             nowMillis = nowMillis,
                             onSelectPeriod = viewModel::selectReportPeriod,
                             onToggleHabitForDate = { habit ->
-                                viewModel.toggleHabitForDate(habit, selectedDateMillis) { isNowCompleted, postTimeMillis ->
+                                viewModel.toggleHabitForDate(habit, selectedDateMillis) { isNowCompleted, postTimeMillis, blockedAsFuture ->
                                     when {
+                                        blockedAsFuture -> {
+                                            val anchorBn = HabitScheduleCalculator.format24hToBengali(habit.anchorTime)
+                                            Toast.makeText(
+                                                context,
+                                                "🔒 বর্তমান সময়ের পরবর্তী ($anchorBn) রুটিনে এখনই টিক দেওয়া যাবে না",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
                                         isNowCompleted && postTimeMillis != null -> {
                                             val timeFormatted = HabitScheduleCalculator.formatMillisToBengaliTime(postTimeMillis)
                                             Toast.makeText(
@@ -480,12 +531,19 @@ private fun ActiveHabitsDashboardTab(
         items(habitsForSelectedDate, key = { it.id }) { habit ->
             val isExpanded = habit.id in expandedHabitIds
             val isScheduledOnDay = HabitDateAndReportEngine.isHabitScheduledOnDate(habit, selectedDateMillis)
+            val isCompleted = habit.id in completedHabitIdsForSelectedDate
+            val isFutureTimeSlot = !isCompleted && HabitDateAndReportEngine.isHabitTimeSlotInFuture(
+                dateMillis = selectedDateMillis,
+                anchorTime = habit.anchorTime,
+                nowMillis = nowMillis
+            )
             CollapsibleHabitRoutineCard(
                 habit = habit,
                 configs = configsByHabit[habit.id].orEmpty(),
                 pendingPostLog = pendingPostLogsByHabit[habit.id],
-                isCompletedOnDate = habit.id in completedHabitIdsForSelectedDate,
+                isCompletedOnDate = isCompleted,
                 isScheduledOnDate = isScheduledOnDay,
+                isFutureTimeSlot = isFutureTimeSlot,
                 isExpanded = isExpanded,
                 nowMillis = nowMillis,
                 onToggleExpand = {
@@ -507,7 +565,7 @@ private fun ActiveHabitsDashboardTab(
 }
 
 /**
- * Clean Collapsible Routine Card (Date-aware completion toggle, Zero Truncation, Pure Icon Buttons).
+ * Clean Collapsible Routine Card (Date-aware completion toggle, Future-Time Lock, Zero Truncation, Pure Icon Buttons).
  */
 @Composable
 private fun CollapsibleHabitRoutineCard(
@@ -516,6 +574,7 @@ private fun CollapsibleHabitRoutineCard(
     pendingPostLog: HabitExecutionLogEntity?,
     isCompletedOnDate: Boolean,
     isScheduledOnDate: Boolean,
+    isFutureTimeSlot: Boolean,
     isExpanded: Boolean,
     nowMillis: Long,
     onToggleExpand: () -> Unit,
@@ -535,6 +594,7 @@ private fun CollapsibleHabitRoutineCard(
     val borderColor = when {
         isCompletedOnDate -> Color(0xFF2E7D32).copy(alpha = 0.55f)
         pendingPostLog != null -> MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
+        isFutureTimeSlot -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
         isActive -> MaterialTheme.colorScheme.primary.copy(alpha = 0.38f)
         else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
     }
@@ -655,6 +715,19 @@ private fun CollapsibleHabitRoutineCard(
                                         modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
                                     )
                                 }
+                            } else if (isFutureTimeSlot) {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f),
+                                    shape = RoundedCornerShape(50)
+                                ) {
+                                    Text(
+                                        text = "আসন্ন",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                                    )
+                                }
                             } else if (!isScheduledOnDate) {
                                 Text(
                                     text = "বিরতি",
@@ -674,7 +747,7 @@ private fun CollapsibleHabitRoutineCard(
 
                 Spacer(Modifier.width(8.dp))
 
-                // Date-Specific Toggle Button + Expand Icon
+                // Date-Specific Toggle Button (Locked for future slots) + Expand Icon
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -683,19 +756,26 @@ private fun CollapsibleHabitRoutineCard(
                         onClick = onMarkDoneClick,
                         modifier = Modifier.testTag("mark_done_${habit.id}"),
                         shape = RoundedCornerShape(10.dp),
-                        colors = if (isCompletedOnDate) {
-                            ButtonDefaults.buttonColors(
+                        colors = when {
+                            isCompletedOnDate -> ButtonDefaults.buttonColors(
                                 containerColor = Color(0xFF2E7D32),
                                 contentColor = Color.White
                             )
-                        } else {
-                            ButtonDefaults.buttonColors()
+                            isFutureTimeSlot -> ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
+                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            else -> ButtonDefaults.buttonColors()
                         },
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        contentPadding = PaddingValues(horizontal = 11.dp, vertical = 6.dp)
                     ) {
                         Text(
-                            text = if (isCompletedOnDate) "✓ সম্পন্ন" else "সম্পন্ন",
-                            fontSize = 12.sp,
+                            text = when {
+                                isCompletedOnDate -> "✓ সম্পন্ন"
+                                isFutureTimeSlot -> "🔒 সময় হয়নি"
+                                else -> "✓ টিক দিন"
+                            },
+                            fontSize = 11.5.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
