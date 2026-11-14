@@ -205,7 +205,7 @@ fun HomeScreen(
 
     BackHandler {
         when {
-            activeTab != "home" -> viewModel.onTabChange("home")
+            activeTab != "home" -> viewModel.onTabSelected("home")
             searchQuery.isNotBlank() || selectedCategory != null -> viewModel.clearSearch()
             else -> showAppExitDialog = true
         }
