@@ -3,6 +3,7 @@ package com.health.knowledge.pregnancy
 import androidx.compose.runtime.Immutable
 import com.health.knowledge.habit.HabitDateAndReportEngine
 import com.health.knowledge.habit.HabitScheduleCalculator
+import java.util.Calendar
 import kotlin.math.roundToInt
 
 @Immutable
@@ -183,6 +184,74 @@ data class PregnancyReminderPreset(
     val preOffsetMins: Int,
     val postOffsetMins: Int,
     val messageBn: String
+)
+
+@Immutable
+data class PeriodCycleEntry(
+    val id: String,
+    val startMillis: Long,
+    val endMillis: Long = 0L,
+    val flowLevel: String = "মাঝারি (স্বাভাবিক)",
+    val note: String = "",
+    val updatedAtMillis: Long = 0L
+)
+
+enum class HaizCalendarDayType {
+    NORMAL,
+    PERIOD_ACTUAL,
+    PERIOD_PROJECTED,
+    FERTILE,
+    OVULATION
+}
+
+@Immutable
+data class HaizCalendarCell(
+    val dayOfMonth: Int,
+    val dateMillis: Long,
+    val type: HaizCalendarDayType,
+    val haizDayNumber: Int = 0,
+    val isToday: Boolean = false
+)
+
+@Immutable
+data class MonthlyHaizReport(
+    val year: Int,
+    val monthZeroBased: Int,
+    val monthYearTitleBn: String,
+    val shortMonthLabelBn: String,
+    val hasActualLog: Boolean,
+    val isProjected: Boolean,
+    val activeEntry: PeriodCycleEntry? = null,
+    val entriesInMonth: List<PeriodCycleEntry> = emptyList(),
+    val periodStartMillis: Long = 0L,
+    val periodEndMillis: Long = 0L,
+    val periodDateRangeBn: String = "লগ করা হয়নি",
+    val durationDays: Int = 0,
+    val cycleGapDays: Int = 0,
+    val fertileStartMillis: Long = 0L,
+    val fertileEndMillis: Long = 0L,
+    val fertileRangeBn: String = "—",
+    val ovulationMillis: Long = 0L,
+    val ovulationDateBn: String = "—",
+    val flowLevelBn: String = "—",
+    val noteBn: String = "",
+    val healthNoticeTitleBn: String = "",
+    val healthNoticeDetailBn: String = "",
+    val isWarningNotice: Boolean = false,
+    val calendarLeadingEmptyCount: Int = 0,
+    val calendarCells: List<HaizCalendarCell> = emptyList()
+)
+
+@Immutable
+data class YearlyHaizMonthBar(
+    val monthZeroBased: Int,
+    val shortLabelBn: String,
+    val fullLabelBn: String,
+    val durationDays: Int,
+    val cycleGapDays: Int,
+    val hasActualLog: Boolean,
+    val isProjected: Boolean,
+    val isWarningDuration: Boolean
 )
 
 object PregnancyPlannerEngine {
@@ -1281,4 +1350,338 @@ object PregnancyPlannerEngine {
             cautionBn = "তলপেটে নিয়মিত বিরতিতে তীব্র সংকোচন বা রক্তপাত দেখা দিলে দ্রুত হাসপাতালে যান।"
         )
     )
+
+    val fullMonthNamesBn = listOf(
+        "জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "মে", "জুন",
+        "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর"
+    )
+
+    val shortMonthNamesBn = listOf(
+        "জানু", "ফেব্রু", "মার্চ", "এপ্রিল", "মে", "জুন",
+        "জুলাই", "আগস্ট", "সেপ্টে", "অক্টো", "নভে", "ডিসে"
+    )
+
+    private fun daysBetweenClean(startMillis: Long, endMillis: Long): Int {
+        val cleanA = HabitDateAndReportEngine.startOfDayMillis(startMillis)
+        val cleanB = HabitDateAndReportEngine.startOfDayMillis(endMillis)
+        return ((cleanB - cleanA + 43_200_000L) / DAY_MILLIS).toInt()
+    }
+
+    /**
+     * Builds a comprehensive Menstruation (Haiz) Monthly Report for any user-selected
+     * [year] and [monthZeroBased] (0 = Jan .. 11 = Dec).
+     */
+    fun buildMonthlyHaizReport(
+        year: Int,
+        monthZeroBased: Int,
+        history: List<PeriodCycleEntry>,
+        averageCycleDays: Int = 28,
+        todayMillis: Long = System.currentTimeMillis()
+    ): MonthlyHaizReport {
+        val safeMonth = monthZeroBased.coerceIn(0, 11)
+        val safeCycle = averageCycleDays.coerceIn(18, 60)
+        val cleanToday = HabitDateAndReportEngine.startOfDayMillis(todayMillis)
+
+        val monthCal = Calendar.getInstance().apply {
+            set(Calendar.YEAR, year)
+            set(Calendar.MONTH, safeMonth)
+            set(Calendar.DAY_OF_MONTH, 1)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val monthStartMillis = monthCal.timeInMillis
+        val daysInMonth = monthCal.getActualMaximum(Calendar.DAY_OF_MONTH)
+        val monthEndMillis = HabitDateAndReportEngine.addDays(monthStartMillis, daysInMonth - 1)
+        // Sat(7)%7=0, Sun(1)%7=1, Mon(2)%7=2, Tue(3)%7=3, Wed(4)%7=4, Thu(5)%7=5, Fri(6)%7=6
+        val leadingEmptyCount = monthCal.get(Calendar.DAY_OF_WEEK) % 7
+
+        val monthYearTitleBn = "${fullMonthNamesBn[safeMonth]} ${HabitScheduleCalculator.toBengaliDigits(year.toString())}"
+        val shortMonthLabelBn = shortMonthNamesBn[safeMonth]
+
+        val sortedHistory = history
+            .filter { it.startMillis > 0L }
+            .map { entry ->
+                val cleanStart = HabitDateAndReportEngine.startOfDayMillis(entry.startMillis)
+                val cleanEnd = if (entry.endMillis >= cleanStart) {
+                    HabitDateAndReportEngine.startOfDayMillis(entry.endMillis)
+                } else {
+                    0L
+                }
+                entry.copy(startMillis = cleanStart, endMillis = cleanEnd)
+            }
+            .sortedBy { it.startMillis }
+
+        fun effectiveEndOf(entry: PeriodCycleEntry): Long {
+            return if (entry.endMillis >= entry.startMillis) entry.endMillis else entry.startMillis
+        }
+
+        val entriesInMonth = sortedHistory.filter { entry ->
+            val effEnd = effectiveEndOf(entry)
+            entry.startMillis <= monthEndMillis && effEnd >= monthStartMillis
+        }
+
+        val primaryEntry = entriesInMonth.lastOrNull { it.startMillis in monthStartMillis..monthEndMillis }
+            ?: entriesInMonth.lastOrNull()
+
+        val actualDayMap = mutableMapOf<Long, Int>() // dayStartMillis -> haiz day index (1..N)
+        val projectedDayMap = mutableMapOf<Long, Int>()
+        val fertileSet = mutableSetOf<Long>()
+        val ovulationSet = mutableSetOf<Long>()
+
+        // Populate actual period days overlapping this month
+        entriesInMonth.forEach { entry ->
+            val effEnd = effectiveEndOf(entry)
+            val loopStart = maxOf(entry.startMillis, monthStartMillis)
+            val loopEnd = minOf(effEnd, monthEndMillis)
+            var cursor = loopStart
+            while (cursor <= loopEnd) {
+                val haizDayNum = (daysBetweenClean(entry.startMillis, cursor) + 1).coerceAtLeast(1)
+                actualDayMap[cursor] = haizDayNum
+                cursor = HabitDateAndReportEngine.addDays(cursor, 1)
+            }
+        }
+
+        // Compute cycle gap & fertile/ovulation windows for logged entries touching this month or preceding month
+        var cycleGapDays = safeCycle
+        var fertileStartMillis = 0L
+        var fertileEndMillis = 0L
+        var ovulationMillis = 0L
+
+        if (primaryEntry != null) {
+            val idx = sortedHistory.indexOf(primaryEntry)
+            if (idx > 0) {
+                val prev = sortedHistory[idx - 1]
+                val observedGap = daysBetweenClean(prev.startMillis, primaryEntry.startMillis)
+                if (observedGap in 18..60) {
+                    cycleGapDays = observedGap
+                }
+            }
+            val nextPeriod = HabitDateAndReportEngine.addDays(primaryEntry.startMillis, cycleGapDays)
+            ovulationMillis = HabitDateAndReportEngine.addDays(nextPeriod, -14)
+            fertileStartMillis = HabitDateAndReportEngine.addDays(ovulationMillis, -5)
+            fertileEndMillis = HabitDateAndReportEngine.addDays(ovulationMillis, 1)
+        }
+
+        // Mark fertile & ovulation days for all actual entries that might project into this month
+        sortedHistory.forEachIndexed { idx, entry ->
+            val gap = if (idx > 0) {
+                val g = daysBetweenClean(sortedHistory[idx - 1].startMillis, entry.startMillis)
+                if (g in 18..60) g else safeCycle
+            } else {
+                safeCycle
+            }
+            val nextP = HabitDateAndReportEngine.addDays(entry.startMillis, gap)
+            val ov = HabitDateAndReportEngine.addDays(nextP, -14)
+            val fertS = HabitDateAndReportEngine.addDays(ov, -5)
+            val fertE = HabitDateAndReportEngine.addDays(ov, 1)
+            if (ov in monthStartMillis..monthEndMillis) {
+                ovulationSet.add(ov)
+            }
+            var fc = maxOf(fertS, monthStartMillis)
+            val fEnd = minOf(fertE, monthEndMillis)
+            while (fc <= fEnd) {
+                fertileSet.add(fc)
+                fc = HabitDateAndReportEngine.addDays(fc, 1)
+            }
+        }
+
+        // Projection logic when no actual entry exists in the selected month
+        var isProjected = false
+        var projectedStart = 0L
+        var projectedEnd = 0L
+        var projectedDuration = 0
+
+        if (primaryEntry == null) {
+            val latestBefore = sortedHistory.lastOrNull { it.startMillis < monthStartMillis }
+            if (latestBefore != null) {
+                val baseDuration = if (latestBefore.endMillis >= latestBefore.startMillis) {
+                    (daysBetweenClean(latestBefore.startMillis, latestBefore.endMillis) + 1).coerceIn(3, 7)
+                } else {
+                    5
+                }
+                var cursorStart = HabitDateAndReportEngine.addDays(latestBefore.startMillis, safeCycle)
+                var guard = 0
+                while (cursorStart <= monthEndMillis && guard < 120) {
+                    val cursorEnd = HabitDateAndReportEngine.addDays(cursorStart, baseDuration - 1)
+                    val nextP = HabitDateAndReportEngine.addDays(cursorStart, safeCycle)
+                    val ov = HabitDateAndReportEngine.addDays(nextP, -14)
+                    val fertS = HabitDateAndReportEngine.addDays(ov, -5)
+                    val fertE = HabitDateAndReportEngine.addDays(ov, 1)
+
+                    if (ov in monthStartMillis..monthEndMillis) {
+                        ovulationSet.add(ov)
+                    }
+                    var fc = maxOf(fertS, monthStartMillis)
+                    val fEnd = minOf(fertE, monthEndMillis)
+                    while (fc <= fEnd) {
+                        fertileSet.add(fc)
+                        fc = HabitDateAndReportEngine.addDays(fc, 1)
+                    }
+
+                    if (cursorStart <= monthEndMillis && cursorEnd >= monthStartMillis) {
+                        isProjected = true
+                        projectedStart = cursorStart
+                        projectedEnd = cursorEnd
+                        projectedDuration = baseDuration
+                        if (ovulationMillis == 0L) {
+                            ovulationMillis = ov
+                            fertileStartMillis = fertS
+                            fertileEndMillis = fertE
+                        }
+                        var pc = maxOf(cursorStart, monthStartMillis)
+                        val pEnd = minOf(cursorEnd, monthEndMillis)
+                        while (pc <= pEnd) {
+                            projectedDayMap[pc] = (daysBetweenClean(cursorStart, pc) + 1).coerceAtLeast(1)
+                            pc = HabitDateAndReportEngine.addDays(pc, 1)
+                        }
+                    }
+
+                    cursorStart = nextP
+                    guard++
+                }
+            }
+        }
+
+        // Build calendar cells
+        val calendarCells = (1..daysInMonth).map { day ->
+            val dayMillis = HabitDateAndReportEngine.addDays(monthStartMillis, day - 1)
+            val (type, haizDayNum) = when {
+                dayMillis in actualDayMap -> HaizCalendarDayType.PERIOD_ACTUAL to (actualDayMap[dayMillis] ?: 1)
+                dayMillis in projectedDayMap -> HaizCalendarDayType.PERIOD_PROJECTED to (projectedDayMap[dayMillis] ?: 1)
+                dayMillis in ovulationSet -> HaizCalendarDayType.OVULATION to 0
+                dayMillis in fertileSet -> HaizCalendarDayType.FERTILE to 0
+                else -> HaizCalendarDayType.NORMAL to 0
+            }
+            HaizCalendarCell(
+                dayOfMonth = day,
+                dateMillis = dayMillis,
+                type = type,
+                haizDayNumber = haizDayNum,
+                isToday = dayMillis == cleanToday
+            )
+        }
+
+        val hasActualLog = primaryEntry != null
+        val reportStart = primaryEntry?.startMillis ?: projectedStart
+        val reportEnd = if (primaryEntry != null) effectiveEndOf(primaryEntry) else projectedEnd
+        val durationDays = when {
+            primaryEntry != null -> (daysBetweenClean(primaryEntry.startMillis, effectiveEndOf(primaryEntry)) + 1).coerceAtLeast(1)
+            isProjected -> projectedDuration
+            else -> 0
+        }
+
+        val periodDateRangeBn = when {
+            reportStart > 0L && reportEnd > reportStart ->
+                "${HabitDateAndReportEngine.formatShortDateBn(reportStart)} – ${HabitDateAndReportEngine.formatShortDateBn(reportEnd)}"
+            reportStart > 0L -> HabitDateAndReportEngine.formatShortDateBn(reportStart)
+            else -> "লগ করা হয়নি"
+        }
+
+        val fertileRangeBn = if (fertileStartMillis > 0L && fertileEndMillis >= fertileStartMillis) {
+            "${HabitDateAndReportEngine.formatShortDateBn(fertileStartMillis)} – ${HabitDateAndReportEngine.formatShortDateBn(fertileEndMillis)}"
+        } else {
+            "—"
+        }
+
+        val ovulationDateBn = if (ovulationMillis > 0L) {
+            HabitDateAndReportEngine.formatShortDateBn(ovulationMillis)
+        } else {
+            "—"
+        }
+
+        val (noticeTitle, noticeDetail, isWarning) = when {
+            hasActualLog && durationDays < 3 -> Triple(
+                "💡 স্বল্প স্থায়িত্ব ও ফেকাহ সচেতনতা",
+                "এই মাসে স্থায়িত্বকাল ৩ দিনের কম (${HabitScheduleCalculator.toBengaliDigits(durationDays.toString())} দিন)। পুষ্টিহীনতা এড়াতে ডালিম, খেজুর ও আয়রনসমৃদ্ধ খাবার নিন। ইসলামী ফেকাহ মতে সর্বনিম্ন হায়েজ ৩ দিন (৭২ ঘণ্টা); ৩ দিনের কম রক্তস্রাব সাধারণত ইস্তিহাযা হিসেবে গণ্য হতে পারে।",
+                true
+            )
+            hasActualLog && durationDays > 10 -> Triple(
+                "⚠️ অতিরিক্ত রক্তক্ষরণ ও জরুরি পরামর্শ",
+                "স্থায়িত্বকাল ১০ দিনের বেশি (${HabitScheduleCalculator.toBengaliDigits(durationDays.toString())} দিন)। দ্রুত গাইনি চিকিৎসকের পরামর্শ নিন ও পর্যাপ্ত বিশ্রাম-আয়রন গ্রহণ করুন। ইসলামী ফেকাহ অনুযায়ী ১০ দিনের অতিরিক্ত সময় সাধারণত ইস্তিহাযা হিসেবে গণ্য হয়।",
+                true
+            )
+            hasActualLog && durationDays > 7 -> Triple(
+                "⚠️ ৭ দিনের বেশি স্থায়িত্ব পর্যবেক্ষণ",
+                "মাসিক ৭ দিনের বেশি (${HabitScheduleCalculator.toBengaliDigits(durationDays.toString())} দিন) চলেছে। শরীর দুর্বল লাগলে আয়রনসমৃদ্ধ খাবার নিন ও চিকিৎসকের পরামর্শ বিবেচনা করুন (ফেকাহ মতে সর্বোচ্চ হায়েজ ১০ দিন পর্যন্ত হতে পারে)।",
+                true
+            )
+            hasActualLog -> Triple(
+                "🌿 স্বাভাবিক হায়েজ ও স্বাস্থ্য রিপোর্ট",
+                "এই মাসে আপনার মাসিকের স্থায়িত্বকাল (${HabitScheduleCalculator.toBengaliDigits(durationDays.toString())} দিন) সম্পূর্ণ স্বাভাবিক ও স্বাস্থ্যসম্মত সীমার (৩–৭ দিন) মধ্যে রয়েছে।",
+                false
+            )
+            isProjected -> Triple(
+                "🔮 পূর্ববর্তী চক্র অনুযায়ী সম্ভাব্য পূর্বাভাস",
+                "আপনার গড় ${HabitScheduleCalculator.toBengaliDigits(safeCycle.toString())} দিনের চক্র অনুযায়ী এই মাসের সম্ভাব্য তারিখ দেখানো হয়েছে। আসল মাসিক শুরু হলে তারিখ লগ করে রাখুন।",
+                false
+            )
+            else -> Triple(
+                "ℹ️ এখনো কোনো তথ্য লগ করা হয়নি",
+                "এই মাসের মাসিক রিপোর্ট সংরক্ষণ করতে নিচের \"এই মাসের তথ্য লগ/হালনাগাদ\" বাটনে ট্যাপ করুন।",
+                false
+            )
+        }
+
+        return MonthlyHaizReport(
+            year = year,
+            monthZeroBased = safeMonth,
+            monthYearTitleBn = monthYearTitleBn,
+            shortMonthLabelBn = shortMonthLabelBn,
+            hasActualLog = hasActualLog,
+            isProjected = isProjected,
+            activeEntry = primaryEntry,
+            entriesInMonth = entriesInMonth,
+            periodStartMillis = reportStart,
+            periodEndMillis = reportEnd,
+            periodDateRangeBn = periodDateRangeBn,
+            durationDays = durationDays,
+            cycleGapDays = if (hasActualLog || isProjected) cycleGapDays else 0,
+            fertileStartMillis = fertileStartMillis,
+            fertileEndMillis = fertileEndMillis,
+            fertileRangeBn = fertileRangeBn,
+            ovulationMillis = ovulationMillis,
+            ovulationDateBn = ovulationDateBn,
+            flowLevelBn = primaryEntry?.flowLevel?.ifBlank { "মাঝারি (স্বাভাবিক)" }
+                ?: if (isProjected) "সম্ভাব্য (পূর্বাভাস)" else "—",
+            noteBn = primaryEntry?.note ?: "",
+            healthNoticeTitleBn = noticeTitle,
+            healthNoticeDetailBn = noticeDetail,
+            isWarningNotice = isWarning,
+            calendarLeadingEmptyCount = leadingEmptyCount,
+            calendarCells = calendarCells
+        )
+    }
+
+    /**
+     * Generates 12 monthly summary bars for a selected [year] so users can visually compare
+     * period duration and cycle regularity across all months of the year.
+     */
+    fun buildYearlyHaizTrend(
+        year: Int,
+        history: List<PeriodCycleEntry>,
+        averageCycleDays: Int = 28,
+        todayMillis: Long = System.currentTimeMillis()
+    ): List<YearlyHaizMonthBar> {
+        return (0..11).map { m ->
+            val monthReport = buildMonthlyHaizReport(
+                year = year,
+                monthZeroBased = m,
+                history = history,
+                averageCycleDays = averageCycleDays,
+                todayMillis = todayMillis
+            )
+            YearlyHaizMonthBar(
+                monthZeroBased = m,
+                shortLabelBn = shortMonthNamesBn[m],
+                fullLabelBn = fullMonthNamesBn[m],
+                durationDays = monthReport.durationDays,
+                cycleGapDays = monthReport.cycleGapDays,
+                hasActualLog = monthReport.hasActualLog,
+                isProjected = monthReport.isProjected,
+                isWarningDuration = monthReport.hasActualLog && (monthReport.durationDays < 3 || monthReport.durationDays > 7)
+            )
+        }
+    }
 }

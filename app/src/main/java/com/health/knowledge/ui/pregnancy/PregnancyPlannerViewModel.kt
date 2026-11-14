@@ -11,6 +11,7 @@ import com.health.knowledge.domain.model.toDomain
 import com.health.knowledge.habit.HabitAudioManager
 import com.health.knowledge.habit.HabitScheduleCalculator
 import com.health.knowledge.habit.HabitScheduler
+import com.health.knowledge.pregnancy.PeriodCycleEntry
 import com.health.knowledge.pregnancy.PregnancyPlannerEngine
 import com.health.knowledge.pregnancy.PregnancyReminderPreset
 import com.health.knowledge.util.UserPreferencesManager
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
@@ -48,6 +50,7 @@ class PregnancyPlannerViewModel @Inject constructor(
     val stageMode: StateFlow<String> = prefsManager.pregnancyStageMode
     val pregnancyStartMillis: StateFlow<Long> = prefsManager.pregnancyStartMillis
     val periodEndMillis: StateFlow<Long> = prefsManager.pregnancyPeriodEndMillis
+    val periodCycleHistory: StateFlow<List<PeriodCycleEntry>> = prefsManager.periodCycleHistory
     val deliveryMillis: StateFlow<Long> = prefsManager.pregnancyDeliveryMillis
     val deliveryType: StateFlow<String> = prefsManager.pregnancyDeliveryType
     val babyGender: StateFlow<String> = prefsManager.pregnancyBabyGender
@@ -57,6 +60,13 @@ class PregnancyPlannerViewModel @Inject constructor(
     val selectedSymptoms: StateFlow<Set<String>> = prefsManager.pregnancySymptoms
     val completedChecks: StateFlow<Set<String>> = prefsManager.pregnancyCompletedChecks
     val isAdminMode: StateFlow<Boolean> = prefsManager.isAdminMode
+
+    private val initialCal = Calendar.getInstance()
+    private val _selectedHaizYear = MutableStateFlow(initialCal.get(Calendar.YEAR))
+    val selectedHaizYear: StateFlow<Int> = _selectedHaizYear.asStateFlow()
+
+    private val _selectedHaizMonth = MutableStateFlow(initialCal.get(Calendar.MONTH))
+    val selectedHaizMonth: StateFlow<Int> = _selectedHaizMonth.asStateFlow()
 
     val allHabits: StateFlow<List<HabitEntity>> = habitDao.getAllHabitsFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -296,6 +306,38 @@ class PregnancyPlannerViewModel @Inject constructor(
 
     fun recordNewPeriodCycle(newStart: Long, newEnd: Long) {
         prefsManager.recordNewPeriodCycle(newStart, newEnd)
+    }
+
+    fun selectHaizReportMonth(year: Int, monthZeroBased: Int) {
+        _selectedHaizYear.value = year.coerceIn(2000, 2100)
+        _selectedHaizMonth.value = monthZeroBased.coerceIn(0, 11)
+    }
+
+    fun stepHaizReportYear(delta: Int) {
+        _selectedHaizYear.value = (_selectedHaizYear.value + delta).coerceIn(2000, 2100)
+    }
+
+    fun savePeriodCycleForReport(
+        startMillis: Long,
+        endMillis: Long,
+        flowLevel: String,
+        note: String,
+        entryId: String? = null
+    ) {
+        prefsManager.upsertPeriodCycleEntry(
+            startMillis = startMillis,
+            endMillis = endMillis,
+            flowLevel = flowLevel,
+            note = note,
+            entryId = entryId
+        )
+        val cal = Calendar.getInstance().apply { timeInMillis = startMillis }
+        _selectedHaizYear.value = cal.get(Calendar.YEAR)
+        _selectedHaizMonth.value = cal.get(Calendar.MONTH)
+    }
+
+    fun deletePeriodCycle(entryId: String) {
+        prefsManager.deletePeriodCycleEntry(entryId)
     }
 
     fun confirmConception() {

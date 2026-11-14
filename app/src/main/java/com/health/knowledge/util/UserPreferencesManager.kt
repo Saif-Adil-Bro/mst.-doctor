@@ -2,6 +2,10 @@ package com.health.knowledge.util
 
 import android.content.Context
 import android.provider.Settings
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import com.health.knowledge.habit.HabitDateAndReportEngine
+import com.health.knowledge.pregnancy.PeriodCycleEntry
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -432,6 +436,101 @@ class UserPreferencesManager @Inject constructor(
     )
     val pregnancyCompletedChecks: StateFlow<Set<String>> = _pregnancyCompletedChecks.asStateFlow()
 
+    private val gson = Gson()
+    private val periodHistoryType = object : TypeToken<List<PeriodCycleEntry>>() {}.type
+
+    private val _periodCycleHistory = MutableStateFlow<List<PeriodCycleEntry>>(loadInitialPeriodCycleHistory())
+    val periodCycleHistory: StateFlow<List<PeriodCycleEntry>> = _periodCycleHistory.asStateFlow()
+
+    private fun loadInitialPeriodCycleHistory(): List<PeriodCycleEntry> {
+        val rawJson = prefs.getString(KEY_PREGNANCY_PERIOD_HISTORY_JSON, null)
+        if (!rawJson.isNullOrBlank()) {
+            return try {
+                val parsed: List<PeriodCycleEntry>? = gson.fromJson(rawJson, periodHistoryType)
+                parsed?.filter { it.startMillis > 0L }?.sortedBy { it.startMillis } ?: emptyList()
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
+        // Auto-migrate existing single-cycle user data on first load if user is female & pre-conception (or periodEndMillis was saved)
+        val onboarded = prefs.getBoolean(KEY_PREGNANCY_ONBOARDED, false)
+        val gender = prefs.getString(KEY_PREGNANCY_GENDER, GENDER_FEMALE) ?: GENDER_FEMALE
+        val stage = prefs.getString(KEY_PREGNANCY_STAGE_MODE, STAGE_POST_CONCEPTION) ?: STAGE_POST_CONCEPTION
+        val existingStart = prefs.getLong(KEY_PREGNANCY_START_MILLIS, 0L)
+        val existingEnd = prefs.getLong(KEY_PREGNANCY_PERIOD_END_MILLIS, 0L)
+        if (onboarded && gender == GENDER_FEMALE && existingStart > 0L && (stage == STAGE_PRE_CONCEPTION || existingEnd > 0L)) {
+            val cleanStart = HabitDateAndReportEngine.startOfDayMillis(existingStart)
+            val cleanEnd = if (existingEnd >= cleanStart) HabitDateAndReportEngine.startOfDayMillis(existingEnd) else 0L
+            val migrated = listOf(
+                PeriodCycleEntry(
+                    id = "cycle_$cleanStart",
+                    startMillis = cleanStart,
+                    endMillis = cleanEnd,
+                    flowLevel = "মাঝারি (স্বাভাবিক)",
+                    note = "",
+                    updatedAtMillis = System.currentTimeMillis()
+                )
+            )
+            prefs.edit().putString(KEY_PREGNANCY_PERIOD_HISTORY_JSON, gson.toJson(migrated)).apply()
+            return migrated
+        }
+        return emptyList()
+    }
+
+    private fun persistPeriodCycleHistory(list: List<PeriodCycleEntry>, syncLatestPeriodFields: Boolean = true) {
+        val sorted = list.filter { it.startMillis > 0L }.sortedBy { it.startMillis }
+        _periodCycleHistory.value = sorted
+        prefs.edit().putString(KEY_PREGNANCY_PERIOD_HISTORY_JSON, gson.toJson(sorted)).apply()
+
+        if (syncLatestPeriodFields && _pregnancyStageMode.value == STAGE_PRE_CONCEPTION && sorted.isNotEmpty()) {
+            val latest = sorted.last()
+            _pregnancyStartMillis.value = latest.startMillis
+            _pregnancyPeriodEndMillis.value = latest.endMillis
+            prefs.edit()
+                .putLong(KEY_PREGNANCY_START_MILLIS, latest.startMillis)
+                .putLong(KEY_PREGNANCY_PERIOD_END_MILLIS, latest.endMillis)
+                .apply()
+        }
+    }
+
+    fun upsertPeriodCycleEntry(
+        startMillis: Long,
+        endMillis: Long,
+        flowLevel: String = "মাঝারি (স্বাভাবিক)",
+        note: String = "",
+        entryId: String? = null
+    ) {
+        val cleanStart = HabitDateAndReportEngine.startOfDayMillis(startMillis)
+        val cleanEnd = if (endMillis >= cleanStart) HabitDateAndReportEngine.startOfDayMillis(endMillis) else 0L
+        val current = _periodCycleHistory.value.toMutableList()
+
+        val matchIndex = when {
+            !entryId.isNullOrBlank() -> current.indexOfFirst { it.id == entryId }
+            else -> current.indexOfFirst { HabitDateAndReportEngine.isSameDay(it.startMillis, cleanStart) }
+        }
+
+        val resolvedId = if (matchIndex >= 0) current[matchIndex].id else (entryId?.takeIf { it.isNotBlank() } ?: "cycle_${cleanStart}_${UUID.randomUUID().toString().take(6)}")
+        val entry = PeriodCycleEntry(
+            id = resolvedId,
+            startMillis = cleanStart,
+            endMillis = cleanEnd,
+            flowLevel = flowLevel.ifBlank { "মাঝারি (স্বাভাবিক)" },
+            note = note.trim(),
+            updatedAtMillis = System.currentTimeMillis()
+        )
+        if (matchIndex >= 0) {
+            current[matchIndex] = entry
+        } else {
+            current.add(entry)
+        }
+        persistPeriodCycleHistory(current, syncLatestPeriodFields = true)
+    }
+
+    fun deletePeriodCycleEntry(entryId: String) {
+        val updated = _periodCycleHistory.value.filterNot { it.id == entryId }
+        persistPeriodCycleHistory(updated, syncLatestPeriodFields = true)
+    }
+
     fun setPregnancyOnboarded(onboarded: Boolean) {
         _pregnancyOnboarded.value = onboarded
         prefs.edit().putBoolean(KEY_PREGNANCY_ONBOARDED, onboarded).apply()
@@ -459,6 +558,9 @@ class UserPreferencesManager @Inject constructor(
             .putLong(KEY_PREGNANCY_START_MILLIS, startMillis)
             .putLong(KEY_PREGNANCY_PERIOD_END_MILLIS, endMillis)
             .apply()
+        if (startMillis > 0L && _pregnancyGender.value == GENDER_FEMALE) {
+            upsertPeriodCycleEntry(startMillis = startMillis, endMillis = endMillis)
+        }
     }
 
     fun recordNewPeriodCycle(newStartMillis: Long, newEndMillis: Long) {
@@ -577,6 +679,10 @@ class UserPreferencesManager @Inject constructor(
             .putStringSet(KEY_PREGNANCY_SYMPTOMS, safeSymptoms)
             .putBoolean(KEY_PREGNANCY_ONBOARDED, true)
             .apply()
+
+        if (gender == GENDER_FEMALE && startMillis > 0L && (stageMode == STAGE_PRE_CONCEPTION || periodEndMillis > 0L)) {
+            upsertPeriodCycleEntry(startMillis = startMillis, endMillis = periodEndMillis)
+        }
     }
 
     fun togglePregnancyCheckItem(itemKey: String) {
@@ -642,6 +748,7 @@ class UserPreferencesManager @Inject constructor(
         private const val KEY_PREGNANCY_STAGE_MODE = "pregnancy_stage_mode"
         private const val KEY_PREGNANCY_START_MILLIS = "pregnancy_start_millis"
         private const val KEY_PREGNANCY_PERIOD_END_MILLIS = "pregnancy_period_end_millis"
+        private const val KEY_PREGNANCY_PERIOD_HISTORY_JSON = "pregnancy_period_cycle_history_json"
         private const val KEY_PREGNANCY_DELIVERY_MILLIS = "pregnancy_delivery_millis"
         private const val KEY_PREGNANCY_DELIVERY_TYPE = "pregnancy_delivery_type"
         private const val KEY_PREGNANCY_BABY_GENDER = "pregnancy_baby_gender"

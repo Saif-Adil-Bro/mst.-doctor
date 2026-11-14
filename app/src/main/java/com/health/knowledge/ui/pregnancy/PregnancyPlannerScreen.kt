@@ -67,6 +67,9 @@ fun PregnancyPlannerScreen(
     val stageMode by viewModel.stageMode.collectAsState()
     val startMillis by viewModel.pregnancyStartMillis.collectAsState()
     val periodEndMillis by viewModel.periodEndMillis.collectAsState()
+    val periodCycleHistory by viewModel.periodCycleHistory.collectAsState()
+    val selectedHaizYear by viewModel.selectedHaizYear.collectAsState()
+    val selectedHaizMonth by viewModel.selectedHaizMonth.collectAsState()
     val cycleDays by viewModel.cycleDays.collectAsState()
     val selectedSymptoms by viewModel.selectedSymptoms.collectAsState()
     val deliveryMillis by viewModel.deliveryMillis.collectAsState()
@@ -85,6 +88,7 @@ fun PregnancyPlannerScreen(
     val isEditingSettings by viewModel.isEditingSettings.collectAsState()
 
     var showActivityReportDialog by remember { mutableStateOf(false) }
+    var showHaizReportDialog by remember { mutableStateOf(false) }
 
     BackHandler(enabled = isEditingSettings) {
         viewModel.cancelEditingSettings()
@@ -422,7 +426,26 @@ fun PregnancyPlannerScreen(
             activeHabitsCount = activeHabitIds.size,
             symptomsCount = selectedSymptoms.size,
             stageLabel = stageLabel,
+            isFemaleUser = userGender == UserPreferencesManager.GENDER_FEMALE,
+            onOpenHaizReport = {
+                showActivityReportDialog = false
+                showHaizReportDialog = true
+            },
             onDismiss = { showActivityReportDialog = false }
+        )
+    }
+
+    if (showHaizReportDialog && userGender == UserPreferencesManager.GENDER_FEMALE) {
+        HaizMonthlyReportDialog(
+            selectedYear = selectedHaizYear,
+            selectedMonthZeroBased = selectedHaizMonth,
+            averageCycleDays = cycleDays,
+            periodHistory = periodCycleHistory,
+            onSelectMonth = viewModel::selectHaizReportMonth,
+            onStepYear = viewModel::stepHaizReportYear,
+            onSaveEntry = viewModel::savePeriodCycleForReport,
+            onDeleteEntry = viewModel::deletePeriodCycle,
+            onDismiss = { showHaizReportDialog = false }
         )
     }
 
@@ -741,6 +764,7 @@ fun PregnancyPlannerScreen(
                     isAdminMode = isAdminMode,
                     isRefreshingPosts = isRefreshingPosts,
                     onOpenPeriodUpdateDialog = { showPeriodUpdateDialog = true },
+                    onOpenHaizReport = { showHaizReportDialog = true },
                     onToggleSymptom = viewModel::toggleSymptom,
                     onNextQuote = viewModel::nextQuote,
                     isSpeaking = isSpeaking,
@@ -833,6 +857,7 @@ private fun PreConceptionStageContent(
     isAdminMode: Boolean,
     isRefreshingPosts: Boolean,
     onOpenPeriodUpdateDialog: () -> Unit,
+    onOpenHaizReport: () -> Unit,
     onToggleSymptom: (String) -> Unit,
     onNextQuote: () -> Unit,
     isSpeaking: Boolean = false,
@@ -869,6 +894,7 @@ private fun PreConceptionStageContent(
                 doneCount = doneCount,
                 totalCount = preChecklist.size,
                 onOpenPeriodUpdateDialog = onOpenPeriodUpdateDialog,
+                onOpenHaizReport = onOpenHaizReport,
                 onSwitchToPostConception = onSwitchToPostConception
             )
         }
@@ -1088,6 +1114,7 @@ private fun FertileWindowHeroCard(
     doneCount: Int,
     totalCount: Int,
     onOpenPeriodUpdateDialog: () -> Unit,
+    onOpenHaizReport: () -> Unit,
     onSwitchToPostConception: () -> Unit
 ) {
     Card(
@@ -1216,6 +1243,27 @@ private fun FertileWindowHeroCard(
                 ) {
                     Text("কনসিভ করেছি 🤰", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
+            }
+
+            FilledTonalButton(
+                onClick = onOpenHaizReport,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("open_haiz_report_button"),
+                shape = RoundedCornerShape(10.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Assessment,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = "📊 মাস অনুযায়ী হায়েজ / মাসিক রিপোর্ট দেখুন",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }
@@ -3927,6 +3975,8 @@ fun ActivityReportDialog(
     activeHabitsCount: Int,
     symptomsCount: Int,
     stageLabel: String,
+    isFemaleUser: Boolean = false,
+    onOpenHaizReport: (() -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
@@ -3978,6 +4028,23 @@ fun ActivityReportDialog(
                     label = "বর্তমান পর্যায়",
                     value = stageLabel
                 )
+
+                if (isFemaleUser && onOpenHaizReport != null) {
+                    Button(
+                        onClick = onOpenHaizReport,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("activity_dialog_open_haiz_report"),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp)
+                    ) {
+                        Text(
+                            text = "🩸 মেয়েদের হায়েজ / মাসিক রিপোর্ট (মাস অনুযায়ী)",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
 
                 Surface(
                     shape = RoundedCornerShape(10.dp),
