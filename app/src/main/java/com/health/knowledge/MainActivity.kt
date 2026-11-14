@@ -57,8 +57,15 @@ class MainActivity : ComponentActivity() {
 
         // Schedule background sync every 6 hours (only when internet available)
         SyncWorker.schedule(this)
-        // Also try immediate sync on app open
-        SyncWorker.syncNow(this)
+        // Incremental check for new posts on fresh launch (throttled to avoid redundant work on config changes/reopens)
+        if (savedInstanceState == null) {
+            val syncPrefs = getSharedPreferences("sync_prefs", MODE_PRIVATE)
+            val lastSync = syncPrefs.getLong("last_sync_timestamp", 0L)
+            val fifteenMinutesMs = 15 * 60 * 1000L
+            if (lastSync == 0L || System.currentTimeMillis() - lastSync >= fifteenMinutesMs) {
+                SyncWorker.syncNow(this)
+            }
+        }
         // Schedule daily health tip reminder if enabled (default 8:00 AM or user-customized)
         DailyTipNotificationWorker.scheduleOrCancel(
             context = this,
@@ -121,26 +128,26 @@ class MainActivity : ComponentActivity() {
                         enterTransition = {
                             slideInHorizontally(
                                 initialOffsetX = { fullWidth -> fullWidth },
-                                animationSpec = tween(durationMillis = 340, easing = FastOutSlowInEasing)
-                            ) + fadeIn(animationSpec = tween(durationMillis = 300))
+                                animationSpec = tween(durationMillis = 320, easing = FastOutSlowInEasing)
+                            ) + fadeIn(animationSpec = tween(durationMillis = 280))
                         },
                         exitTransition = {
                             slideOutHorizontally(
-                                targetOffsetX = { fullWidth -> -fullWidth / 3 },
-                                animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
-                            ) + fadeOut(animationSpec = tween(durationMillis = 240))
+                                targetOffsetX = { fullWidth -> -fullWidth / 4 },
+                                animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing)
+                            ) + fadeOut(animationSpec = tween(durationMillis = 220))
                         },
                         popEnterTransition = {
                             slideInHorizontally(
-                                initialOffsetX = { fullWidth -> fullWidth / 3 },
-                                animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
-                            ) + fadeIn(animationSpec = tween(durationMillis = 300))
+                                initialOffsetX = { fullWidth -> -fullWidth / 4 },
+                                animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing)
+                            ) + fadeIn(animationSpec = tween(durationMillis = 280))
                         },
                         popExitTransition = {
                             slideOutHorizontally(
-                                targetOffsetX = { fullWidth -> -fullWidth },
-                                animationSpec = tween(durationMillis = 340, easing = FastOutSlowInEasing)
-                            ) + fadeOut(animationSpec = tween(durationMillis = 280))
+                                targetOffsetX = { fullWidth -> fullWidth },
+                                animationSpec = tween(durationMillis = 320, easing = FastOutSlowInEasing)
+                            ) + fadeOut(animationSpec = tween(durationMillis = 260))
                         }
                     ) {
                         composable("home") {
@@ -249,5 +256,12 @@ class MainActivity : ComponentActivity() {
         if (intent.getBooleanExtra("open_habit_module", false)) {
             openHabitModuleState.value = true
         }
+    }
+
+    override fun onDestroy() {
+        if (isFinishing) {
+            prefsManager.lockAdminMode()
+        }
+        super.onDestroy()
     }
 }

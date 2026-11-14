@@ -1,8 +1,10 @@
 package com.health.knowledge.ui.home
 
 import android.Manifest
+import android.app.Activity
 import android.os.Build
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
@@ -198,7 +200,54 @@ fun HomeScreen(
     var lastTapTime by remember { mutableLongStateOf(0L) }
     var showPasswordDialog by remember { mutableStateOf(false) }
     var showThemeDialog by remember { mutableStateOf(false) }
+    var showAppExitDialog by remember { mutableStateOf(false) }
     var articleToDelete by remember { mutableStateOf<Article?>(null) }
+
+    BackHandler {
+        when {
+            activeTab != "home" -> viewModel.onTabChange("home")
+            searchQuery.isNotBlank() || selectedCategory != null -> viewModel.clearSearch()
+            else -> showAppExitDialog = true
+        }
+    }
+
+    if (showAppExitDialog) {
+        AlertDialog(
+            onDismissRequest = { showAppExitDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.ExitToApp,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            title = {
+                Text(
+                    text = "অ্যাপটি বন্ধ করবেন?",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text("আপনি কি নিশ্চিতভাবে অ্যাপটি ক্লোজ করে বের হতে চান?")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showAppExitDialog = false
+                        viewModel.lockAdmin()
+                        (context as? Activity)?.finish()
+                    }
+                ) {
+                    Text("হ্যাঁ, বন্ধ করুন")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAppExitDialog = false }) {
+                    Text("না")
+                }
+            }
+        )
+    }
 
     articleToVerify?.let { target ->
         VerificationConsentDialog(

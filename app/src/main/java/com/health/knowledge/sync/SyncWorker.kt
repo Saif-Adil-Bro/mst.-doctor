@@ -24,14 +24,12 @@ class SyncWorker @AssistedInject constructor(
         return try {
             val prefs = applicationContext.getSharedPreferences("sync_prefs", Context.MODE_PRIVATE)
             val lastSync = prefs.getLong("last_sync_timestamp", 0L)
-
-            articleDao.normalizeBundledTimestamps()
-            articleDao.deduplicateCloudArticles()
+            val lastMetaSync = prefs.getLong("last_meta_sync_timestamp", 0L)
 
             val myDeviceId = prefsManager.getDeviceAuthorId()
             val myDocIds = prefsManager.getMySubmittedDocIds()
 
-            // 1. Fetch new articles from Firestore without creating duplicates
+            // 1. Fetch only NEW articles from Firestore without creating duplicates
             val newArticles = if (lastSync == 0L) {
                 firestoreDataSource.fetchAllArticles()
             } else {
@@ -59,6 +57,7 @@ class SyncWorker @AssistedInject constructor(
                 }
                 if (entities.isNotEmpty()) {
                     articleDao.insertAll(entities)
+                    articleDao.deduplicateCloudArticles()
                     if (lastSync > 0L) {
                         val firstApproved = entities.firstOrNull { it.isReviewed && !it.isDraft }
                         if (firstApproved != null) {
@@ -75,10 +74,8 @@ class SyncWorker @AssistedInject constructor(
                 }
             }
 
-            articleDao.deduplicateCloudArticles()
-
-            // 2. Fetch global postMeta overrides (pins, edits, global deletes, reactions, verifiedCount, source, cover photos)
-            val metaList = firestoreDataSource.fetchAllPostMeta()
+            // 2. Fetch ONLY updated postMeta overrides since lastMetaSync and apply diff-checked Room updates
+            val metaList = firestoreDataSource.fetchUpdatedPostMetaSince(lastMetaSync)
             for (meta in metaList) {
                 val targetEntity = when {
                     meta.postKey.startsWith("fb_") -> {
@@ -94,47 +91,65 @@ class SyncWorker @AssistedInject constructor(
                 } ?: continue
 
                 if (meta.isDeleted) {
-                    articleDao.markDeleted(targetEntity.id)
+                    if (!targetEntity.isDeleted) {
+                        articleDao.markDeleted(targetEntity.id)
+                    }
                     continue
                 }
 
                 meta.isPinned?.let { pinned ->
-                    articleDao.updatePin(targetEntity.id, pinned)
+                    if (pinned != targetEntity.isPinned) {
+                        articleDao.updatePin(targetEntity.id, pinned)
+                    }
                 }
 
                 if (meta.hasContentOverride && meta.title.isNotBlank() && meta.content.isNotBlank()) {
                     val resolvedSource = meta.source.ifBlank { targetEntity.source }
-                    val keywords = "${meta.title} ${meta.content} ${meta.medicines} ${meta.categories} $resolvedSource".lowercase()
                     val resolvedPhoto = meta.photoUrl.ifBlank { targetEntity.photoPath }
-                    articleDao.updateArticleContent(
-                        id = targetEntity.id,
-                        title = meta.title,
-                        content = meta.content,
-                        medicines = meta.medicines,
-                        categories = meta.categories,
-                        photoPath = resolvedPhoto,
-                        hasPhoto = resolvedPhoto.isNotBlank(),
-                        searchKeywords = keywords,
-                        isReviewed = meta.isReviewed,
-                        source = resolvedSource
-                    )
+                    val hasPhoto = resolvedPhoto.isNotBlank()
+                    val contentChanged = meta.title != targetEntity.title ||
+                        meta.content != targetEntity.content ||
+                        meta.medicines != targetEntity.medicines ||
+                        meta.categories != targetEntity.categories ||
+                        resolvedPhoto != targetEntity.photoPath ||
+                        hasPhoto != targetEntity.hasPhoto ||
+                        meta.isReviewed != targetEntity.isReviewed ||
+                        resolvedSource != targetEntity.source
+                    if (contentChanged) {
+                        val keywords = "${meta.title} ${meta.content} ${meta.medicines} ${meta.categories} $resolvedSource".lowercase()
+                        articleDao.updateArticleContent(
+                            id = targetEntity.id,
+                            title = meta.title,
+                            content = meta.content,
+                            medicines = meta.medicines,
+                            categories = meta.categories,
+                            photoPath = resolvedPhoto,
+                            hasPhoto = hasPhoto,
+                            searchKeywords = keywords,
+                            isReviewed = meta.isReviewed,
+                            source = resolvedSource
+                        )
+                    }
                 }
 
                 meta.reactions?.let { remoteReactions ->
-                    if (remoteReactions >= 0) {
+                    if (remoteReactions >= 0 && remoteReactions != targetEntity.reactions) {
                         articleDao.updateReactionsCountOnly(targetEntity.id, remoteReactions)
                     }
                 }
 
                 meta.verifiedCount?.let { remoteVerified ->
-                    if (remoteVerified >= 0) {
+                    if (remoteVerified >= 0 && remoteVerified != targetEntity.verifiedCount) {
                         articleDao.updateVerifiedCountOnly(targetEntity.id, remoteVerified)
                     }
                 }
             }
 
+            val now = System.currentTimeMillis()
             prefs.edit()
-                .putLong("last_sync_timestamp", System.currentTimeMillis())
+                .putBoolean("has_completed_initial_cloud_sync", true)
+                .putLong("last_sync_timestamp", now)
+                .putLong("last_meta_sync_timestamp", now)
                 .apply()
 
             Result.success()

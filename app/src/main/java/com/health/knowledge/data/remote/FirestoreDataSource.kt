@@ -114,6 +114,24 @@ class FirestoreDataSource @Inject constructor() {
     }
 
     /**
+     * Fetches only postMeta documents updated after [lastMetaSyncTimestamp].
+     */
+    suspend fun fetchUpdatedPostMetaSince(lastMetaSyncTimestamp: Long): List<PostMetaOverride> {
+        if (lastMetaSyncTimestamp <= 0L) return fetchAllPostMeta()
+        return try {
+            val snapshot = metaCollection
+                .whereGreaterThan("updatedAt", lastMetaSyncTimestamp)
+                .get()
+                .await()
+            snapshot.documents.mapNotNull { doc ->
+                doc.toObject(PostMetaOverride::class.java)?.copy(postKey = doc.id)
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
      * Fetches live global reaction count & IP reaction status for a single post.
      */
     suspend fun fetchLiveReactionStatus(postKey: String, ipHash: String): Pair<Int?, Boolean?> {

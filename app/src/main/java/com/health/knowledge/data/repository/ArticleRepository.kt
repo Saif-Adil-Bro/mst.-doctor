@@ -182,12 +182,16 @@ class ArticleRepository @Inject constructor(
         syncMutex.withLock {
             var addedOrUpdated = 0
             try {
-                articleDao.normalizeBundledTimestamps()
-                articleDao.deduplicateCloudArticles()
-
                 val syncPrefs = context.getSharedPreferences("sync_prefs", Context.MODE_PRIVATE)
+                if (!syncPrefs.getBoolean("has_normalized_bundled_v1", false)) {
+                    articleDao.normalizeBundledTimestamps()
+                    articleDao.deduplicateCloudArticles()
+                    syncPrefs.edit().putBoolean("has_normalized_bundled_v1", true).apply()
+                }
+
                 val hadInitialCloudSync = syncPrefs.getBoolean("has_completed_initial_cloud_sync", false)
                 val lastSync = syncPrefs.getLong("last_sync_timestamp", 0L)
+                val lastMetaSync = syncPrefs.getLong("last_meta_sync_timestamp", 0L)
 
                 val remoteArticles = withTimeoutOrNull(6000L) {
                     if (lastSync == 0L || !hadInitialCloudSync) {
@@ -241,6 +245,7 @@ class ArticleRepository @Inject constructor(
                     }
                     if (newEntities.isNotEmpty()) {
                         articleDao.insertAll(newEntities)
+                        articleDao.deduplicateCloudArticles()
                         addedOrUpdated += newEntities.size
                         if (hadInitialCloudSync) {
                             val firstApproved = newEntities.firstOrNull { it.isReviewed && !it.isDraft }
@@ -259,10 +264,8 @@ class ArticleRepository @Inject constructor(
                     syncPrefs.edit().putBoolean("has_completed_initial_cloud_sync", true).apply()
                 }
 
-                articleDao.deduplicateCloudArticles()
-
                 val metaList = withTimeoutOrNull(6000L) {
-                    firestoreDataSource.fetchAllPostMeta()
+                    firestoreDataSource.fetchUpdatedPostMetaSince(lastMetaSync)
                 } ?: emptyList()
 
                 for (meta in metaList) {
@@ -280,48 +283,65 @@ class ArticleRepository @Inject constructor(
                     } ?: continue
 
                     if (meta.isDeleted) {
-                        articleDao.markDeleted(targetEntity.id)
+                        if (!targetEntity.isDeleted) {
+                            articleDao.markDeleted(targetEntity.id)
+                        }
                         continue
                     }
 
                     meta.isPinned?.let { pinned ->
-                        articleDao.updatePin(targetEntity.id, pinned)
+                        if (pinned != targetEntity.isPinned) {
+                            articleDao.updatePin(targetEntity.id, pinned)
+                        }
                     }
 
                     if (meta.hasContentOverride && meta.title.isNotBlank() && meta.content.isNotBlank()) {
                         val resolvedSource = meta.source.ifBlank { targetEntity.source }
-                        val keywords = "${meta.title} ${meta.content} ${meta.medicines} ${meta.categories} $resolvedSource".lowercase()
                         val resolvedPhoto = meta.photoUrl.ifBlank { targetEntity.photoPath }
-                        articleDao.updateArticleContent(
-                            id = targetEntity.id,
-                            title = meta.title,
-                            content = meta.content,
-                            medicines = meta.medicines,
-                            categories = meta.categories,
-                            photoPath = resolvedPhoto,
-                            hasPhoto = resolvedPhoto.isNotBlank(),
-                            searchKeywords = keywords,
-                            isReviewed = meta.isReviewed,
-                            source = resolvedSource
-                        )
+                        val hasPhoto = resolvedPhoto.isNotBlank()
+                        val contentChanged = meta.title != targetEntity.title ||
+                            meta.content != targetEntity.content ||
+                            meta.medicines != targetEntity.medicines ||
+                            meta.categories != targetEntity.categories ||
+                            resolvedPhoto != targetEntity.photoPath ||
+                            hasPhoto != targetEntity.hasPhoto ||
+                            meta.isReviewed != targetEntity.isReviewed ||
+                            resolvedSource != targetEntity.source
+                        if (contentChanged) {
+                            val keywords = "${meta.title} ${meta.content} ${meta.medicines} ${meta.categories} $resolvedSource".lowercase()
+                            articleDao.updateArticleContent(
+                                id = targetEntity.id,
+                                title = meta.title,
+                                content = meta.content,
+                                medicines = meta.medicines,
+                                categories = meta.categories,
+                                photoPath = resolvedPhoto,
+                                hasPhoto = hasPhoto,
+                                searchKeywords = keywords,
+                                isReviewed = meta.isReviewed,
+                                source = resolvedSource
+                            )
+                        }
                     }
 
                     meta.reactions?.let { remoteReactions ->
-                        if (remoteReactions >= 0) {
+                        if (remoteReactions >= 0 && remoteReactions != targetEntity.reactions) {
                             articleDao.updateReactionsCountOnly(targetEntity.id, remoteReactions)
                         }
                     }
 
                     meta.verifiedCount?.let { remoteVerified ->
-                        if (remoteVerified >= 0) {
+                        if (remoteVerified >= 0 && remoteVerified != targetEntity.verifiedCount) {
                             articleDao.updateVerifiedCountOnly(targetEntity.id, remoteVerified)
                         }
                     }
                 }
 
+                val now = System.currentTimeMillis()
                 syncPrefs.edit()
                     .putBoolean("has_completed_initial_cloud_sync", true)
-                    .putLong("last_sync_timestamp", System.currentTimeMillis())
+                    .putLong("last_sync_timestamp", now)
+                    .putLong("last_meta_sync_timestamp", now)
                     .apply()
             } catch (_: Exception) {
                 // Keep existing local data intact on offline/timeout

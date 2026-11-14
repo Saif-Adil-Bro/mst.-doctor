@@ -56,9 +56,7 @@ fun HabitReminderScreen(
     onBack: () -> Unit,
     viewModel: HabitViewModel = hiltViewModel()
 ) {
-    var showExitConfirmDialog by remember { mutableStateOf(false) }
-
-    BackHandler { showExitConfirmDialog = true }
+    BackHandler { onBack() }
 
     val context = LocalContext.current
     val habits by viewModel.habits.collectAsState()
@@ -185,47 +183,6 @@ fun HabitReminderScreen(
         )
     }
 
-    if (showExitConfirmDialog) {
-        AlertDialog(
-            onDismissRequest = { showExitConfirmDialog = false },
-            icon = {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            },
-            title = {
-                Text(
-                    text = "হ্যাবিট প্ল্যানার বন্ধ করবেন?",
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
-                Text("আপনি কি হ্যাবিট প্ল্যানার পেজটি ক্লোজ করে ফিরে যেতে চান?")
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showExitConfirmDialog = false
-                        onBack()
-                    },
-                    modifier = Modifier.testTag("habit_exit_confirm_ok")
-                ) {
-                    Text("ওকে")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { showExitConfirmDialog = false },
-                    modifier = Modifier.testTag("habit_exit_confirm_cancel")
-                ) {
-                    Text("বাতিল")
-                }
-            }
-        )
-    }
-
     Scaffold(
         topBar = {
             Column(
@@ -246,7 +203,7 @@ fun HabitReminderScreen(
                         modifier = Modifier.weight(1f)
                     ) {
                         IconButton(
-                            onClick = { showExitConfirmDialog = true },
+                            onClick = onBack,
                             modifier = Modifier.testTag("habit_back_button")
                         ) {
                             Icon(

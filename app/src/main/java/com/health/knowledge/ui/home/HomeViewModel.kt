@@ -195,13 +195,17 @@ class HomeViewModel @Inject constructor(
         all.size > limit
     }.stateIn(viewModelScope, SharingStarted.Lazily, false)
 
-    // True while initial bundled JSON is seeding or initial database load is in progress
+    // True only while initial bundled JSON is seeding on first launch (never flashes on subsequent opens)
     val isInitialLoading: StateFlow<Boolean> = combine(
         allActiveDomainArticles,
         databaseSeeder.isSeeding
     ) { list, seeding ->
-        seeding || list.isEmpty()
-    }.stateIn(viewModelScope, SharingStarted.Lazily, true)
+        seeding || (list.isEmpty() && !databaseSeeder.isInitialSeedCompleted())
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.Lazily,
+        !databaseSeeder.isInitialSeedCompleted()
+    )
 
     fun loadMoreArticles() {
         val total = articles.value.size

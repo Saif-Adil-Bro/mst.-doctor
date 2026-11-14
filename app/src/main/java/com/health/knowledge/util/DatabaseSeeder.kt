@@ -28,20 +28,36 @@ class DatabaseSeeder @Inject constructor(
     private val _isSeeding = MutableStateFlow(false)
     val isSeeding: StateFlow<Boolean> = _isSeeding.asStateFlow()
 
+    fun isInitialSeedCompleted(): Boolean {
+        val prefs = context.getSharedPreferences("sync_prefs", Context.MODE_PRIVATE)
+        return prefs.getBoolean("has_completed_initial_seed", false)
+    }
+
     suspend fun seedIfEmpty() {
+        val prefs = context.getSharedPreferences("sync_prefs", Context.MODE_PRIVATE)
         val count = articleDao.getTotalCount()
         if (count == 0) {
             _isSeeding.value = true
             try {
                 val articles = loadBundledArticles()
                 articleDao.insertAll(articles)
+                prefs.edit()
+                    .putBoolean("has_completed_initial_seed", true)
+                    .putBoolean("has_normalized_bundled_v1", true)
+                    .apply()
             } finally {
                 _isSeeding.value = false
             }
         } else {
-            // Normalize existing bundled articles' timestamps and clean up any duplicate cloud posts
-            articleDao.normalizeBundledTimestamps()
-            articleDao.deduplicateCloudArticles()
+            if (!prefs.getBoolean("has_completed_initial_seed", false)) {
+                prefs.edit().putBoolean("has_completed_initial_seed", true).apply()
+            }
+            if (!prefs.getBoolean("has_normalized_bundled_v1", false)) {
+                // Run one-time normalization & deduplication instead of rewriting Room on every app launch
+                articleDao.normalizeBundledTimestamps()
+                articleDao.deduplicateCloudArticles()
+                prefs.edit().putBoolean("has_normalized_bundled_v1", true).apply()
+            }
             upgradeBundledArticlesParagraphsIfNeeded()
         }
 
