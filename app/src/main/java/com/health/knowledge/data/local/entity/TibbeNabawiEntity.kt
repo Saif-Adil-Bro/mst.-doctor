@@ -1,10 +1,12 @@
 package com.health.knowledge.data.local.entity
 
+import androidx.compose.runtime.Immutable
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.health.knowledge.domain.model.Article
 
+@Immutable
 @Entity(tableName = "tibbe_nabawi_posts")
 data class TibbeNabawiEntity(
     @PrimaryKey
@@ -31,12 +33,18 @@ data class TibbeNabawiEntity(
     val searchKeywords: String = ""          // Precomputed search index
 )
 
+@Immutable
 data class TibbeQuote(
     val type: String = "হাদিস",
     val arabic: String = "",
     val translation: String = "",
     val reference: String = ""
 )
+
+private val QUOTE_BLOCK_REGEX = Regex("""\{[^{}]*\}""")
+private val RAW_JSON_CLEAN_REGEX = Regex("""[{}\[\]"]|type:|arabic:|translation:|reference:""")
+private val QUOTE_FIELD_REGEXES = listOf("type", "arabic", "matn", "translation", "bangla", "reference", "source")
+    .associateWith { key -> Regex("""\"$key\"\s*:\s*\"((?:\\.|[^\"\\])*)\"""") }
 
 fun TibbeNabawiEntity.parsedQuotes(): List<TibbeQuote> {
     var raw = quotes?.trim()
@@ -91,12 +99,11 @@ fun TibbeNabawiEntity.parsedQuotes(): List<TibbeQuote> {
     // 3. Resilient Regex Extraction for damaged, escaped or concatenated JSON strings
     if (raw.contains("arabic") || raw.contains("translation") || raw.contains("\"type\"")) {
         val extractedList = mutableListOf<TibbeQuote>()
-        val blockRegex = Regex("""\{[^{}]*\}""")
-        val blocks = blockRegex.findAll(raw).map { it.value }.toList()
+        val blocks = QUOTE_BLOCK_REGEX.findAll(raw).map { it.value }.toList()
         val targets = if (blocks.isNotEmpty()) blocks else listOf(raw)
 
         fun extractField(block: String, key: String): String {
-            val pat = Regex("""\"$key\"\s*:\s*\"((?:\\.|[^\"\\])*)\"""")
+            val pat = QUOTE_FIELD_REGEXES[key] ?: return ""
             val m = pat.find(block)
             return m?.groupValues?.getOrNull(1)?.replace("\\\"", "\"")?.replace("\\n", "\n")?.trim().orEmpty()
         }
@@ -116,7 +123,7 @@ fun TibbeNabawiEntity.parsedQuotes(): List<TibbeQuote> {
     // 4. Safe fallback: Never treat raw JSON syntax as Arabic matn!
     val isRawJson = raw.startsWith("{") || raw.startsWith("[") || raw.contains("\"type\":") || raw.contains("\"arabic\":")
     if (isRawJson) {
-        val cleanAr = raw.replace(Regex("""[{}\[\]"]|type:|arabic:|translation:|reference:"""), "").trim()
+        val cleanAr = raw.replace(RAW_JSON_CLEAN_REGEX, "").trim()
         return if (cleanAr.isNotBlank()) listOf(TibbeQuote(type = "হাদিস", arabic = cleanAr)) else emptyList()
     }
 

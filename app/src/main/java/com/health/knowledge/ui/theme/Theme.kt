@@ -6,6 +6,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.toArgb
@@ -104,7 +105,8 @@ fun onePxDp(): Dp = with(LocalDensity.current) { 1f.toDp() }
  */
 @Composable
 fun onePxBorder(color: Color = MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)): BorderStroke {
-    return BorderStroke(width = onePxDp(), color = color)
+    val dp = onePxDp()
+    return remember(dp, color) { BorderStroke(width = dp, color = color) }
 }
 
 /**

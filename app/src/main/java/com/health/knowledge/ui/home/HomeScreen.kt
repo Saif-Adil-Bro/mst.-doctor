@@ -1085,13 +1085,14 @@ fun ArticleCard(
         )
     ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-            // Cover Photo / Thumbnail from CDN URL (stable height to prevent scroll jank)
+            // Cover Photo / Thumbnail from CDN URL (stable height & constrained decode size to prevent scroll jank)
             if (hasCdnImage) {
                 AsyncImage(
                     model = remember(article.photoPath) {
                         ImageRequest.Builder(context)
                             .data(article.photoPath)
-                            .crossfade(true)
+                            .size(640, 360)
+                            .crossfade(false)
                             .build()
                     },
                     contentDescription = article.title,
@@ -1309,7 +1310,9 @@ fun ArticleCard(
             Spacer(Modifier.height(10.dp))
 
             // Horizontally scrollable single-line tag row for categories/diseases and herbal/medicines
-            if (article.categories.isNotEmpty() || article.medicines.isNotEmpty()) {
+            val distinctCategories = remember(article.categories) { article.categories.distinct() }
+            val distinctMedicines = remember(article.medicines) { article.medicines.distinct() }
+            if (distinctCategories.isNotEmpty() || distinctMedicines.isNotEmpty()) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1317,13 +1320,13 @@ fun ArticleCard(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    article.categories.distinct().forEach { cat ->
+                    distinctCategories.forEach { cat ->
                         TagChip(
                             text = cat.replace("_", " "),
                             color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
                         )
                     }
-                    article.medicines.distinct().forEach { med ->
+                    distinctMedicines.forEach { med ->
                         TagChip(
                             text = "💊 $med",
                             color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.65f)

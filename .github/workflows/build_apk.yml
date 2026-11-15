@@ -53,16 +53,16 @@ jobs:
           fi
           chmod +x gradlew
 
-      # Step 6: Build Debug APK
-      - name: Build Debug APK with Gradle
-        run: ./gradlew assembleDebug --stacktrace --no-daemon
+      # Step 6: Run Unit Tests & Build R8-Optimized Release APK
+      - name: Run Unit Tests & Build Release APK with Gradle
+        run: ./gradlew testDebugUnitTest assembleRelease --stacktrace --no-daemon
 
       # Step 7: Upload APK artifact for easy download
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: HealthKnowledge-Debug-APK
-          path: app/build/outputs/apk/debug/*.apk
+          name: HealthKnowledge-Release-APK
+          path: app/build/outputs/apk/release/*.apk
           retention-days: 30
 
       # Step 8: Push APK to Appetize.io (Create new or Update existing publicKey)
@@ -73,10 +73,10 @@ jobs:
           SECRET_PUBLIC_KEY: ${{ secrets.APPETIZE_PUBLIC_KEY }}
           INPUT_PUBLIC_KEY: ${{ github.event.inputs.appetize_public_key }}
         run: |
-          APK_PATH=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
+          APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
 
           if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
-            echo "❌ Error: Built APK file not found in app/build/outputs/apk/debug/"
+            echo "❌ Error: Built APK file not found in app/build/outputs/apk/release/"
             exit 1
           fi
 

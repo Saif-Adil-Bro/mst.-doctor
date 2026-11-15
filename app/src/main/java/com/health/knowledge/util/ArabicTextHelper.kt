@@ -31,6 +31,7 @@ object ArabicTextHelper {
     // Unicode ranges for Arabic scripts (0600-06FF, 0750-077F, 08A0-08FF, FB50-FDFF, FE70-FEFF)
     private val ARABIC_REGEX = Regex("[\\u0600-\\u06FF\\u0750-\\u077F\\u08A0-\\u08FF\\uFB50-\\uFDFF\\uFE70-\\uFEFF]")
     private val BENGALI_REGEX = Regex("[\\u0980-\\u09FF]")
+    private val DOUBLE_NEWLINE_REGEX = Regex("\n{2,}")
 
     /**
      * Checks if a paragraph or component contains Arabic characters and DOES NOT contain Bengali characters.
@@ -55,7 +56,7 @@ object ArabicTextHelper {
      */
     fun splitIntoParagraphs(content: String): List<String> {
         val normalized = content.replace("\r\n", "\n").replace("\r", "\n")
-        return normalized.split(Regex("\n{2,}"))
+        return normalized.split(DOUBLE_NEWLINE_REGEX)
             .flatMap { block ->
                 val lines = block.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
                 if (lines.any { isStandaloneArabic(it) }) {
@@ -121,23 +122,27 @@ fun SmartMultilingualBody(
     modifier: Modifier = Modifier,
     textColor: Color = MaterialTheme.colorScheme.onSurface
 ) {
-    val paragraphs = remember(content) {
-        ArabicTextHelper.splitIntoParagraphs(content)
+    val formattedParagraphs = remember(content) {
+        ArabicTextHelper.splitIntoParagraphs(content).map { paragraph ->
+            val isArabic = ArabicTextHelper.isStandaloneArabic(paragraph)
+            val text = if (isArabic) paragraph else ArticleTextFormatter.formatBengaliParagraphs(paragraph)
+            isArabic to text
+        }
     }
 
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        paragraphs.forEach { paragraph ->
-            if (ArabicTextHelper.isStandaloneArabic(paragraph)) {
+        formattedParagraphs.forEach { (isArabic, text) ->
+            if (isArabic) {
                 ArabicStandaloneBlock(
-                    arabicText = paragraph,
+                    arabicText = text,
                     fontSize = (fontSizeSp + 3f).sp
                 )
             } else {
                 Text(
-                    text = ArticleTextFormatter.formatBengaliParagraphs(paragraph),
+                    text = text,
                     modifier = Modifier.fillMaxWidth(),
                     fontFamily = SolaimanLipi,
                     fontSize = fontSizeSp.sp,

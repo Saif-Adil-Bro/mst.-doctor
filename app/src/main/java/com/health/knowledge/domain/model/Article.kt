@@ -1,7 +1,9 @@
 package com.health.knowledge.domain.model
 
+import androidx.compose.runtime.Immutable
 import com.health.knowledge.data.local.entity.ArticleEntity
 
+@Immutable
 data class Article(
     val id: Int,
     val messageId: String,

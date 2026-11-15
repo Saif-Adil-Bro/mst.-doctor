@@ -6,13 +6,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.BookmarkBorder
@@ -60,7 +59,6 @@ fun TibbeNabawiDetailScreen(
     val relatedPosts by viewModel.relatedPosts.collectAsState()
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
-    val scrollState = rememberScrollState()
 
     val emeraldPrimary = Color(0xFF1B6B46)
 
@@ -175,15 +173,18 @@ fun TibbeNabawiDetailScreen(
                 CircularProgressIndicator(color = emeraldPrimary)
             }
         } else {
-            Column(
+            val diseasesList = remember(currentPost.id, currentPost.diseases) {
+                currentPost.diseases.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+            }
+            LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(innerPadding)
-                    .verticalScroll(scrollState)
-                    .padding(horizontal = 12.dp, vertical = 14.dp),
+                    .padding(innerPadding),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 // ── 1. Hero Header Card ──────────────────────────────
+                item(key = "hero_header", contentType = "hero_header") {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(18.dp),
@@ -257,8 +258,10 @@ fun TibbeNabawiDetailScreen(
                         }
                     }
                 }
+                }
 
                 // ── 2. Quick Specs Properties (Food, Nature, Taste) ─────
+                item(key = "quick_specs", contentType = "quick_specs") {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
@@ -340,7 +343,7 @@ fun TibbeNabawiDetailScreen(
                         }
 
                         // Target Diseases Flow Chips
-                        if (currentPost.diseases.isNotBlank()) {
+                        if (diseasesList.isNotEmpty()) {
                             Spacer(Modifier.height(4.dp))
                             Text(
                                 text = "যেসব রোগের নিরাময়ে কার্যকর:",
@@ -354,30 +357,29 @@ fun TibbeNabawiDetailScreen(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                currentPost.diseases.split(",").forEach { disease ->
-                                    val trimmed = disease.trim()
-                                    if (trimmed.isNotEmpty()) {
-                                        Surface(
-                                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
-                                            shape = RoundedCornerShape(8.dp)
-                                        ) {
-                                            Text(
-                                                text = "• $trimmed",
-                                                fontSize = 12.sp,
-                                                lineHeight = 16.sp,
-                                                fontWeight = FontWeight.Medium,
-                                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                            )
-                                        }
+                                diseasesList.forEach { trimmed ->
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text(
+                                            text = "• $trimmed",
+                                            fontSize = 12.sp,
+                                            lineHeight = 16.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
                                     }
                                 }
                             }
                         }
                     }
                 }
+                }
 
                 // ── 3. Hadith & Detailed Explanation ─────────────────
+                item(key = "hadith_details", contentType = "hadith_details") {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
@@ -419,9 +421,11 @@ fun TibbeNabawiDetailScreen(
                         }
                     }
                 }
+                }
 
                 // ── 4. Usage Instructions Box ────────────────────────
                 if (!currentPost.usageInstructions.isNullOrBlank()) {
+                    item(key = "usage_instructions", contentType = "usage_instructions") {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(16.dp),
@@ -456,9 +460,11 @@ fun TibbeNabawiDetailScreen(
                             }
                         }
                     }
+                    }
                 }
 
                 // ── 5. Book Reference Footer ─────────────────────────
+                item(key = "book_reference", contentType = "book_reference") {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
@@ -495,9 +501,11 @@ fun TibbeNabawiDetailScreen(
                         }
                     }
                 }
+                }
 
                 // ── 6. Related Posts in Same Category ────────────────
                 if (relatedPosts.isNotEmpty()) {
+                    item(key = "related_posts", contentType = "related_posts") {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
                             text = "এই ক্যাটাগরির আরও পথ্য ও চিকিৎসা",
@@ -552,9 +560,12 @@ fun TibbeNabawiDetailScreen(
                             }
                         }
                     }
+                    }
                 }
 
-                Spacer(Modifier.height(16.dp))
+                item(key = "bottom_spacer") {
+                    Spacer(Modifier.height(16.dp))
+                }
             }
         }
         }
