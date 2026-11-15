@@ -198,7 +198,7 @@ class HabitScheduleCalculatorTest {
         assertEquals(2, weeklyReport.completedCount)
         assertEquals(7, weeklyReport.bars.size)
 
-        // 4. Monthly report: 5 weekly bars for November (30 days)
+        // 4. Monthly report: 30 daily bars for November (30 days)
         val monthlyReport = HabitDateAndReportEngine.computePeriodReport(
             habits = habits,
             logs = logs,
@@ -208,7 +208,7 @@ class HabitScheduleCalculatorTest {
         )
         assertEquals(60, monthlyReport.totalScheduled)
         assertEquals(2, monthlyReport.completedCount)
-        assertEquals(5, monthlyReport.bars.size)
+        assertEquals(30, monthlyReport.bars.size)
 
         // 5. Yearly report: 12 monthly bars
         val yearlyReport = HabitDateAndReportEngine.computePeriodReport(
